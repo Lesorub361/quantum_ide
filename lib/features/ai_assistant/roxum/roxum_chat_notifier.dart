@@ -98,15 +98,33 @@ class RoxumConversationTurn {
         'id': id,
         'userRequest': userRequest,
         'aiResponse': aiResponse,
+        'reasoningText': reasoningText,
+        'thinkingDurationMs': thinkingDurationMs,
+        'promptTokens': usage.promptTokens,
+        'completionTokens': usage.completionTokens,
+        'totalTokens': usage.totalTokens,
+        'costUsd': usage.costUsd,
         'isError': isError,
         'timestamp': timestamp.toIso8601String(),
       };
 
   factory RoxumConversationTurn.fromJson(Map<String, dynamic> json) {
+    final pTok = (json['promptTokens'] as num?)?.toInt() ?? 0;
+    final cTok = (json['completionTokens'] as num?)?.toInt() ?? 0;
+    final tTok = (json['totalTokens'] as num?)?.toInt() ?? (pTok + cTok);
+    final cost = (json['costUsd'] as num?)?.toDouble() ?? 0.0;
     return RoxumConversationTurn(
       id: json['id']?.toString() ?? const Uuid().v4(),
       userRequest: json['userRequest']?.toString() ?? '',
       aiResponse: json['aiResponse']?.toString() ?? '',
+      reasoningText: json['reasoningText']?.toString() ?? '',
+      thinkingDurationMs: (json['thinkingDurationMs'] as num?)?.toInt() ?? 0,
+      usage: RoxumUsageStats(
+        promptTokens: pTok,
+        completionTokens: cTok,
+        totalTokens: tTok,
+        costUsd: cost,
+      ),
       isError: json['isError'] == true,
       timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
           DateTime.now(),
@@ -422,6 +440,38 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     }
   }
 
+  String _loadProjectContextBlocks(String workspace) {
+    if (workspace.isEmpty) return '';
+    final buf = StringBuffer();
+    for (final rel in const ['.quantum/AGENTS.md', 'AGENTS.md', 'GEMINI.md']) {
+      try {
+        final f = File('$workspace/$rel');
+        if (f.existsSync()) {
+          final text = f.readAsStringSync().trim();
+          if (text.isNotEmpty) {
+            final clipped =
+                text.length > 4000 ? '${text.substring(0, 4000)}\n...' : text;
+            buf.writeln('\n[PROJECT RULES ($rel)]:\n$clipped');
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+    try {
+      final memFile = File('$workspace/.quantum_memory.json');
+      if (memFile.existsSync()) {
+        final memText = memFile.readAsStringSync().trim();
+        if (memText.isNotEmpty && memText != '{}') {
+          final clipped = memText.length > 3000
+              ? '${memText.substring(0, 3000)}\n...'
+              : memText;
+          buf.writeln('\n[PERSISTENT PROJECT MEMORY (.quantum_memory.json)]:\n$clipped');
+        }
+      }
+    } catch (_) {}
+    return buf.toString();
+  }
+
   Future<void> sendPrompt(
     String prompt, {
     int? truncateFromIndex,
@@ -478,20 +528,49 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final runtime = ref.read(runtimeServiceProvider);
     final guestWorkspace = runtime.toProotPath(workspace);
     final activeFilePath = ref.read(editorProvider).activeFilePath;
+
+    final baseTools = state.chatMode == RoxumChatMode.agent
+        ? RoxumAgenticTools.buildOpenAiTools(state.toolSelections)
+        : const <Map<String, dynamic>>[];
+    List<Map<String, dynamic>> rawMcp = const [];
+    List<Map<String, dynamic>> mcpTools = const [];
+    if (state.chatMode == RoxumChatMode.agent &&
+        ref.read(mcpServiceProvider).any((s) => s.isEnabled)) {
+      try {
+        rawMcp = await ref
+            .read(mcpServiceProvider.notifier)
+            .getAvailableMcpTools()
+            .timeout(const Duration(seconds: 12));
+        mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
+      } catch (_) {}
+    }
+    final toolsSchema = <Map<String, dynamic>>[...baseTools, ...mcpTools];
+
+    final mcpSummary = mcpTools.isEmpty
+        ? ''
+        : '\nACTIVE MCP TOOLS (${mcpTools.length} available — use them proactively!):\n'
+            '${mcpTools.map((t) => '- ${(t['function'] as Map)['name']}: ${(t['function'] as Map)['description']}').join('\n')}\n';
+    final projectBlocks = _loadProjectContextBlocks(workspace);
+
     final systemPrompt = state.chatMode == RoxumChatMode.agent
-        ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace and shell via tool calls '
-            '(readFile, codeOutline, writeFile, editFile, listFiles, grepInFiles, runCommand, checkEnvironment, installPackages, getLspDiagnostics, gitStatus, and MCP tools). '
+        ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace, shell, and MCP servers via tool calls '
+            '(readFile, codeOutline, writeFile, editFile, listFiles, grepInFiles, runCommand, checkEnvironment, installPackages, getLspDiagnostics, gitStatus, and all `mcp__*` tools). '
             'Workspace root: "$workspace"${guestWorkspace != workspace ? ' (in shell/terminal mapped to "$guestWorkspace")' : ''}. '
-            '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}'
+            '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}\n'
             'CRITICAL RULES FOR HIGH EFFICIENCY & ACCURACY:\n'
-            '1) TOKEN SAVING: For unfamiliar or large files, call `codeOutline` or `grepInFiles` first, then `readFile` with `startLine` and `endLine` instead of reading entire large files repeatedly.\n'
+            '1) TOKEN SAVING & CODEGRAPH MCP: For unfamiliar or large files/projects, call `mcp__quantum_codegraph__project_symbols` or `codeOutline` first, use `mcp__quantum_codegraph__read_symbol` to read a specific class/method body with brace balancing, `mcp__quantum_codegraph__find_symbol_usages` to find references across the project, or `readFile` with `startLine` and `endLine`.\n'
             '2) ENVIRONMENT & SDKS: NEVER assume `flutter`, `dart`, `node`, `python`, `java`, or `git` is missing and NEVER try to manually download huge SDK tarballs via curl unless `checkEnvironment` proves it is absent. Always call `checkEnvironment` first to see exact installed SDK paths and versions.\n'
             '3) INSTALLING PACKAGES: If a project or system dependency is missing, install it directly using `installPackages` (supports apt, npm, pip, pub, cargo) or `runCommand`.\n'
-            '4) REAL VERIFICATION: After creating or editing files, ALWAYS call `getLspDiagnostics` (which runs both open-tab LSP and project-wide `dart analyze` / `flutter analyze` / `tsc`) to see all real errors and fix them before finishing.\n'
-            '5) HONESTY: NEVER claim you ran a command, installed an SDK, or edited a file unless you actually invoked the corresponding tool call in this turn.\n'
+            '4) REAL VERIFICATION & SMART ANALYZER MCP: After creating or editing files, ALWAYS call `getLspDiagnostics` or `mcp__quantum_token_saver__smart_analyze_errors` to see all real compiler/analyzer errors and fix them before finishing.\n'
+            '5) PROJECT MEMORY MCP: When you discover important architectural facts, SDK paths, or user preferences, save them using `mcp__quantum_memory__save_memory` so they persist across sessions.\n'
+            '6) WEB & DOCS MCP: When you need external documentation, package versions, or web search, use `mcp__quantum_web_fetch__web_search_docs` and `mcp__quantum_web_fetch__fetch_url_markdown` (or `mcp__context7__*` if enabled).\n'
+            '7) HONESTY: NEVER claim you ran a command, installed an SDK, or edited a file unless you actually invoked the corresponding tool call in this turn.\n'
+            '$mcpSummary'
+            '$projectBlocks\n'
             'Respond in the user\'s language.'
         : 'You are a helpful coding assistant inside QuantumIDE. '
             '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
+            '$projectBlocks\n'
             'Respond concisely in the user\'s language.';
 
     final textBuffer = StringBuffer(trimmed);
@@ -505,9 +584,13 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           },
         });
       } else if (att.textContent != null && att.textContent!.isNotEmpty) {
-        textBuffer.write('\n\n<attached_file name="${att.name}">\n${att.textContent}\n</attached_file>');
+        textBuffer.write(
+          '\n\n<attached_file name="${att.name}">\n${att.textContent}\n</attached_file>',
+        );
       } else {
-        textBuffer.write('\n\n[Прикреплён файл: ${att.name} (${att.sizeBytes} байт)]');
+        textBuffer.write(
+          '\n\n[Прикреплён файл: ${att.name} (${att.sizeBytes} байт)]',
+        );
       }
     }
 
@@ -522,8 +605,15 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       {'role': 'system', 'content': systemPrompt},
       for (final t in baseTurns) ...[
         {'role': 'user', 'content': t.userRequest},
-        if (t.aiResponse.isNotEmpty)
-          {'role': 'assistant', 'content': t.aiResponse},
+        if (t.aiResponse.isNotEmpty || t.toolCalls.isNotEmpty)
+          {
+            'role': 'assistant',
+            'content': [
+              if (t.toolCalls.isNotEmpty)
+                '[Executed tools in this turn: ${t.toolCalls.map((c) => c.name).toSet().join(', ')}]',
+              if (t.aiResponse.isNotEmpty) t.aiResponse,
+            ].join('\n'),
+          },
       ],
       {'role': 'user', 'content': currentUserContent},
     ];
@@ -588,22 +678,6 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
             },
           )
         : null;
-
-    final baseTools = state.chatMode == RoxumChatMode.agent
-        ? RoxumAgenticTools.buildOpenAiTools(state.toolSelections)
-        : const <Map<String, dynamic>>[];
-    List<Map<String, dynamic>> mcpTools = const [];
-    if (state.chatMode == RoxumChatMode.agent &&
-        ref.read(mcpServiceProvider).any((s) => s.isEnabled)) {
-      try {
-        final rawMcp = await ref
-            .read(mcpServiceProvider.notifier)
-            .getAvailableMcpTools()
-            .timeout(const Duration(seconds: 3));
-        mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
-      } catch (_) {}
-    }
-    final toolsSchema = <Map<String, dynamic>>[...baseTools, ...mcpTools];
 
     try {
       final finalAnswer = await _client.runAgentLoop(

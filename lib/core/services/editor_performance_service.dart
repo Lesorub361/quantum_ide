@@ -3,35 +3,27 @@ import 'package:flutter/foundation.dart';
 import 'package:re_editor/re_editor.dart';
 
 class EditorPerformanceService {
-  static const int _largeFileThreshold = 100000; // 100KB
+  static const int _largeFileLineThreshold = 2500;
   static const int _maxLinesForFullSyntaxHighlight = 5000;
-  
+
   // Cache for syntax highlighting results
   final Map<String, Map<int, String>> _syntaxCache = {};
   final Map<String, int> _fileSizeCache = {};
-  
+
   // Debounce timers
   Timer? _cacheCleanupTimer;
-  
-  /// Check if a file is considered "large"
+
+  /// Check if a file is considered "large" in O(1) without joining full text
   bool isLargeFile(CodeLineEditingController controller) {
-    return controller.text.length > _largeFileThreshold;
+    return controller.codeLines.length > _largeFileLineThreshold;
   }
 
-  /// Optimize controller for large files
-  void optimizeForLargeFile(CodeLineEditingController controller) {
-    if (!isLargeFile(controller)) return;
-    
-    // For large files, use virtual scrolling
-    // Note: re_editor already has virtual scrolling, but we can optimize
-    debugPrint('EditorPerformanceService: Optimizing for large file (${controller.text.length} bytes)');
-  }
+  /// Optimize controller for large files (no-op without allocating controller.text)
+  void optimizeForLargeFile(CodeLineEditingController controller) {}
 
-  /// Check if syntax highlighting should be applied
+  /// Check if syntax highlighting should be applied in O(1)
   bool shouldApplySyntaxHighlighting(CodeLineEditingController controller) {
-    // Disable full syntax highlighting for very large files
-    final lineCount = controller.text.split('\n').length;
-    return lineCount <= _maxLinesForFullSyntaxHighlight;
+    return controller.codeLines.length <= _maxLinesForFullSyntaxHighlight;
   }
 
   /// Cache syntax highlighting results for a file
@@ -55,15 +47,14 @@ class EditorPerformanceService {
   }
 
   /// Measure editor performance
-  Future<EditorMetrics> measurePerformance(CodeLineEditingController controller) async {
+  Future<EditorMetrics> measurePerformance(
+    CodeLineEditingController controller,
+  ) async {
     final stopwatch = Stopwatch()..start();
-    
-    // Measure text length
+    final lineCount = controller.codeLines.length;
     final textLength = controller.text.length;
-    final lineCount = controller.text.split('\n').length;
-    
     stopwatch.stop();
-    
+
     return EditorMetrics(
       textLength: textLength,
       lineCount: lineCount,

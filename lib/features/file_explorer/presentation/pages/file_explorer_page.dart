@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:quantum_ide/shared/widgets/unified_load_meter.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,7 +7,9 @@ import 'package:path/path.dart' as p;
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
-import 'package:quantum_ide/core/services/project_service.dart';
+import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/features/file_explorer/domain/file_node.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
@@ -16,7 +17,6 @@ import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
-import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/pages/file_preview_page.dart';
@@ -45,12 +45,27 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     super.dispose();
   }
 
+  double _horizontalPaddingForWidth(double width) {
+    if (width >= 1024) return 20.0;
+    if (width >= 600) return 16.0;
+    return 12.0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final explorerState = ref.watch(fileExplorerProvider);
     final notifier = ref.read(fileExplorerProvider.notifier);
     final workspaceRoot = ref.watch(workspaceProvider).currentPath;
     final isRoot = explorerState.currentPath == workspaceRoot || explorerState.currentPath.isEmpty;
+
+    final settings = ref.watch(settingsProvider);
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+    final bgColor = palette?.canvas ?? Theme.of(context).scaffoldBackgroundColor;
+    final panelColor = palette?.panel ?? const Color(0xFF10131B);
+    final accentColor = palette?.accent ?? Theme.of(context).colorScheme.primary;
+    final borderColor = palette?.border ?? Colors.white.withValues(alpha: 0.06);
 
     return DropTarget(
       onDragEntered: (details) {
@@ -68,7 +83,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         final l10n = AppLocalizations.of(context)!;
         final messenger = ScaffoldMessenger.of(context);
         final explorerNotifier = ref.read(fileExplorerProvider.notifier);
-        final projectNotifier = ref.read(projectServiceProvider.notifier);
         setState(() {
           _isDraggingOver = false;
         });
@@ -88,8 +102,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
               await destFile.create(recursive: true);
               await srcFile.copy(destFile.path);
             }
-            final destPath = p.join(currentPath, p.basename(file.path));
-            await projectNotifier.mirrorEntity(destPath);
           } catch (e) {
             // messenger was captured before async so it's safe to use
             messenger.showSnackBar(
@@ -125,22 +137,41 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
               }
             },
             child: Scaffold(
-              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+              backgroundColor: bgColor,
               body: LayoutBuilder(
                 builder: (context, constraints) {
                   final isWide = constraints.maxWidth >= 768;
-                  final explorerBody = _buildExplorerBody(context, ref, explorerState, notifier, workspaceRoot);
+                  final hPad = _horizontalPaddingForWidth(constraints.maxWidth);
+                  final explorerBody = _buildExplorerBody(
+                    context,
+                    ref,
+                    explorerState,
+                    notifier,
+                    workspaceRoot,
+                    horizontalPadding: hPad,
+                    bgColor: bgColor,
+                    accentColor: accentColor,
+                    borderColor: borderColor,
+                  );
                   if (isWide) {
                     return Row(
                       children: [
                         SizedBox(
-                          width: (constraints.maxWidth * 0.42).clamp(360.0, 520.0),
+                          width: (constraints.maxWidth * 0.4).clamp(360.0, 500.0),
                           child: explorerBody,
                         ),
-                        const VerticalDivider(width: 1, color: Colors.white10),
+                        VerticalDivider(width: 1, color: borderColor),
                         Expanded(
                           child: _selectedPreviewPath != null
-                              ? _buildPreviewPane(context, ref, _selectedPreviewPath!)
+                              ? _buildPreviewPane(
+                                  context,
+                                  ref,
+                                  _selectedPreviewPath!,
+                                  bgColor: bgColor,
+                                  panelColor: panelColor,
+                                  accentColor: accentColor,
+                                  borderColor: borderColor,
+                                )
                               : _buildEmptyPreviewPane(context),
                         ),
                       ],
@@ -149,24 +180,29 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                   return explorerBody;
                 },
               ),
-              floatingActionButton: _buildFAB(context, ref),
+              floatingActionButton: _buildFAB(
+                context,
+                ref,
+                accentColor: accentColor,
+                panelColor: panelColor,
+              ),
             ),
           ),
           if (_isDraggingOver)
             Container(
-              color: Colors.cyanAccent.withValues(alpha: 0.15),
+              color: accentColor.withValues(alpha: 0.15),
               child: Center(
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E2230),
+                    color: panelColor,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.cyanAccent, width: 2),
+                    border: Border.all(color: accentColor, width: 2),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(LucideIcons.cloud_upload, size: 48, color: Colors.cyanAccent),
+                      Icon(LucideIcons.cloud_upload, size: 48, color: accentColor),
                       const SizedBox(height: 16),
                       Text(
                         AppLocalizations.of(context)!.dragFilesHereToImport,
@@ -187,10 +223,14 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     WidgetRef ref,
     FileExplorerState explorerState,
     FileExplorerNotifier notifier,
-    String? workspaceRoot,
-  ) {
+    String? workspaceRoot, {
+    required double horizontalPadding,
+    required Color bgColor,
+    required Color accentColor,
+    required Color borderColor,
+  }) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 250),
       switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeIn,
       transitionBuilder: (child, animation) {
@@ -210,48 +250,81 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         slivers: [
           _isSelectMode
               ? explorerState.files.when(
-                  data: (nodes) => _buildSelectionAppBar(context, ref, nodes),
-                  loading: () => _buildSelectionAppBar(context, ref, []),
-                  error: (err, stack) => _buildSelectionAppBar(context, ref, []),
+                  data: (nodes) => _buildSelectionAppBar(context, ref, nodes, accentColor: accentColor),
+                  loading: () => _buildSelectionAppBar(context, ref, [], accentColor: accentColor),
+                  error: (err, stack) => _buildSelectionAppBar(context, ref, [], accentColor: accentColor),
                 )
-              : _buildSliverAppBar(context, ref, explorerState, workspaceRoot),
+              : _buildSliverAppBar(
+                  context,
+                  ref,
+                  explorerState,
+                  workspaceRoot,
+                  bgColor: bgColor,
+                  accentColor: accentColor,
+                ),
           if (!_isSelectMode)
             SliverToBoxAdapter(
-              child: _buildBreadcrumbs(context, explorerState.currentPath, workspaceRoot),
+              child: _buildBreadcrumbs(
+                context,
+                explorerState.currentPath,
+                workspaceRoot,
+                horizontalPadding: horizontalPadding,
+                accentColor: accentColor,
+                borderColor: borderColor,
+              ),
             ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 10),
               child: _buildSearchBar(),
             ),
           ),
           explorerState.files.when(
-            data: (nodes) => SliverToBoxAdapter(child: _buildStatsPanel(nodes)),
+            data: (nodes) => SliverToBoxAdapter(
+              child: _buildStatsPanel(
+                nodes,
+                horizontalPadding: horizontalPadding,
+                borderColor: borderColor,
+              ),
+            ),
             loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
             error: (err, stack) => const SliverToBoxAdapter(child: SizedBox.shrink()),
           ),
           explorerState.files.when(
             data: (nodes) {
-              final filteredNodes = nodes.where((n) => 
-                n.name.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
-              
+              final filteredNodes = nodes
+                  .where((n) => n.name.toLowerCase().contains(_searchQuery.toLowerCase()))
+                  .toList();
+
               if (filteredNodes.isEmpty) {
                 return SliverFillRemaining(
-                  child: Center(child: Text(AppLocalizations.of(context)!.noFilesFound, style: const TextStyle(color: Colors.white24))),
+                  child: Center(
+                    child: Text(
+                      AppLocalizations.of(context)!.noFilesFound,
+                      style: const TextStyle(color: Colors.white24),
+                    ),
+                  ),
                 );
               }
 
               return SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) => _buildFileItem(context, ref, filteredNodes[index]),
+                    (context, index) => _buildFileItem(
+                      context,
+                      ref,
+                      filteredNodes[index],
+                      accentColor: accentColor,
+                    ),
                     childCount: filteredNodes.length,
                   ),
                 ),
               );
             },
-            loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: Color(0xFF00D4FF)))),
+            loading: () => SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator(color: accentColor)),
+            ),
             error: (err, stack) => SliverFillRemaining(
               child: Center(
                 child: Column(
@@ -259,17 +332,23 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                   children: [
                     const Icon(LucideIcons.circle_alert, size: 48, color: Colors.redAccent),
                     const SizedBox(height: 16),
-                    Text(AppLocalizations.of(context)!.errorOccurred(err.toString()), style: const TextStyle(color: Colors.white38)),
+                    Text(
+                      AppLocalizations.of(context)!.errorOccurred(err.toString()),
+                      style: const TextStyle(color: Colors.white38),
+                    ),
                     TextButton(
                       onPressed: () => notifier.scanDirectory(explorerState.currentPath),
-                      child: Text(AppLocalizations.of(context)!.retry, style: const TextStyle(color: Color(0xFF00D4FF))),
+                      child: Text(
+                        AppLocalizations.of(context)!.retry,
+                        style: TextStyle(color: accentColor),
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          const SliverToBoxAdapter(child: SizedBox(height: 96)),
         ],
       ),
     );
@@ -304,7 +383,15 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     );
   }
 
-  Widget _buildPreviewPane(BuildContext context, WidgetRef ref, String filePath) {
+  Widget _buildPreviewPane(
+    BuildContext context,
+    WidgetRef ref,
+    String filePath, {
+    required Color bgColor,
+    required Color panelColor,
+    required Color accentColor,
+    required Color borderColor,
+  }) {
     final file = File(filePath);
     final exists = file.existsSync();
     final fileName = p.basename(filePath);
@@ -313,14 +400,14 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     final iconInfo = FileIconHelper.getIconInfo(fileName, false);
 
     return Container(
-      color: const Color(0xFF090B0F),
+      color: bgColor,
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF10131B),
-              border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+              color: panelColor,
+              border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(
               children: [
@@ -351,7 +438,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                   icon: const Icon(LucideIcons.pencil, size: 14),
                   label: const Text('Open in Editor', style: TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00D4FF),
+                    backgroundColor: accentColor,
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -397,12 +484,12 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                         }(),
                         builder: (context, snapshot) {
                           if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator(color: Color(0xFF00D4FF)));
+                            return Center(child: CircularProgressIndicator(color: accentColor));
                           }
                           final content = snapshot.data ?? '';
                           return Container(
                             width: double.infinity,
-                            color: const Color(0xFF0B0D12),
+                            color: bgColor,
                             padding: const EdgeInsets.all(16),
                             child: SingleChildScrollView(
                               child: SelectableText(
@@ -418,14 +505,22 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       ),
     );
   }
-  Widget _buildSliverAppBar(BuildContext context, WidgetRef ref, FileExplorerState state, String? root) {
+
+  Widget _buildSliverAppBar(
+    BuildContext context,
+    WidgetRef ref,
+    FileExplorerState state,
+    String? root, {
+    required Color bgColor,
+    required Color accentColor,
+  }) {
     final pathSegments = state.currentPath.replaceFirst(root ?? '', '').split('/').where((s) => s.isNotEmpty).toList();
     final isRoot = state.currentPath == root || state.currentPath.isEmpty;
 
     return SliverAppBar(
-      expandedHeight: 80,
+      expandedHeight: 76,
       pinned: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: bgColor,
       elevation: 0,
       leading: IconButton(
         icon: Icon(isRoot ? LucideIcons.arrow_left : LucideIcons.chevron_left, color: Colors.white),
@@ -444,7 +539,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         centerTitle: false,
         titlePadding: const EdgeInsets.only(left: 52, bottom: 12),
         title: Text(
-          isRoot ? 'Project Explorer' : (pathSegments.isEmpty ? 'Root' : pathSegments.last),
+          isRoot ? AppLocalizations.of(context)!.explorer : (pathSegments.isEmpty ? 'Root' : pathSegments.last),
           style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
         ),
         background: Container(
@@ -453,8 +548,8 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF6C63FF).withValues(alpha: 0.1),
-                const Color(0xFF0D0F14),
+                accentColor.withValues(alpha: 0.1),
+                bgColor,
               ],
             ),
           ),
@@ -463,6 +558,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       actions: [
         IconButton(
           icon: const Icon(LucideIcons.refresh_cw, size: 18, color: Colors.white70),
+          tooltip: AppLocalizations.of(context)!.refresh,
           onPressed: () => ref.read(fileExplorerProvider.notifier).scanDirectory(state.currentPath),
         ),
         PopupMenuButton<FileSortMode>(
@@ -552,7 +648,12 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     );
   }
 
-  Widget _buildSelectionAppBar(BuildContext context, WidgetRef ref, List<FileNode> allNodes) {
+  Widget _buildSelectionAppBar(
+    BuildContext context,
+    WidgetRef ref,
+    List<FileNode> allNodes, {
+    required Color accentColor,
+  }) {
     return SliverAppBar(
       pinned: true,
       backgroundColor: const Color(0xFF1E2130),
@@ -572,7 +673,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       ),
       actions: [
         IconButton(
-          icon: const Icon(LucideIcons.check, size: 18, color: Colors.cyanAccent),
+          icon: Icon(LucideIcons.check, size: 18, color: accentColor),
           tooltip: AppLocalizations.of(context)!.selectAllTooltip,
           onPressed: () {
             setState(() {
@@ -634,124 +735,59 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     );
   }
 
-  Widget _buildStatsPanel(List<FileNode> nodes) {
+  Widget _buildStatsPanel(
+    List<FileNode> nodes, {
+    required double horizontalPadding,
+    required Color borderColor,
+  }) {
     final folderCount = nodes.where((n) => n.isDirectory).length;
     final fileCount = nodes.where((n) => !n.isDirectory).length;
     final totalSizeBytes = nodes.where((n) => !n.isDirectory).fold<int>(0, (sum, n) => sum + n.size);
-    
-    String sizeStr = '';
-    if (totalSizeBytes < 1024) {
-      sizeStr = '$totalSizeBytes B';
-    } else if (totalSizeBytes < 1024 * 1024) {
-      sizeStr = '${(totalSizeBytes / 1024).toStringAsFixed(1)} KB';
-    } else {
-      sizeStr = '${(totalSizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
 
-    final stats = ref.watch(systemStatsProvider);
+    final sizeStr = _formatSize(totalSizeBytes);
 
     return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-      child: GlassContainer(
-        blur: 10,
-        opacity: 0.03,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      padding: EdgeInsets.only(left: horizontalPadding, right: horizontalPadding, bottom: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor, width: 0.6),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    const Icon(LucideIcons.folder, size: 12, color: Colors.blueAccent),
-                    const SizedBox(width: 4),
-                    Text(
-                      AppLocalizations.of(context)!.foldersCount(folderCount),
-                      style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(LucideIcons.file, size: 12, color: Colors.tealAccent),
-                    const SizedBox(width: 4),
-                    Text(
-                      AppLocalizations.of(context)!.filesCount(fileCount),
-                      style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(LucideIcons.hard_drive, size: 12, color: Colors.purpleAccent),
-                    const SizedBox(width: 4),
-                    Text(
-                      sizeStr,
-                      style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
-                    ),
-                  ],
+                const Icon(LucideIcons.folder, size: 13, color: Colors.blueAccent),
+                const SizedBox(width: 5),
+                Text(
+                  AppLocalizations.of(context)!.foldersCount(folderCount),
+                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6.0),
-              child: Divider(height: 1, color: Colors.white10),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.file, size: 13, color: Colors.tealAccent),
+                const SizedBox(width: 5),
+                Text(
+                  AppLocalizations.of(context)!.filesCount(fileCount),
+                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+                ),
+              ],
             ),
             Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(child: UnifiedLoadMeter(stats: stats, compact: true)),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(LucideIcons.zap, size: 12, color: Colors.greenAccent),
-                      const SizedBox(width: 4),
-                      Text(
-                        'GPU: ${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
-                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            value: stats.gpuUsage,
-                            minHeight: 2,
-                            backgroundColor: Colors.white.withValues(alpha: 0.05),
-                            valueColor: AlwaysStoppedAnimation<Color>(_getLoadColor(stats.gpuUsage)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(LucideIcons.memory_stick, size: 12, color: Colors.amberAccent),
-                      const SizedBox(width: 4),
-                      Text(
-                        'RAM: ${stats.ramUsedGB.toStringAsFixed(1)} GB',
-                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            value: stats.ramUsage,
-                            minHeight: 2,
-                            backgroundColor: Colors.white.withValues(alpha: 0.05),
-                            valueColor: AlwaysStoppedAnimation<Color>(_getLoadColor(stats.ramUsage)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                const Icon(LucideIcons.hard_drive, size: 13, color: Colors.purpleAccent),
+                const SizedBox(width: 5),
+                Text(
+                  sizeStr,
+                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -759,12 +795,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         ),
       ),
     );
-  }
-
-  Color _getLoadColor(double value) {
-    if (value < 0.6) return Colors.greenAccent;
-    if (value < 0.85) return Colors.amberAccent;
-    return Colors.redAccent;
   }
 
   Widget _buildSearchBar() {
@@ -1254,7 +1284,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         } else {
           await File(path).create();
         }
-        await ref.read(projectServiceProvider.notifier).mirrorEntity(path);
         notifier.scanDirectory(currentPath);
       } catch (e) {
         if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -1481,7 +1510,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       );
 
       final currentPath = ref.read(fileExplorerProvider).currentPath;
-      final projectNotifier = ref.read(projectServiceProvider.notifier);
 
       for (final sourcePath in clipboard.paths) {
         final name = sourcePath.split(Platform.pathSeparator).last;
@@ -1494,7 +1522,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
           } else if (type == FileSystemEntityType.file) {
             await File(sourcePath).rename(destPath);
           }
-          await projectNotifier.mirrorDelete(sourcePath);
         } else {
           final type = FileSystemEntity.typeSync(sourcePath);
           if (type == FileSystemEntityType.directory) {
@@ -1503,7 +1530,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
             await File(sourcePath).copy(destPath);
           }
         }
-        await projectNotifier.mirrorEntity(destPath);
       }
 
       if (clipboard.isCut) {

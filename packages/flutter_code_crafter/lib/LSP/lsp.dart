@@ -212,8 +212,17 @@ sealed class LspConfig {
       method: 'textDocument/definition',
       params: _commonParams(line, character),
     );
-    if (response['result'] == null || response['result'].isEmpty) return '';
-    return response['result'][1]['uri'] ?? '';
+    final res = response['result'];
+    if (res == null) return '';
+    if (res is List && res.isNotEmpty) {
+      final first = res.first;
+      if (first is Map) {
+        return (first['uri'] ?? first['targetUri'])?.toString() ?? '';
+      }
+    } else if (res is Map) {
+      return (res['uri'] ?? res['targetUri'])?.toString() ?? '';
+    }
+    return '';
   }
 
   Future<List<dynamic>> getReferences(int line, int character) async {

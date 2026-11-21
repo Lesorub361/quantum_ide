@@ -17,7 +17,6 @@ import '../../../../core/services/diff_service.dart';
 import '../../../../core/services/lsp_service.dart';
 import '../../../../core/services/settings_service.dart';
 import '../../../../core/services/analysis_service.dart';
-import '../../../../core/services/project_service.dart';
 import '../../../../core/services/workspace_service.dart';
 import '../../../git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
@@ -140,7 +139,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   Pty? _agentPty;
   StreamSubscription<Uint8List>? _agentPtySubscription;
   StreamSubscription<FileSystemEvent>? _workspaceWatcherSubscription;
-  Timer? _externalSyncTimer;
   Timer? _autoHotReloadTimer;
   bool _isReloadingFromDisk = false;
 
@@ -179,8 +177,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       updateDiagnostics(fileDiagnostics.path, fileDiagnostics.diagnostics);
     });
 
-    // Connect LiveTelemetryService instant sync & reload callbacks
-    LiveTelemetryService.instance.onSyncRequested = () => syncExternalNow(reloadAllTabs: true);
+    // Connect LiveTelemetryService reload callback
     LiveTelemetryService.instance.onFileUpdated = reloadFileFromDisk;
 
     // Defer heavy workspace loading to avoid blocking initial UI render
@@ -325,41 +322,9 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   Future<String?> _readTextFile(String path) async {
     try {
       final file = File(path);
-      if (Platform.isAndroid) {
-        try {
-          final prefs = await SharedPreferences.getInstance();
-          final syncEnabled = prefs.getBool('settings_sd_card_sync') ?? false;
-          if (syncEnabled) {
-            final runtime = ref.read(runtimeServiceProvider);
-            final extPath = PathMapper.mapToExternal(path, runtime.appDirectory);
-            if (extPath != path) {
-              final extFile = File(extPath);
-              if (await extFile.exists()) {
-                final extStat = await extFile.stat();
-                if (extStat.size > 0) {
-                  if (!await file.exists()) {
-                    await file.parent.create(recursive: true);
-                    await extFile.copy(path);
-                  } else {
-                    final intStat = await file.stat();
-                    if (intStat.size == 0 ||
-                        extStat.modified.isAfter(intStat.modified.add(const Duration(seconds: 1)))) {
-                      await extFile.copy(path);
-                      try {
-                        await file.setLastModified(extStat.modified);
-                      } catch (_) {}
-                    }
-                  }
-                }
-              }
-            }
-          }
-        } catch (_) {}
-      }
-
       if (!await file.exists()) return null;
 
-      // Self-healing inside IDE: if file is 0 bytes in both internal and external storage,
+      // Self-healing inside IDE: if file is 0 bytes,
       // automatically try restoring it from local Git history (git show HEAD:<relPath>)!
       if (await file.length() == 0) {
         final ws = ref.read(workspaceProvider).currentPath;
@@ -374,7 +339,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
             final out = res.stdout?.toString() ?? '';
             if (res.exitCode == 0 && out.isNotEmpty) {
               await file.writeAsString(out, flush: true);
-              await ref.read(projectServiceProvider.notifier).mirrorEntity(path);
               return out;
             }
           } catch (_) {}
@@ -557,13 +521,18 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
   void closeTab(int index) {
     if (index < 0 || index >= state.openFiles.length) return;
-    final path = state.openFiles[index].path;
+    final closingFile = state.openFiles[index];
+    final path = closingFile.path;
     _autoSaveTimers[path]?.cancel();
     _autoSaveTimers.remove(path);
+    _lastCodeLines.remove(path);
+    try {
+      closingFile.controller.dispose();
+    } catch (_) {}
 
     final newList = List<EditorFile>.from(state.openFiles);
     newList.removeAt(index);
-    
+
     int newActiveIndex = state.activeTabIndex;
     if (newActiveIndex >= newList.length) {
       newActiveIndex = newList.isEmpty ? 0 : newList.length - 1;
@@ -631,9 +600,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         return;
       }
       await diskFile.writeAsString(content, flush: true);
-
-      // Mirror to external storage
-      await ref.read(projectServiceProvider.notifier).mirrorEntity(path);
 
       // Re-verify index after await
       final afterIndex = state.openFiles.indexWhere((f) => f.path == path);
@@ -757,9 +723,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
   Future<void> loadWorkspaceFiles(String workspacePath) async {
     try {
-      // Pull any external fixes or 0-byte repairs from /storage/emulated/0/QuantumIDE/<project> first
-      await ref.read(projectServiceProvider.notifier).syncExternalIntoWorkspace(workspacePath);
-
       final prefs = await SharedPreferences.getInstance();
       final keyPaths = 'open_files_$workspacePath';
       final keyActive = 'active_tab_$workspacePath';
@@ -896,13 +859,17 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   void clearWorkspace() {
     _workspaceWatcherSubscription?.cancel();
     _workspaceWatcherSubscription = null;
-    _externalSyncTimer?.cancel();
-    _externalSyncTimer = null;
     stopAgent();
     for (final timer in _autoSaveTimers.values) {
       timer.cancel();
     }
     _autoSaveTimers.clear();
+    for (final file in state.openFiles) {
+      try {
+        file.controller.dispose();
+      } catch (_) {}
+    }
+    _lastCodeLines.clear();
     state = EditorState();
   }
 
@@ -910,7 +877,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
   void _startWorkspaceWatcher(String workspacePath) {
     _workspaceWatcherSubscription?.cancel();
-    _externalSyncTimer?.cancel();
     for (final t in _watcherDebouncers.values) {
       t.cancel();
     }
@@ -920,10 +886,13 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         (event) {
           final eventPath = event.path;
           _watcherDebouncers[eventPath]?.cancel();
-          _watcherDebouncers[eventPath] = Timer(const Duration(milliseconds: 350), () {
-            _watcherDebouncers.remove(eventPath);
-            reloadFileFromDisk(eventPath);
-          });
+          _watcherDebouncers[eventPath] = Timer(
+            const Duration(milliseconds: 350),
+            () {
+              _watcherDebouncers.remove(eventPath);
+              reloadFileFromDisk(eventPath);
+            },
+          );
         },
         onError: (e) {
           debugPrint('Workspace watcher error: $e');
@@ -931,49 +900,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       );
     } catch (e) {
       debugPrint('Failed to start workspace watcher: $e');
-    }
-
-    // External /storage/emulated/0/QuantumIDE 45s background sync disabled for fast internal-only I/O.
-  }
-
-  Future<List<String>> syncExternalNow({bool reloadAllTabs = false}) async {
-    return const [];
-  }
-
-  bool _isSyncingExternal = false;
-
-  Future<List<String>> _disabledSyncExternalNow({bool reloadAllTabs = false}) async {
-    if (_isSyncingExternal) return const [];
-    // Protect active typing session: never run external sync while the user is actively typing
-    if (!reloadAllTabs && _diffTimer != null && _diffTimer!.isActive) return const [];
-    final workspacePath = ref.read(workspaceProvider).currentPath;
-    if (workspacePath == null) return const [];
-
-    _isSyncingExternal = true;
-    try {
-      final updatedPaths = await ref
-          .read(projectServiceProvider.notifier)
-          .syncExternalIntoWorkspace(workspacePath);
-
-      for (final updatedPath in updatedPaths) {
-        await reloadFileFromDisk(updatedPath);
-      }
-
-      if (reloadAllTabs) {
-        for (final openFile in List<EditorFile>.from(state.openFiles)) {
-          await reloadFileFromDisk(openFile.path);
-        }
-        // Re-validate any files with cached diagnostics so fixed files clear their errors
-        for (final diagPath in List<String>.from(state.allDiagnostics.keys)) {
-          await reloadFileFromDisk(diagPath);
-        }
-      }
-
-      return updatedPaths;
-    } catch (_) {
-      return const [];
-    } finally {
-      _isSyncingExternal = false;
     }
   }
 
@@ -990,7 +916,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         if (content.trim().isEmpty && openFile.controller.text.trim().isNotEmpty) {
           try {
             await File(normalisedPath).writeAsString(openFile.controller.text, flush: true);
-            await ref.read(projectServiceProvider.notifier).mirrorEntity(normalisedPath);
           } catch (_) {}
           return;
         }
@@ -1146,9 +1071,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
           saveFile(i, isAutoSave: true);
         }
       }
-    } else if (state == AppLifecycleState.resumed) {
-      // Pick up any external edits immediately when returning to the IDE from external editors
-      syncExternalNow();
     }
   }
 

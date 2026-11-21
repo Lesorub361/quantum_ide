@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:conduit_vt/conduit_vt.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/core/theme/conduit_terminal_appearance.dart';
 import 'package:quantum_ide/core/theme/system_navigation_insets.dart';
@@ -17,9 +17,9 @@ class ConduitKeyboardBar extends StatelessWidget {
     required this.focusNode,
     required this.palette,
     required this.brightness,
-    required this.fullscreen,
-    required this.onToggleFullscreen,
-    this.onOpenAppearance,
+    this.fullscreen = false,
+    this.onToggleFullscreen,
+    this.onToggleKeyboard,
     this.onPaste,
     this.rows,
     super.key,
@@ -31,55 +31,52 @@ class ConduitKeyboardBar extends StatelessWidget {
   final AppPalette palette;
   final Brightness brightness;
   final bool fullscreen;
-  final VoidCallback onToggleFullscreen;
-  final VoidCallback? onOpenAppearance;
+  final VoidCallback? onToggleFullscreen;
+  final VoidCallback? onToggleKeyboard;
   final VoidCallback? onPaste;
   final List<TerminalKeyboardRow>? rows;
 
-  static final List<TerminalKeyboardRow> _defaultRows = [
-    TerminalKeyboardRow(
-      height: 44,
-      items: [
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.escape),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.control),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.alt),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.tab),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.arrowUp),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.arrowDown),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.arrowLeft),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.arrowRight),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.slash),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.dash),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.pipe),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.colon),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.paste),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.controlC),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.controlD),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.controlZ),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.controlL),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.home),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.end),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.pageUp),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.pageDown),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.functionKeys),
-        const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.fullscreen),
-      ],
+  static const double _barHeight = 38;
+
+  static final List<TerminalKeyboardItem> _centerScrollItems = [
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.alt),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.arrowUp),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.arrowDown),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.arrowLeft),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.arrowRight),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.controlC),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.slash),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.dash),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.pipe),
+    const TerminalKeyboardItem(
+      id: 'tilde',
+      kind: TerminalKeyboardItemKind.customText,
+      label: '~',
+      text: '~',
     ),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.paste),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.home),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.end),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.pageUp),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.pageDown),
+    const TerminalKeyboardItem.builtIn(TerminalKeyboardAction.functionKeys),
   ];
 
   @override
   Widget build(BuildContext context) {
     final safePadding = MediaQuery.paddingOf(context);
-    final activeRows = rows ?? _defaultRows;
+    final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 20;
+    final customRows = rows;
 
     return ListenableBuilder(
       listenable: keyboardController,
       builder: (context, _) {
+        final dividerColor = palette.hairlineFor(brightness);
         return DecoratedBox(
           decoration: BoxDecoration(
             color: palette.canvasFor(brightness),
             border: Border(
-              top: BorderSide(color: palette.hairlineFor(brightness)),
+              top: BorderSide(color: dividerColor),
             ),
           ),
           child: SafeArea(
@@ -87,38 +84,86 @@ class ConduitKeyboardBar extends StatelessWidget {
             bottom: shouldApplyBottomSafeArea(context),
             left: false,
             right: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final (index, row) in activeRows.indexed)
-                  SizedBox(
-                    height:
-                        row.height -
-                        (index == 0 ? 0 : 5) -
-                        (index == activeRows.length - 1 ? 0 : 5),
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: EdgeInsets.fromLTRB(
-                        safePadding.left + 8,
-                        index == 0 ? 7 : 2,
-                        safePadding.right + 8,
-                        index == activeRows.length - 1 ? 7 : 2,
-                      ),
-                      children: [
-                        if (index == 0 && onOpenAppearance != null)
-                          _Key(
-                            icon: Icons.palette_outlined,
-                            palette: palette,
-                            brightness: brightness,
-                            onPressed: onOpenAppearance!,
+            child: customRows != null
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final (index, row) in customRows.indexed)
+                        SizedBox(
+                          height: row.height.clamp(34.0, 44.0),
+                          child: ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: EdgeInsets.fromLTRB(
+                              safePadding.left + 6,
+                              index == 0 ? 4 : 2,
+                              safePadding.right + 6,
+                              index == customRows.length - 1 ? 4 : 2,
+                            ),
+                            children: [
+                              for (final item in row.items)
+                                _buildItem(context, item),
+                            ],
                           ),
-                        for (final item in row.items)
-                          _buildItem(context, item),
-                      ],
+                        ),
+                    ],
+                  )
+                : SizedBox(
+                    height: _barHeight,
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: safePadding.left + 4,
+                        right: safePadding.right + 4,
+                        top: 4,
+                        bottom: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          // Left pinned zone: ESC, CTRL, TAB
+                          _buildAction(context, TerminalKeyboardAction.escape),
+                          _buildAction(context, TerminalKeyboardAction.control),
+                          _buildAction(context, TerminalKeyboardAction.tab),
+                          Container(
+                            width: 1,
+                            height: 20,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            color: dividerColor,
+                          ),
+                          // Center scrollable zone
+                          Expanded(
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                for (final item in _centerScrollItems)
+                                  _buildItem(context, item),
+                                if (onToggleFullscreen != null)
+                                  _buildAction(
+                                    context,
+                                    TerminalKeyboardAction.fullscreen,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          // Right pinned zone: keyboard toggle
+                          if (onToggleKeyboard != null) ...[
+                            Container(
+                              width: 1,
+                              height: 20,
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              color: dividerColor,
+                            ),
+                            _Key(
+                              icon: isKeyboardOpen
+                                  ? LucideIcons.keyboard_off
+                                  : LucideIcons.keyboard,
+                              palette: palette,
+                              brightness: brightness,
+                              onPressed: onToggleKeyboard!,
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-              ],
-            ),
           ),
         );
       },
@@ -166,40 +211,43 @@ class ConduitKeyboardBar extends StatelessWidget {
           _focusTerminal();
         },
       ),
-      TerminalKeyboardAction.fullscreen => _Key(
-        icon: fullscreen
-            ? Icons.fullscreen_exit_rounded
-            : Icons.fullscreen_rounded,
-        palette: palette,
-        brightness: brightness,
-        onPressed: () {
-          onToggleFullscreen();
-          _focusTerminal();
-        },
-      ),
+      TerminalKeyboardAction.fullscreen =>
+        onToggleFullscreen == null
+            ? const SizedBox.shrink()
+            : _Key(
+                icon: fullscreen
+                    ? LucideIcons.minimize_2
+                    : LucideIcons.maximize_2,
+                palette: palette,
+                brightness: brightness,
+                onPressed: () {
+                  onToggleFullscreen?.call();
+                  _focusTerminal();
+                },
+              ),
       TerminalKeyboardAction.arrowUp => _Key(
-        icon: Icons.keyboard_arrow_up_rounded,
+        icon: LucideIcons.chevron_up,
         palette: palette,
         brightness: brightness,
         repeat: true,
         onPressed: () => _sendKey(TerminalKey.arrowUp),
       ),
       TerminalKeyboardAction.arrowDown => _Key(
-        icon: Icons.keyboard_arrow_down_rounded,
+        icon: LucideIcons.chevron_down,
         palette: palette,
         brightness: brightness,
         repeat: true,
         onPressed: () => _sendKey(TerminalKey.arrowDown),
       ),
       TerminalKeyboardAction.arrowLeft => _Key(
-        icon: Icons.keyboard_arrow_left_rounded,
+        icon: LucideIcons.chevron_left,
         palette: palette,
         brightness: brightness,
         repeat: true,
         onPressed: () => _sendKey(TerminalKey.arrowLeft),
       ),
       TerminalKeyboardAction.arrowRight => _Key(
-        icon: Icons.keyboard_arrow_right_rounded,
+        icon: LucideIcons.chevron_right,
         palette: palette,
         brightness: brightness,
         repeat: true,

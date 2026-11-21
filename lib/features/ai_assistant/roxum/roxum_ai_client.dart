@@ -1412,12 +1412,80 @@ class RoxumAiClient {
   ) {
     return tools.map((t) {
       final fn = t['function'] as Map<String, dynamic>;
+      final rawParams = fn['parameters'];
+      Map<String, dynamic>? sanitizedParams;
+      if (rawParams is Map) {
+        final props = rawParams['properties'];
+        if (props is Map && props.isNotEmpty) {
+          final cleanProps = <String, dynamic>{};
+          props.forEach((k, v) {
+            if (v is Map) {
+              cleanProps[k.toString()] = _sanitizeGeminiSchemaNode(
+                v.cast<String, dynamic>(),
+              );
+            }
+          });
+          if (cleanProps.isNotEmpty) {
+            sanitizedParams = {
+              'type': 'OBJECT',
+              'properties': cleanProps,
+              if (rawParams['required'] is List &&
+                  (rawParams['required'] as List).isNotEmpty)
+                'required': List<String>.from(
+                  (rawParams['required'] as List)
+                      .map((e) => e.toString())
+                      .where(cleanProps.containsKey),
+                ),
+            };
+          }
+        }
+      }
       return {
         'name': fn['name'],
         'description': fn['description'],
-        'parameters': fn['parameters'],
+        if (sanitizedParams != null) 'parameters': sanitizedParams,
       };
     }).toList();
+  }
+
+  Map<String, dynamic> _sanitizeGeminiSchemaNode(Map<String, dynamic> node) {
+    final rawType = (node['type']?.toString() ?? 'string').toUpperCase();
+    final type = const {
+      'STRING',
+      'NUMBER',
+      'INTEGER',
+      'BOOLEAN',
+      'ARRAY',
+      'OBJECT',
+    }.contains(rawType)
+        ? rawType
+        : 'STRING';
+    final out = <String, dynamic>{
+      'type': type,
+      if (node['description'] != null)
+        'description': node['description'].toString(),
+      if (node['enum'] is List && type == 'STRING')
+        'enum': (node['enum'] as List).map((e) => e.toString()).toList(),
+    };
+    if (type == 'ARRAY') {
+      final items = node['items'];
+      out['items'] = (items is Map)
+          ? _sanitizeGeminiSchemaNode(items.cast<String, dynamic>())
+          : {'type': 'STRING'};
+    } else if (type == 'OBJECT' && node['properties'] is Map) {
+      final childProps = <String, dynamic>{};
+      (node['properties'] as Map).forEach((k, v) {
+        if (v is Map) {
+          childProps[k.toString()] = _sanitizeGeminiSchemaNode(
+            v.cast<String, dynamic>(),
+          );
+        }
+      });
+      if (childProps.isNotEmpty) {
+        out['properties'] = childProps;
+      }
+    }
+    return out;
   }
 
   List<Map<String, dynamic>> _toGeminiContents(List<Map<String, dynamic>> msgs) {

@@ -150,8 +150,6 @@ Future<void> showCreateDialog(
       await File(newPath).create();
     }
 
-    // Mirror to external storage
-    await ref.read(projectServiceProvider.notifier).mirrorEntity(newPath);
 
     ref.read(expandedFoldersProvider.notifier).setExpanded({
       ...ref.read(expandedFoldersProvider),
@@ -2190,6 +2188,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     onTap: () {
                       if (!isDesktop) {
                         _scaffoldKey.currentState?.openDrawer();
+                      } else {
+                        ref.read(leftPanelOpenProvider.notifier).state = true;
                       }
                     },
                   ),
@@ -2289,11 +2289,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
   Widget _buildRecentProjectsCard(BuildContext context) {
     final theme = Theme.of(context);
-    final projects = [
-      {'name': 'Orion-OS', 'time': '3 мин назад', 'lang': 'C++'},
-      {'name': 'Quantum-Engine', 'time': '2 часа назад', 'lang': 'Dart'},
-      {'name': 'Stellar-UI', 'time': 'Вчера', 'lang': 'TypeScript'},
-    ];
+    final allProjects = ref.watch(projectServiceProvider);
+    final recentProjects = allProjects.take(4).toList();
     return GlassContainer(
       blur: 20,
       opacity: 0.05,
@@ -2314,38 +2311,58 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               ),
             ),
             const SizedBox(height: 12),
-            ...projects.map(
-              (p) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6.0),
-                child: Row(
-                  children: [
-                    Icon(
-                      LucideIcons.folder,
-                      size: 14,
-                      color: theme.colorScheme.primary,
+            if (recentProjects.isEmpty)
+              Text(
+                'Нет недавних проектов',
+                style: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
+              )
+            else
+              ...recentProjects.map(
+                (proj) => InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    ref.read(workspaceProvider.notifier).setWorkspace(
+                          proj.path,
+                          proj.name,
+                        );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 6.0,
+                      horizontal: 4.0,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        p['name']!,
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                    child: Row(
+                      children: [
+                        Icon(
+                          LucideIcons.folder,
+                          size: 14,
+                          color: theme.colorScheme.primary,
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            proj.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          proj.type.name,
+                          style: GoogleFonts.inter(
+                            color: Colors.white30,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      p['time']!,
-                      style: GoogleFonts.inter(
-                        color: Colors.white30,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -2353,6 +2370,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   }
 
   Widget _buildGitStatusCard(BuildContext context, int gitChangesCount) {
+    final gitBranch = ref.watch(
+      gitProvider.select((g) => g.status?.currentBranch ?? 'main'),
+    );
     return GlassContainer(
       blur: 20,
       opacity: 0.05,
@@ -2391,12 +2411,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                   color: Colors.cyanAccent,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Ветка: main*',
-                  style: GoogleFonts.jetBrainsMono(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+                Flexible(
+                  child: Text(
+                    'Ветка: $gitBranch${gitChangesCount > 0 ? '*' : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.jetBrainsMono(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],

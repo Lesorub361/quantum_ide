@@ -28,7 +28,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Widget build(BuildContext context) {
     final s = ref.watch(settingsProvider);
     final sn = ref.read(settingsProvider.notifier);
-    final stats = ref.watch(systemStatsProvider);
     final theme = Theme.of(context);
     final isRu = Localizations.localeOf(context).languageCode == 'ru';
     final width = MediaQuery.of(context).size.width;
@@ -75,28 +74,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           Padding(
             padding: const EdgeInsets.only(right: 14),
             child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.cyanAccent.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.25)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(LucideIcons.memory_stick, size: 13, color: Colors.cyanAccent),
-                    const SizedBox(width: 6),
-                    Text(
-                      'App RAM: ${stats.appRamFormatted}',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.cyanAccent,
-                      ),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final stats = ref.watch(systemStatsProvider);
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.25)),
                     ),
-                  ],
-                ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(LucideIcons.memory_stick, size: 13, color: Colors.cyanAccent),
+                        const SizedBox(width: 6),
+                        Text(
+                          'App RAM: ${stats.appRamFormatted}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.cyanAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -172,7 +176,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   child: ListView(
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(28, 12, 28, 40),
-                    children: _buildCategorySections(context, s, sn, stats, isRu),
+                    children: _buildCategorySections(context, s, sn, isRu),
                   ),
                 ),
               ],
@@ -239,7 +243,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   child: ListView(
                     physics: const BouncingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                    children: _buildCategorySections(context, s, sn, stats, isRu),
+                    children: _buildCategorySections(context, s, sn, isRu),
                   ),
                 ),
               ],
@@ -251,7 +255,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     BuildContext context,
     SettingsState s,
     SettingsService sn,
-    SystemStats stats,
     bool isRu,
   ) {
     final theme = Theme.of(context);
@@ -629,27 +632,32 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       widgets.addAll([
         _sectionHeader(context, AppLocalizations.of(context)!.system),
         _settingsGroup(context, [
-          _tile(
-            context,
-            icon: LucideIcons.memory_stick,
-            title: isRu ? 'Очистить фоновую память (Gradle / LSP)' : 'Free Background RAM (Gradle / LSP)',
-            subtitle: isRu
-                ? 'Quantum IDE использует ${stats.appRamFormatted} • Свободно на устройстве: ${stats.deviceRamAvailableGB.toStringAsFixed(1)} из ${stats.ramTotalGB.toStringAsFixed(1)} GB'
-                : 'Quantum IDE uses ${stats.appRamFormatted} • Device free: ${stats.deviceRamAvailableGB.toStringAsFixed(1)} GB',
-            trailing: _badge(context, isRu ? 'ОЧИСТИТЬ' : 'FREE RAM', Colors.cyanAccent),
-            onTap: () async {
-              await ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      isRu
-                          ? 'Фоновые демоны Gradle/Kotlin остановлены, память освобождена'
-                          : 'Background daemons stopped, memory freed',
-                    ),
-                  ),
-                );
-              }
+          Consumer(
+            builder: (context, ref, _) {
+              final stats = ref.watch(systemStatsProvider);
+              return _tile(
+                context,
+                icon: LucideIcons.memory_stick,
+                title: isRu ? 'Очистить фоновую память (Gradle / LSP)' : 'Free Background RAM (Gradle / LSP)',
+                subtitle: isRu
+                    ? 'Quantum IDE использует ${stats.appRamFormatted} • Свободно на устройстве: ${stats.deviceRamAvailableGB.toStringAsFixed(1)} из ${stats.ramTotalGB.toStringAsFixed(1)} GB'
+                    : 'Quantum IDE uses ${stats.appRamFormatted} • Device free: ${stats.deviceRamAvailableGB.toStringAsFixed(1)} GB',
+                trailing: _badge(context, isRu ? 'ОЧИСТИТЬ' : 'FREE RAM', Colors.cyanAccent),
+                onTap: () async {
+                  await ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          isRu
+                              ? 'Фоновые демоны Gradle/Kotlin остановлены, память освобождена'
+                              : 'Background daemons stopped, memory freed',
+                        ),
+                      ),
+                    );
+                  }
+                },
+              );
             },
           ),
           _switchTile(

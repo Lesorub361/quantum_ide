@@ -31,9 +31,72 @@ class _HomePageState extends ConsumerState<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedStackFilter = 'all';
+  bool _sortByName = false;
+  bool _isExportingAllToSd = false;
+  final Set<String> _exportingProjectIds = {};
   String? _dismissedUpdateTag;
   bool _dismissedPackagesBanner = false;
   bool _checkedPackagesPrompt = false;
+
+  Future<void> _exportAllToSdCard() async {
+    if (_isExportingAllToSd) return;
+    setState(() => _isExportingAllToSd = true);
+    try {
+      final result = await ref
+          .read(projectServiceProvider.notifier)
+          .exportAllProjectsToSdCard();
+      if (!mounted) return;
+      _showSdExportSnackBar(result);
+    } finally {
+      if (mounted) {
+        setState(() => _isExportingAllToSd = false);
+      }
+    }
+  }
+
+  Future<void> _exportSingleProjectToSdCard(Project project) async {
+    if (_exportingProjectIds.contains(project.id)) return;
+    setState(() => _exportingProjectIds.add(project.id));
+    try {
+      final result = await ref
+          .read(projectServiceProvider.notifier)
+          .exportProjectToSdCard(project);
+      if (!mounted) return;
+      _showSdExportSnackBar(result, projectName: project.name);
+    } finally {
+      if (mounted) {
+        setState(() => _exportingProjectIds.remove(project.id));
+      }
+    }
+  }
+
+  void _showSdExportSnackBar(SdCardExportResult result, {String? projectName}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final String text;
+    if (!result.isSuccess) {
+      text = result.errorMessage ?? 'Ошибка экспорта на SD-карту';
+    } else if (projectName != null) {
+      final apkPart =
+          result.copiedApks > 0 ? ', APK: ${result.copiedApks}' : '';
+      text =
+          'Проект «$projectName» обновлён на SD: ${result.copiedFiles} файлов$apkPart (${result.destinationPath})';
+    } else {
+      final apkPart =
+          result.copiedApks > 0 ? ', APK: ${result.copiedApks}' : '';
+      text =
+          'Обновлено на SD: ${result.projectCount} проектов, ${result.copiedFiles} файлов$apkPart (${result.destinationPath})';
+    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor:
+            result.isSuccess ? const Color(0xFF10B981) : Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
 
   Future<void> _importAndOpenProject(BuildContext context, WidgetRef ref) async {
     final dir = await FilePicker.getDirectoryPath();
@@ -98,23 +161,29 @@ class _HomePageState extends ConsumerState<HomePage> {
             p.name.toLowerCase().contains(_searchQuery.toLowerCase()) &&
             _matchesStackFilter(p))
         .toList();
-    
-    final lastProject = allProjects.isNotEmpty 
-        ? (List<Project>.from(allProjects)..sort((a, b) => b.lastOpened.compareTo(a.lastOpened))).first 
+
+    if (_sortByName) {
+      projects.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    } else {
+      projects.sort((a, b) => b.lastOpened.compareTo(a.lastOpened));
+    }
+
+    final lastProject = allProjects.isNotEmpty
+        ? (List<Project>.from(allProjects)..sort((a, b) => b.lastOpened.compareTo(a.lastOpened))).first
         : null;
-        
+
     final otherProjects = lastProject != null && _searchQuery.isEmpty && _selectedStackFilter == 'all'
         ? projects.where((p) => p.id != lastProject.id).toList()
         : projects;
-        
+
     final width = MediaQuery.of(context).size.width;
 
     if (width >= 1024) {
-      return _buildDesktopHome(context, projects, lastProject, otherProjects);
+      return _buildDesktopHome(context, allProjects, projects, lastProject, otherProjects);
     } else if (width >= 600) {
-      return _buildTabletHome(context, projects, lastProject, otherProjects);
+      return _buildTabletHome(context, allProjects, projects, lastProject, otherProjects);
     } else {
-      return _buildMobileHome(context, projects, lastProject, otherProjects);
+      return _buildMobileHome(context, allProjects, projects, lastProject, otherProjects);
     }
   }
 
@@ -125,11 +194,11 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(LucideIcons.folder_search, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
+            Icon(LucideIcons.folder_search, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.12)),
             const SizedBox(height: 16),
             Text(
               _searchQuery.isEmpty ? AppLocalizations.of(context)!.noProjects : AppLocalizations.of(context)!.nothingFound,
-              style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5), fontSize: 16),
+              style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 16),
             ),
             if (_searchQuery.isEmpty) ...[
               const SizedBox(height: 24),
@@ -163,7 +232,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.08),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -173,9 +242,16 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildTabletHome(BuildContext context, List<Project> projects, Project? lastProject, List<Project> otherProjects) {
+  Widget _buildTabletHome(
+    BuildContext context,
+    List<Project> allProjects,
+    List<Project> projects,
+    Project? lastProject,
+    List<Project> otherProjects,
+  ) {
     final theme = Theme.of(context);
-    final stats = ref.watch(systemStatsProvider);
+    final showResume = lastProject != null && _searchQuery.isEmpty && _selectedStackFilter == 'all';
+    final displayedProjects = showResume ? otherProjects : projects;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -185,8 +261,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           Container(
             width: 68,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.015),
-              border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+              color: theme.colorScheme.surfaceContainerLow,
+              border: Border(right: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4))),
             ),
             child: Column(
               children: [
@@ -199,10 +275,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(LucideIcons.terminal, color: Colors.white, size: 20),
+                  child: Icon(LucideIcons.terminal, color: theme.colorScheme.onPrimary, size: 20),
                 ),
                 const SizedBox(height: 16),
-                const Divider(height: 1, color: Colors.white10),
+                Divider(height: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
                 const SizedBox(height: 8),
                 Expanded(
                   child: ListView(
@@ -254,35 +330,40 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 // Telemetry summary indicator
-                Tooltip(
-                  message: 'CPU: ${(stats.cpuUsage * 100).toStringAsFixed(0)}% • App RAM: ${stats.appRamFormatted}',
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Container(
-                      width: 44,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.02),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF10B981)),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final stats = ref.watch(systemStatsProvider);
+                    return Tooltip(
+                      message: 'CPU: ${(stats.cpuUsage * 100).toStringAsFixed(0)}% • GPU: ${(stats.gpuUsage * 100).toStringAsFixed(0)}% • App RAM: ${stats.appRamFormatted}',
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Container(
+                          width: 44,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHigh,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45)),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
-                            style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF10B981)),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
+                                style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -294,77 +375,71 @@ class _HomePageState extends ConsumerState<HomePage> {
               physics: const BouncingScrollPhysics(),
               slivers: [
                 SliverPadding(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final searchWidth = (constraints.maxWidth * 0.38).clamp(200.0, 280.0);
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      AppLocalizations.of(context)!.welcomeTitle,
-                                      style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, letterSpacing: -0.5),
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            AppLocalizations.of(context)!.welcomeTitle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w900,
+                                              color: theme.colorScheme.onSurface,
+                                              letterSpacing: -0.5,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        _buildVersionChip(context),
+                                      ],
                                     ),
-                                    const SizedBox(width: 10),
-                                    _buildVersionChip(context),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      AppLocalizations.of(context)!.welcomeSubtitle,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13,
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  AppLocalizations.of(context)!.welcomeSubtitle,
-                                  style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          SizedBox(
-                            width: 280,
-                            child: _buildSearchField(),
-                          ),
-                        ],
+                              ),
+                              const SizedBox(width: 16),
+                              SizedBox(
+                                width: searchWidth,
+                                child: _buildSearchField(),
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 16),
                       _buildAppUpdateBanner(context),
                       _buildPackagesRecommendationBanner(context),
-                      _buildQuickActionsAdaptive(context),
-                      const SizedBox(height: 18),
-                      if (lastProject != null && _searchQuery.isEmpty) ...[
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: _buildResumeCard(context, lastProject),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              flex: 2,
-                              child: _buildSystemMonitor(context),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                      ] else ...[
-                        _buildSystemMonitor(context),
+                      if (showResume) ...[
+                        _buildResumeCard(context, lastProject),
                         const SizedBox(height: 16),
                       ],
                       _buildStackFilterChips(context),
                       const SizedBox(height: 14),
-                      if (projects.isNotEmpty) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              AppLocalizations.of(context)!.projectsHeader(projects.length),
-                              style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
-                            ),
-                          ],
+                      if (displayedProjects.isNotEmpty || (Platform.isAndroid && allProjects.isNotEmpty)) ...[
+                        _buildProjectsHeader(
+                          displayedProjects.length,
+                          hasAnyProjects: allProjects.isNotEmpty,
                         ),
                         const SizedBox(height: 14),
                       ],
@@ -373,19 +448,19 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
                 if (projects.isEmpty)
                   _buildEmptyStateSliver(context, theme)
-                else
+                else if (displayedProjects.isNotEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                     sliver: SliverGrid(
                       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 320,
-                        mainAxisExtent: 175,
+                        maxCrossAxisExtent: 340,
+                        mainAxisExtent: 184,
                         mainAxisSpacing: 14,
                         crossAxisSpacing: 14,
                       ),
                       delegate: SliverChildBuilderDelegate(
-                        (context, index) => _buildDesktopProjectCard(context, ref, projects[index]),
-                        childCount: projects.length,
+                        (context, index) => _buildDesktopProjectCard(context, ref, displayedProjects[index]),
+                        childCount: displayedProjects.length,
                       ),
                     ),
                   ),
@@ -397,9 +472,17 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildMobileHome(BuildContext context, List<Project> projects, Project? lastProject, List<Project> otherProjects) {
+  Widget _buildMobileHome(
+    BuildContext context,
+    List<Project> allProjects,
+    List<Project> projects,
+    Project? lastProject,
+    List<Project> otherProjects,
+  ) {
     final theme = Theme.of(context);
     final isLandscapeMobile = MediaQuery.of(context).orientation == Orientation.landscape;
+    final showResume = lastProject != null && _searchQuery.isEmpty && _selectedStackFilter == 'all';
+    final displayedProjects = showResume ? otherProjects : projects;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -419,7 +502,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          theme.colorScheme.primary.withValues(alpha: 0.12),
+                          theme.colorScheme.primary.withValues(alpha: 0.1),
                           theme.colorScheme.primary.withValues(alpha: 0.0),
                         ],
                       ),
@@ -436,8 +519,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          Colors.purpleAccent.withValues(alpha: 0.08),
-                          Colors.purpleAccent.withValues(alpha: 0.0),
+                          theme.colorScheme.secondary.withValues(alpha: 0.07),
+                          theme.colorScheme.secondary.withValues(alpha: 0.0),
                         ],
                       ),
                     ),
@@ -452,25 +535,29 @@ class _HomePageState extends ConsumerState<HomePage> {
               slivers: [
                 _buildSliverAppBar(context),
                 SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       _buildSearchField(),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
                       _buildAppUpdateBanner(context),
                       _buildPackagesRecommendationBanner(context),
-                      if (lastProject != null && _searchQuery.isEmpty) ...[
+                      if (showResume) ...[
                         _buildResumeCard(context, lastProject),
+                        const SizedBox(height: 12),
                       ],
-                      _buildQuickActionsAdaptive(context),
+                      _buildMobileQuickActionsBar(context),
+                      const SizedBox(height: 12),
+                      _buildCompactSystemMonitorChip(context),
                       const SizedBox(height: 14),
-                      _buildSystemMonitor(context),
-                      const SizedBox(height: 16),
                       _buildStackFilterChips(context),
                       const SizedBox(height: 14),
-                      if (otherProjects.isNotEmpty) ...[
-                        _buildProjectsHeader(otherProjects.length),
+                      if (displayedProjects.isNotEmpty || (Platform.isAndroid && allProjects.isNotEmpty)) ...[
+                        _buildProjectsHeader(
+                          displayedProjects.length,
+                          hasAnyProjects: allProjects.isNotEmpty,
+                        ),
                         const SizedBox(height: 10),
                       ],
                     ]),
@@ -478,26 +565,29 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
                 if (projects.isEmpty)
                   _buildEmptyStateSliver(context, theme)
-                else if (otherProjects.isNotEmpty)
+                else if (displayedProjects.isNotEmpty)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     sliver: isLandscapeMobile
                         ? SliverGrid(
                             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                               maxCrossAxisExtent: 360,
-                              mainAxisExtent: 96,
+                              mainAxisExtent: 116,
                               crossAxisSpacing: 10,
                               mainAxisSpacing: 10,
                             ),
                             delegate: SliverChildBuilderDelegate(
-                              (context, index) => _buildProjectCard(context, ref, otherProjects[index]),
-                              childCount: otherProjects.length,
+                              (context, index) => _buildProjectCard(context, ref, displayedProjects[index]),
+                              childCount: displayedProjects.length,
                             ),
                           )
                         : SliverList(
                             delegate: SliverChildBuilderDelegate(
-                              (context, index) => _buildProjectCard(context, ref, otherProjects[index]),
-                              childCount: otherProjects.length,
+                              (context, index) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _buildProjectCard(context, ref, displayedProjects[index]),
+                              ),
+                              childCount: displayedProjects.length,
                             ),
                           ),
                   ),
@@ -506,18 +596,19 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showProjectDialog(context, ref),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
-        child: const Icon(LucideIcons.plus),
-      ),
     );
   }
 
-  Widget _buildDesktopHome(BuildContext context, List<Project> projects, Project? lastProject, List<Project> otherProjects) {
+  Widget _buildDesktopHome(
+    BuildContext context,
+    List<Project> allProjects,
+    List<Project> projects,
+    Project? lastProject,
+    List<Project> otherProjects,
+  ) {
     final theme = Theme.of(context);
-    final stats = ref.watch(systemStatsProvider);
+    final showResume = lastProject != null && _searchQuery.isEmpty && _selectedStackFilter == 'all';
+    final displayedProjects = showResume ? otherProjects : projects;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -527,8 +618,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           Container(
             width: 260,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.015),
-              border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+              color: theme.colorScheme.surfaceContainerLow,
+              border: Border(right: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4))),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -546,26 +637,29 @@ class _HomePageState extends ConsumerState<HomePage> {
                           ),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(LucideIcons.terminal, color: Colors.white, size: 20),
+                        child: Icon(LucideIcons.terminal, color: theme.colorScheme.onPrimary, size: 20),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        'Quantum IDE',
-                        style: GoogleFonts.inter(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          color: theme.colorScheme.onSurface,
-                          letterSpacing: -0.5,
+                      Expanded(
+                        child: Text(
+                          'Quantum IDE',
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: theme.colorScheme.onSurface,
+                            letterSpacing: -0.5,
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       _buildVersionChip(context),
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: Colors.white10),
+                Divider(height: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
                 const SizedBox(height: 16),
-                
+
                 // Navigation items
                 Expanded(
                   child: ListView(
@@ -616,147 +710,188 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ],
                   ),
                 ),
-                
+
                 // System Telemetry
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.01),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                Consumer(
+                  builder: (context, ref, _) {
+                    final stats = ref.watch(systemStatsProvider);
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: 6, height: 6,
-                              decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF10B981)),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF10B981)),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'TELEMETRY',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'TELEMETRY',
-                              style: GoogleFonts.inter(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white38),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('CPU', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
+                                Text(
+                                  '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
+                                  style: GoogleFonts.inter(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            LinearProgressIndicator(
+                              value: stats.cpuUsage,
+                              minHeight: 3,
+                              backgroundColor: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                              valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('App RAM', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
+                                Text(
+                                  stats.appRamFormatted,
+                                  style: GoogleFonts.inter(color: theme.colorScheme.secondary, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            LinearProgressIndicator(
+                              value: stats.ramUsage,
+                              minHeight: 3,
+                              backgroundColor: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
+                              valueColor: AlwaysStoppedAnimation(theme.colorScheme.secondary),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('CPU', style: GoogleFonts.inter(color: Colors.white60, fontSize: 10)),
-                            Text('${(stats.cpuUsage * 100).toStringAsFixed(0)}%', style: GoogleFonts.inter(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(value: stats.cpuUsage, minHeight: 2, backgroundColor: Colors.white10, valueColor: const AlwaysStoppedAnimation(Colors.cyanAccent)),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('App RAM', style: GoogleFonts.inter(color: Colors.white60, fontSize: 10)),
-                            Text(stats.appRamFormatted, style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(value: stats.ramUsage, minHeight: 2, backgroundColor: Colors.white10, valueColor: const AlwaysStoppedAnimation(Colors.purpleAccent)),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
           ),
-          
+
           // Main content
           Expanded(
-            child: CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.all(32),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  AppLocalizations.of(context)!.welcomeTitle,
-                                  style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, letterSpacing: -0.5),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1360),
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(32, 32, 32, 0),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      AppLocalizations.of(context)!.welcomeTitle,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w900,
+                                        color: theme.colorScheme.onSurface,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      AppLocalizations.of(context)!.welcomeSubtitle,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  AppLocalizations.of(context)!.welcomeSubtitle,
-                                  style: GoogleFonts.inter(fontSize: 14, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
-                                ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 24),
+                              SizedBox(
+                                width: 320,
+                                child: _buildSearchField(),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 24),
-                          SizedBox(
-                            width: 320,
-                            child: _buildSearchField(),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      _buildAppUpdateBanner(context),
-                      _buildPackagesRecommendationBanner(context),
-                      _buildQuickActionsAdaptive(context),
-                      const SizedBox(height: 20),
-                      if (lastProject != null && _searchQuery.isEmpty) ...[
-                        Text(
-                          AppLocalizations.of(context)!.lastActiveProject,
-                          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildResumeCard(context, lastProject),
-                        const SizedBox(height: 20),
-                      ],
-                      _buildStackFilterChips(context),
-                      const SizedBox(height: 16),
-                      if (projects.isNotEmpty) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
+                          const SizedBox(height: 20),
+                          _buildAppUpdateBanner(context),
+                          _buildPackagesRecommendationBanner(context),
+                          if (showResume) ...[
                             Text(
-                              AppLocalizations.of(context)!.projectsHeader(projects.length),
-                              style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                              AppLocalizations.of(context)!.lastActiveProject,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 680),
+                                child: _buildResumeCard(context, lastProject),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
                           ],
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    ]),
-                  ),
-                ),
-                
-                if (projects.isEmpty)
-                  _buildEmptyStateSliver(context, theme)
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(32, 0, 32, 32),
-                    sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 320,
-                        mainAxisExtent: 192,
-                        mainAxisSpacing: 16,
-                        crossAxisSpacing: 16,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) => _buildDesktopProjectCard(context, ref, projects[index]),
-                        childCount: projects.length,
+                          _buildStackFilterChips(context),
+                          const SizedBox(height: 16),
+                          if (displayedProjects.isNotEmpty || (Platform.isAndroid && allProjects.isNotEmpty)) ...[
+                            _buildProjectsHeader(
+                              displayedProjects.length,
+                              hasAnyProjects: allProjects.isNotEmpty,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        ]),
                       ),
                     ),
-                  ),
-              ],
+                    if (projects.isEmpty)
+                      _buildEmptyStateSliver(context, theme)
+                    else if (displayedProjects.isNotEmpty)
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(32, 0, 32, 32),
+                        sliver: SliverGrid(
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 340,
+                            mainAxisExtent: 184,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                          ),
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) => _buildDesktopProjectCard(context, ref, displayedProjects[index]),
+                            childCount: displayedProjects.length,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -780,7 +915,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.08),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(icon, color: color, size: 16),
@@ -790,7 +925,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   child: Text(
                     label,
                     style: GoogleFonts.inter(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -808,14 +943,15 @@ class _HomePageState extends ConsumerState<HomePage> {
     final lastModified = project.lastOpened;
     final dateStr = '${lastModified.day}.${lastModified.month}.${lastModified.year}';
     final theme = Theme.of(context);
+    final isExporting = _exportingProjectIds.contains(project.id);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.015),
+          color: theme.colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 1),
+          border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45), width: 1),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -861,6 +997,29 @@ class _HomePageState extends ConsumerState<HomePage> {
                               : Icon(project.icon, color: project.color, size: 20),
                         ),
                         const Spacer(),
+                        if (Platform.isAndroid) ...[
+                          IconButton(
+                            icon: isExporting
+                                ? SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  )
+                                : Icon(
+                                    LucideIcons.hard_drive_upload,
+                                    size: 14,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                            tooltip: 'Обновить на SD',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: isExporting ? null : () => _exportSingleProjectToSdCard(project),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         if (PlatformUtils.isDesktop) ...[
                           IconButton(
                             icon: const Icon(LucideIcons.folder_open, size: 14, color: Colors.cyanAccent),
@@ -872,7 +1031,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           const SizedBox(width: 8),
                         ],
                         IconButton(
-                          icon: const Icon(LucideIcons.play, size: 14, color: Colors.greenAccent),
+                          icon: const Icon(LucideIcons.play, size: 14, color: Color(0xFF10B981)),
                           tooltip: AppLocalizations.of(context)!.runTooltip,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -883,7 +1042,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ),
                         const SizedBox(width: 8),
                         IconButton(
-                          icon: const Icon(LucideIcons.ellipsis_vertical, size: 14),
+                          icon: Icon(LucideIcons.ellipsis_vertical, size: 14, color: theme.colorScheme.onSurfaceVariant),
                           tooltip: AppLocalizations.of(context)!.actionsTooltip,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -906,7 +1065,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.jetBrainsMono(
-                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
+                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                           fontSize: 9.5,
                         ),
                       ),
@@ -917,16 +1076,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                       children: [
                         Text(
                           project.type.name.toUpperCase(),
-                          style: GoogleFonts.inter(color: theme.colorScheme.primary.withValues(alpha: 0.8), fontSize: 10, fontWeight: FontWeight.bold),
+                          style: GoogleFonts.inter(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold),
                         ),
                         Text(
                           dateStr,
-                          style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4), fontSize: 10),
+                          style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65), fontSize: 10),
                         ),
                       ],
                     ),
                     if (project.platforms != null && project.platforms!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Wrap(
                         spacing: 4,
                         runSpacing: 4,
@@ -934,9 +1093,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                           return Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                             decoration: BoxDecoration(
-                              color: project.color.withValues(alpha: 0.08),
+                              color: project.color.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: project.color.withValues(alpha: 0.15)),
+                              border: Border.all(color: project.color.withValues(alpha: 0.2)),
                             ),
                             child: Text(
                               plat.toUpperCase(),
@@ -949,7 +1108,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           );
                         }).toList(),
                       ),
-                    ]
+                    ],
                   ],
                 ),
               ),
@@ -966,9 +1125,9 @@ class _HomePageState extends ConsumerState<HomePage> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       pinned: true,
-      expandedHeight: 80,
+      expandedHeight: 68,
       flexibleSpace: FlexibleSpaceBar(
-        titlePadding: const EdgeInsets.only(left: 20, bottom: 12),
+        titlePadding: const EdgeInsets.only(left: 16, bottom: 12),
         centerTitle: false,
         title: FittedBox(
           fit: BoxFit.scaleDown,
@@ -1006,11 +1165,6 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
       actions: [
         _buildAppActionButton(
-          icon: LucideIcons.git_branch,
-          tooltip: 'Git и GitHub',
-          onTap: () => context.push('/github'),
-        ),
-        _buildAppActionButton(
           icon: LucideIcons.blocks,
           tooltip: 'Инструменты разработчика',
           onTap: () => _showDeveloperToolsSheet(context),
@@ -1032,11 +1186,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       height: 34,
       margin: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
       decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+        color: theme.colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: IconButton(
-        icon: Icon(icon, color: theme.colorScheme.onSurface.withValues(alpha: 0.7), size: 16),
+        icon: Icon(icon, color: theme.colorScheme.onSurfaceVariant, size: 16),
         onPressed: onTap,
         tooltip: tooltip,
         padding: EdgeInsets.zero,
@@ -1536,7 +1691,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildPackagesRecommendationBanner(BuildContext context) {
-    if (_dismissedPackagesBanner) return const SizedBox.shrink();
+    if (!Platform.isAndroid || _dismissedPackagesBanner) {
+      return const SizedBox.shrink();
+    }
 
     final allPackages = ref.watch(packageServiceProvider);
     const essentialIds = ['vulkan-graphics', 'box64-emulator', 'build-fix', 'apk-signing-tools'];
@@ -1621,17 +1778,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Vulkan 3D, Box64, Build Environment Fix и инструменты подписи APK для работы на планшете.',
+                      'Vulkan 3D, Box64, Build Environment Fix и инструменты подписи APK для работы на Android.',
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
               ),
               IconButton(
-                icon: Icon(LucideIcons.x, size: 18, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                icon: Icon(LucideIcons.x, size: 18, color: theme.colorScheme.onSurfaceVariant),
                 onPressed: () {
                   setState(() {
                     _dismissedPackagesBanner = true;
@@ -1654,7 +1811,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                     _dismissedPackagesBanner = true;
                   });
                 },
-                child: Text('Позже', style: GoogleFonts.inter(color: Colors.white54, fontSize: 13)),
+                child: Text(
+                  'Позже',
+                  style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 13),
+                ),
               ),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -1894,9 +2054,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildSystemMonitor(BuildContext context) {
-    final stats = ref.watch(systemStatsProvider);
+    return Consumer(
+      builder: (context, ref, _) {
+        final stats = ref.watch(systemStatsProvider);
 
-    return Container(
+        return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.02),
@@ -2092,6 +2254,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         ],
       ),
+        );
+      },
     );
   }
 
@@ -2241,6 +2405,36 @@ class _HomePageState extends ConsumerState<HomePage> {
         onTap: () {
           Navigator.pop(context);
           context.push('/devtools');
+        },
+      ),
+      (
+        icon: LucideIcons.send,
+        title: 'REST API Клиент',
+        subtitle: 'Отправка HTTP-запросов (GET/POST/PUT/DELETE) и просмотр ответов',
+        color: const Color(0xFF818CF8),
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/rest-client');
+        },
+      ),
+      (
+        icon: LucideIcons.activity,
+        title: 'Сетевой инспектор (Network)',
+        subtitle: 'Мониторинг HTTP/API-запросов, статусов, заголовков и задержек',
+        color: const Color(0xFF34D399),
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/network-inspector');
+        },
+      ),
+      (
+        icon: LucideIcons.folder_search,
+        title: 'Проводник файлов',
+        subtitle: 'Обзор директорий и быстрый доступ к файлам устройства',
+        color: const Color(0xFFFBBF24),
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/explorer');
         },
       ),
     ];

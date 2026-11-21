@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:diff_match_patch/diff_match_patch.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,6 +34,12 @@ class RoxumThinkingCard extends StatefulWidget {
 class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
   bool _expanded = false;
 
+  String _tailLines(String text, int maxLines) {
+    final lines = text.trimRight().split('\n');
+    if (lines.length <= maxLines) return text.trimRight();
+    return lines.sublist(lines.length - maxLines).join('\n');
+  }
+
   @override
   Widget build(BuildContext context) {
     final sec = (widget.durationMs / 1000).round();
@@ -44,6 +51,21 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
         : (widget.durationMs > 0 ? 'Thought for $secDisplay' : 'Thought');
 
     final muted = widget.textColor.withValues(alpha: 0.62);
+
+    final Widget labelWidget = Text(
+      label,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w400,
+        color: muted,
+      ),
+    );
+
+    final displayReasoning = _expanded
+        ? widget.reasoningText
+        : (widget.isStreaming
+            ? _tailLines(widget.reasoningText, 3)
+            : widget.reasoningText);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -58,22 +80,15 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      color: muted,
-                    ),
-                  )
-                      .animate(
-                        onPlay: (c) =>
-                            widget.isStreaming ? c.repeat() : c.stop(),
-                      )
-                      .shimmer(
-                        duration: 1300.ms,
-                        color: widget.textColor.withValues(alpha: 0.9),
-                      ),
+                  if (widget.isStreaming)
+                    labelWidget
+                        .animate(onPlay: (c) => c.repeat())
+                        .shimmer(
+                          duration: 1300.ms,
+                          color: widget.textColor.withValues(alpha: 0.9),
+                        )
+                  else
+                    labelWidget,
                   const SizedBox(width: 6),
                   Icon(
                     _expanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
@@ -98,7 +113,7 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
                 ),
               ),
               child: Text(
-                widget.reasoningText,
+                displayReasoning,
                 maxLines: _expanded ? null : 3,
                 overflow:
                     _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
@@ -135,10 +150,94 @@ class RoxumAgentTimeline extends StatefulWidget {
 
 class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
   final Set<String> _expandedIds = {};
+  bool _chainExpanded = false;
 
   @override
   Widget build(BuildContext context) {
     if (widget.toolCalls.isEmpty) return const SizedBox.shrink();
+
+    final allFinished = widget.toolCalls.every((tc) => !tc.isRunning);
+    final shouldUseSummary = allFinished && widget.toolCalls.length > 4;
+    final failedCount =
+        widget.toolCalls.where((tc) => !tc.isRunning && !tc.success).length;
+    final muted = widget.textColor.withValues(alpha: 0.65);
+
+    if (shouldUseSummary) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(7),
+              onTap: () => setState(() => _chainExpanded = !_chainExpanded),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 34),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        failedCount > 0
+                            ? Icons.error_outline
+                            : LucideIcons.circle_check,
+                        size: 14,
+                        color: failedCount > 0
+                            ? Colors.redAccent
+                            : const Color(0xFF22C55E),
+                      ),
+                      const SizedBox(width: 7),
+                      Flexible(
+                        child: Text(
+                          failedCount > 0
+                              ? 'Выполнено ${widget.toolCalls.length} шагов ($failedCount с ошибкой)'
+                              : 'Выполнено ${widget.toolCalls.length} шагов',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                            color: muted,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        _chainExpanded
+                            ? Icons.keyboard_arrow_down
+                            : Icons.chevron_right,
+                        size: 16,
+                        color: muted,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (_chainExpanded)
+              Container(
+                margin: const EdgeInsets.only(left: 7, top: 2),
+                padding: const EdgeInsets.only(left: 8),
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(
+                      color: widget.textColor.withValues(alpha: 0.14),
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final tc in widget.toolCalls) _buildInlineStepRow(tc),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -155,112 +254,139 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
     final isExpanded = _expandedIds.contains(tc.id);
     final info = _describeStep(tc);
     final muted = widget.textColor.withValues(alpha: 0.62);
+    final hasExpandableOutput = tc.output.isNotEmpty;
+    final canOpenFile = info.filePath != null &&
+        info.filePath!.isNotEmpty &&
+        widget.onOpenFile != null &&
+        (tc.name == 'readFile' ||
+            tc.name == 'codeOutline' ||
+            tc.name == 'writeFile' ||
+            tc.name == 'editFile' ||
+            tc.name == 'insertAtLine' ||
+            tc.name == 'replaceAllInFile');
+
+    final targetTextStyle = info.isMono
+        ? GoogleFonts.jetBrainsMono(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: widget.textColor.withValues(alpha: 0.9),
+            decoration: canOpenFile ? TextDecoration.underline : null,
+            decorationColor: widget.textColor.withValues(alpha: 0.35),
+          )
+        : TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: widget.textColor.withValues(alpha: 0.9),
+            decoration: canOpenFile ? TextDecoration.underline : null,
+            decorationColor: widget.textColor.withValues(alpha: 0.35),
+          );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(6),
-            onTap: () {
-              if (info.filePath != null &&
-                  info.filePath!.isNotEmpty &&
-                  widget.onOpenFile != null &&
-                  (tc.name == 'readFile' ||
-                      tc.name == 'codeOutline' ||
-                      tc.name == 'writeFile' ||
-                      tc.name == 'editFile')) {
-                widget.onOpenFile!(info.filePath!);
-                return;
-              }
-              if (tc.output.isNotEmpty) {
-                setState(() {
-                  if (isExpanded) {
-                    _expandedIds.remove(tc.id);
-                  } else {
-                    _expandedIds.add(tc.id);
+            onTap: hasExpandableOutput
+                ? () {
+                    setState(() {
+                      if (isExpanded) {
+                        _expandedIds.remove(tc.id);
+                      } else {
+                        _expandedIds.add(tc.id);
+                      }
+                    });
                   }
-                });
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3.5),
-              child: Row(
-                children: [
-                  if (tc.isRunning) ...[
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
-                        color: info.iconColor,
+                : null,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 34),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Row(
+                  children: [
+                    if (tc.isRunning) ...[
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.8,
+                          color: info.iconColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      info.verb,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: muted,
                       ),
                     ),
                     const SizedBox(width: 8),
-                  ],
-                  Text(
-                    info.verb,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      color: muted,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  _buildFileOrToolBadge(info),
-                  const SizedBox(width: 7),
-                  Flexible(
-                    child: Text(
-                      info.primaryTarget,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: info.isMono
-                          ? GoogleFonts.jetBrainsMono(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: widget.textColor.withValues(alpha: 0.9),
+                    _buildFileOrToolBadge(info),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: canOpenFile
+                          ? InkWell(
+                              borderRadius: BorderRadius.circular(4),
+                              onTap: () => widget.onOpenFile!(info.filePath!),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 2,
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  info.primaryTarget,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: targetTextStyle,
+                                ),
+                              ),
                             )
-                          : TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: widget.textColor.withValues(alpha: 0.9),
+                          : Text(
+                              info.primaryTarget,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: targetTextStyle,
                             ),
                     ),
-                  ),
-                  if (info.lineRange != null && info.lineRange!.isNotEmpty) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      info.lineRange!,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: widget.textColor.withValues(alpha: 0.55),
+                    if (info.lineRange != null &&
+                        info.lineRange!.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        info.lineRange!,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: widget.textColor.withValues(alpha: 0.55),
+                        ),
                       ),
-                    ),
+                    ],
+                    if (!tc.isRunning && !tc.success) ...[
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.error_outline,
+                        size: 14,
+                        color: Colors.redAccent,
+                      ),
+                    ],
+                    if (hasExpandableOutput) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        isExpanded
+                            ? Icons.keyboard_arrow_down
+                            : Icons.chevron_right,
+                        size: 16,
+                        color: (!tc.isRunning && !tc.success)
+                            ? Colors.redAccent.withValues(alpha: 0.85)
+                            : widget.textColor.withValues(alpha: 0.45),
+                      ),
+                    ],
                   ],
-                  if (!tc.isRunning && !tc.success) ...[
-                    const SizedBox(width: 6),
-                    const Icon(
-                      Icons.error_outline,
-                      size: 14,
-                      color: Colors.redAccent,
-                    ),
-                  ],
-                  if (tc.output.isNotEmpty &&
-                      tc.name != 'readFile' &&
-                      tc.name != 'writeFile' &&
-                      tc.name != 'editFile') ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      isExpanded
-                          ? Icons.keyboard_arrow_down
-                          : Icons.chevron_right,
-                      size: 15,
-                      color: widget.textColor.withValues(alpha: 0.45),
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
           ),
@@ -269,10 +395,14 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
               margin: const EdgeInsets.only(top: 4, bottom: 4, left: 6),
               padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
-                color: widget.surfaceColor.withValues(alpha: 0.8),
+                color: (!tc.isRunning && !tc.success)
+                    ? Colors.redAccent.withValues(alpha: 0.08)
+                    : widget.surfaceColor.withValues(alpha: 0.8),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: widget.textColor.withValues(alpha: 0.09),
+                  color: (!tc.isRunning && !tc.success)
+                      ? Colors.redAccent.withValues(alpha: 0.35)
+                      : widget.textColor.withValues(alpha: 0.09),
                 ),
               ),
               child: SelectableText(
@@ -282,7 +412,9 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10.5,
                   height: 1.38,
-                  color: widget.textColor.withValues(alpha: 0.8),
+                  color: (!tc.isRunning && !tc.success)
+                      ? Colors.redAccent
+                      : widget.textColor.withValues(alpha: 0.8),
                 ),
               ),
             ),
@@ -519,16 +651,34 @@ class RoxumFileDiffCard extends StatefulWidget {
 class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
   bool _showAllLines = false;
   bool _collapsed = false;
+  late List<({int op, String text})> _diffLines;
 
   @override
-  Widget build(BuildContext context) {
-    final diffLines = _computeDiffLines(
+  void initState() {
+    super.initState();
+    _diffLines = _computeDiffLines(
       widget.edit.originalContent,
       widget.edit.updatedContent,
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant RoxumFileDiffCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.edit.originalContent != widget.edit.originalContent ||
+        oldWidget.edit.updatedContent != widget.edit.updatedContent) {
+      _diffLines = _computeDiffLines(
+        widget.edit.originalContent,
+        widget.edit.updatedContent,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final visibleLines =
-        _showAllLines ? diffLines : diffLines.take(16).toList();
-    final hiddenCount = diffLines.length - visibleLines.length;
+        _showAllLines ? _diffLines : _diffLines.take(16).toList();
+    final hiddenCount = _diffLines.length - visibleLines.length;
 
     final isDark = ThemeData.estimateBrightnessForColor(widget.surfaceColor) ==
         Brightness.dark;
@@ -553,10 +703,13 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
         children: [
           // Header
           InkWell(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+            borderRadius: BorderRadius.vertical(
+              top: const Radius.circular(11),
+              bottom: _collapsed ? const Radius.circular(11) : Radius.zero,
+            ),
             onTap: () => setState(() => _collapsed = !_collapsed),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: widget.surfaceColor,
                 borderRadius: BorderRadius.vertical(
@@ -566,6 +719,14 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
               ),
               child: Row(
                 children: [
+                  Icon(
+                    _collapsed
+                        ? Icons.chevron_right
+                        : Icons.keyboard_arrow_down,
+                    size: 16,
+                    color: widget.textColor.withValues(alpha: 0.55),
+                  ),
+                  const SizedBox(width: 4),
                   const Icon(
                     LucideIcons.file_diff,
                     size: 14,
@@ -575,45 +736,80 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
                   Expanded(
                     child: InkWell(
                       onTap: widget.onOpenFile,
-                      child: Text(
-                        p.basename(widget.edit.filePath),
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF38BDF8),
-                          decoration: widget.onOpenFile != null
-                              ? TextDecoration.underline
-                              : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Text(
+                          p.basename(widget.edit.filePath),
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF38BDF8),
+                            decoration: widget.onOpenFile != null
+                                ? TextDecoration.underline
+                                : null,
+                          ),
                         ),
                       ),
                     ),
                   ),
+                  const SizedBox(width: 4),
                   _statPill('+${widget.edit.addedLines}', const Color(0xFF22C55E)),
                   const SizedBox(width: 4),
                   _statPill('-${widget.edit.removedLines}', Colors.redAccent),
                   if (widget.isPending) ...[
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: widget.onUndo,
-                      child: Tooltip(
-                        message: AppLocalizations.of(context)!.revertFile,
-                        child: const Icon(
-                          Icons.undo,
-                          size: 16,
-                          color: Colors.redAccent,
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: AppLocalizations.of(context)!.revertFile,
+                      child: InkWell(
+                        onTap: widget.onUndo,
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: Center(
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: const Icon(
+                                Icons.undo,
+                                size: 16,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: widget.onKeep,
-                      child: Tooltip(
-                        message: AppLocalizations.of(context)!.acceptFile,
-                        child: const Icon(
-                          Icons.check,
-                          size: 16,
-                          color: Color(0xFF22C55E),
+                    const SizedBox(width: 8),
+                    Tooltip(
+                      message: AppLocalizations.of(context)!.acceptFile,
+                      child: InkWell(
+                        onTap: widget.onKeep,
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: Center(
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF22C55E)
+                                    .withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: const Icon(
+                                Icons.check,
+                                size: 16,
+                                color: Color(0xFF22C55E),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -639,50 +835,66 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
             else
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: visibleLines.map((dl) {
-                    final bg = switch (dl.op) {
-                      DIFF_INSERT =>
-                        const Color(0xFF22C55E).withValues(alpha: 0.14),
-                      DIFF_DELETE => Colors.redAccent.withValues(alpha: 0.14),
-                      _ => Colors.transparent,
-                    };
-                    final prefix = switch (dl.op) {
-                      DIFF_INSERT => '+',
-                      DIFF_DELETE => '-',
-                      _ => ' ',
-                    };
-                    final fg = switch (dl.op) {
-                      DIFF_INSERT => insertFg,
-                      DIFF_DELETE => deleteFg,
-                      _ => widget.textColor.withValues(alpha: 0.72),
-                    };
-                    return Container(
-                      color: bg,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 1.5,
-                      ),
-                      child: Text(
-                        '$prefix ${dl.text}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          height: 1.35,
-                          color: fg,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: constraints.maxWidth,
+                        ),
+                        child: IntrinsicWidth(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: visibleLines.map((dl) {
+                              final bg = switch (dl.op) {
+                                DIFF_INSERT => const Color(0xFF22C55E)
+                                    .withValues(alpha: 0.14),
+                                DIFF_DELETE =>
+                                  Colors.redAccent.withValues(alpha: 0.14),
+                                _ => Colors.transparent,
+                              };
+                              final prefix = switch (dl.op) {
+                                DIFF_INSERT => '+',
+                                DIFF_DELETE => '-',
+                                _ => ' ',
+                              };
+                              final fg = switch (dl.op) {
+                                DIFF_INSERT => insertFg,
+                                DIFF_DELETE => deleteFg,
+                                _ => widget.textColor.withValues(alpha: 0.72),
+                              };
+                              return Container(
+                                color: bg,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 1.5,
+                                ),
+                                child: Text(
+                                  '$prefix ${dl.text}',
+                                  softWrap: false,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    height: 1.35,
+                                    color: fg,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ),
                     );
-                  }).toList(),
+                  },
                 ),
               ),
-            if (hiddenCount > 0)
+            if (hiddenCount > 0 || (_showAllLines && _diffLines.length > 16))
               InkWell(
-                onTap: () => setState(() => _showAllLines = true),
+                borderRadius:
+                    const BorderRadius.vertical(bottom: Radius.circular(11)),
+                onTap: () => setState(() => _showAllLines = !_showAllLines),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     border: Border(
@@ -692,9 +904,11 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
                     ),
                   ),
                   child: Text(
-                    'Показать ещё $hiddenCount строк',
+                    hiddenCount > 0
+                        ? 'Показать ещё $hiddenCount строк'
+                        : 'Свернуть',
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 11.5,
                       color: Color(0xFF38BDF8),
                       fontWeight: FontWeight.w500,
                     ),
@@ -751,7 +965,7 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
   }
 }
 
-class RoxumCodeBlockCard extends StatelessWidget {
+class RoxumCodeBlockCard extends StatefulWidget {
   final String code;
   final String language;
   final bool isTerminalCommand;
@@ -772,16 +986,42 @@ class RoxumCodeBlockCard extends StatelessWidget {
   });
 
   @override
+  State<RoxumCodeBlockCard> createState() => _RoxumCodeBlockCardState();
+}
+
+class _RoxumCodeBlockCardState extends State<RoxumCodeBlockCard> {
+  bool _copied = false;
+  Timer? _copyTimer;
+
+  @override
+  void dispose() {
+    _copyTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleCopy() {
+    Clipboard.setData(ClipboardData(text: widget.code));
+    _copyTimer?.cancel();
+    setState(() => _copied = true);
+    _copyTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) {
+        setState(() => _copied = false);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseBg = surfaceColor ??
+    final baseBg = widget.surfaceColor ??
         (isDark ? const Color(0xFF0A0D14) : const Color(0xFFF1F5F9));
-    final bg = surfaceColor != null
+    final bg = widget.surfaceColor != null
         ? (isDark
             ? Color.lerp(baseBg, Colors.black, 0.12)!
             : Color.lerp(baseBg, Colors.black, 0.04)!)
         : baseBg;
-    final fg = textColor ?? (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A));
+    final fg = widget.textColor ??
+        (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A));
     final accent = isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7);
     final muted = fg.withValues(alpha: 0.65);
 
@@ -796,7 +1036,7 @@ class RoxumCodeBlockCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
               color: fg.withValues(alpha: 0.05),
               borderRadius:
@@ -804,89 +1044,131 @@ class RoxumCodeBlockCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(
-                  isTerminalCommand ? LucideIcons.terminal : LucideIcons.code,
-                  size: 12,
-                  color: accent,
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  language.isEmpty
-                      ? (isTerminalCommand ? 'terminal' : 'code')
-                      : language,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: accent,
-                  ),
-                ),
-                const Spacer(),
-                if (isTerminalCommand && onRunInTerminal != null) ...[
-                  InkWell(
-                    onTap: onRunInTerminal,
-                    child: Row(
-                      children: [
-                        Icon(
-                          LucideIcons.terminal,
-                          size: 12,
-                          color: accent,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          AppLocalizations.of(context)!.terminal,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: accent,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                ] else if (!isTerminalCommand && onInsertIntoEditor != null) ...[
-                  InkWell(
-                    onTap: onInsertIntoEditor,
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.input_rounded,
-                          size: 13,
-                          color: Color(0xFF22C55E),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          AppLocalizations.of(context)!.insert,
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            color: Color(0xFF22C55E),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                InkWell(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: code));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(AppLocalizations.of(context)!.codeCopied),
-                        duration: const Duration(seconds: 1),
-                      ),
-                    );
-                  },
+                Expanded(
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.copy, size: 13, color: muted),
-                      const SizedBox(width: 4),
-                      Text(
-                        AppLocalizations.of(context)!.copy,
-                        style: TextStyle(fontSize: 10.5, color: muted),
+                      Icon(
+                        widget.isTerminalCommand
+                            ? LucideIcons.terminal
+                            : LucideIcons.code,
+                        size: 12,
+                        color: accent,
+                      ),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          widget.language.isEmpty
+                              ? (widget.isTerminalCommand ? 'terminal' : 'code')
+                              : widget.language,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: accent,
+                          ),
+                        ),
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (widget.isTerminalCommand &&
+                    widget.onRunInTerminal != null) ...[
+                  InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: widget.onRunInTerminal,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 5,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.terminal,
+                            size: 13,
+                            color: accent,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            AppLocalizations.of(context)!.terminal,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ] else if (!widget.isTerminalCommand &&
+                    widget.onInsertIntoEditor != null) ...[
+                  InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: widget.onInsertIntoEditor,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 5,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.input_rounded,
+                            size: 13,
+                            color: Color(0xFF22C55E),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            AppLocalizations.of(context)!.insert,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF22C55E),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: _handleCopy,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 5,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _copied ? LucideIcons.check : Icons.copy,
+                          size: 13,
+                          color: _copied ? const Color(0xFF22C55E) : muted,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _copied
+                              ? 'Скопировано ✓'
+                              : AppLocalizations.of(context)!.copy,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight:
+                                _copied ? FontWeight.w600 : FontWeight.w400,
+                            color: _copied ? const Color(0xFF22C55E) : muted,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -896,7 +1178,7 @@ class RoxumCodeBlockCard extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.all(10),
             child: SelectableText(
-              code.trimRight(),
+              widget.code.trimRight(),
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 11.5,
                 height: 1.45,

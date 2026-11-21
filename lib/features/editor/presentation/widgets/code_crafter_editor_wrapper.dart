@@ -34,12 +34,17 @@ class _CodeCrafterEditorWrapperState
   StreamSubscription<FileDiagnostics>? _diagSubscription;
   bool _isSyncingFromReEditor = false;
   bool _isSyncingFromCrafter = false;
+  String _lastSyncedText = '';
+  CodeLines? _lastReEditorCodeLines;
 
   @override
   void initState() {
     super.initState();
+    final initialText = widget.file.controller.text;
+    _lastSyncedText = initialText;
+    _lastReEditorCodeLines = widget.file.controller.codeLines;
     _crafterController = CodeCrafterController()
-      ..text = widget.file.controller.text
+      ..text = initialText
       ..language = _resolveLanguage(widget.file.path);
     _crafterController.addListener(_onCrafterChanged);
     widget.file.controller.addListener(_onReEditorChanged);
@@ -101,13 +106,14 @@ class _CodeCrafterEditorWrapperState
       workspacePath: workspacePath,
       languageId: _resolveLanguageId(filePath),
       onOpen: () async {
-        await lspService.onFileOpened(filePath, _crafterController.text);
+        // EditorNotifier already sends didOpen to LspService on openFile;
+        // just push any existing diagnostics into CodeCrafter.
         if (widget.file.diagnostics.isNotEmpty) {
           bridge.pushDiagnostics(_mapDiagnostics(widget.file.diagnostics));
         }
       },
       onUpdate: (content) async {
-        await lspService.onFileChanged(filePath, content);
+        // EditorNotifier already notifies LspService via the synced controller listener.
       },
       onCompletion: (line, character) async {
         final items = await lspService.getCompletions(
@@ -157,8 +163,11 @@ class _CodeCrafterEditorWrapperState
       oldWidget.file.controller.removeListener(_onReEditorChanged);
       widget.file.controller.addListener(_onReEditorChanged);
       _isSyncingFromReEditor = true;
+      final nextText = widget.file.controller.text;
+      _lastSyncedText = nextText;
+      _lastReEditorCodeLines = widget.file.controller.codeLines;
       _crafterController.language = _resolveLanguage(widget.file.path);
-      _crafterController.text = widget.file.controller.text;
+      _crafterController.text = nextText;
       _isSyncingFromReEditor = false;
       _initLspBridge();
     } else if (oldWidget.file.diagnostics != widget.file.diagnostics) {
@@ -179,21 +188,27 @@ class _CodeCrafterEditorWrapperState
   void _onCrafterChanged() {
     if (_isSyncingFromReEditor) return;
     final nextText = _crafterController.text;
-    if (widget.file.controller.text != nextText) {
-      _isSyncingFromCrafter = true;
-      widget.file.controller.text = nextText;
-      _isSyncingFromCrafter = false;
-    }
+    // Fast-path: ignore cursor/selection-only notifications without touching re_editor
+    if (nextText == _lastSyncedText) return;
+    _lastSyncedText = nextText;
+    _isSyncingFromCrafter = true;
+    widget.file.controller.text = nextText;
+    _lastReEditorCodeLines = widget.file.controller.codeLines;
+    _isSyncingFromCrafter = false;
   }
 
   void _onReEditorChanged() {
     if (_isSyncingFromCrafter) return;
+    // Fast-path O(1): ignore cursor/selection-only changes when CodeLines reference is unchanged
+    final currentLines = widget.file.controller.codeLines;
+    if (identical(currentLines, _lastReEditorCodeLines)) return;
+    _lastReEditorCodeLines = currentLines;
     final nextText = widget.file.controller.text;
-    if (_crafterController.text != nextText) {
-      _isSyncingFromReEditor = true;
-      _crafterController.text = nextText;
-      _isSyncingFromReEditor = false;
-    }
+    if (nextText == _lastSyncedText) return;
+    _lastSyncedText = nextText;
+    _isSyncingFromReEditor = true;
+    _crafterController.text = nextText;
+    _isSyncingFromReEditor = false;
   }
 
   dynamic _resolveLanguage(String filePath) {

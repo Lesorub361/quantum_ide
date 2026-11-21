@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/features/file_explorer/domain/file_node.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
-import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:path/path.dart' as p;
 import 'package:archive/archive_io.dart';
@@ -112,9 +111,6 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
       final isDir = await Directory(path).exists();
       final entity = isDir ? Directory(path) : File(path);
       await entity.delete(recursive: true);
-      
-      // Mirror deletion
-      await _ref.read(projectServiceProvider.notifier).mirrorDelete(path);
 
       await scanDirectory(state.currentPath);
     } catch (e) {
@@ -129,10 +125,6 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
       final isDir = await Directory(oldPath).exists();
       final entity = isDir ? Directory(oldPath) : File(oldPath);
       await entity.rename(newPath);
-
-      // Mirror rename (delete old, mirror new)
-      await _ref.read(projectServiceProvider.notifier).mirrorDelete(oldPath);
-      await _ref.read(projectServiceProvider.notifier).mirrorEntity(newPath);
 
       await scanDirectory(state.currentPath);
     } catch (e) {
@@ -158,8 +150,7 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
         }
       }
       encoder.close();
-      
-      await _ref.read(projectServiceProvider.notifier).mirrorEntity(zipFilePath);
+
       await scanDirectory(state.currentPath);
     } catch (e) {
       rethrow;
@@ -203,11 +194,9 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
           final outFile = File(destPath);
           await outFile.create(recursive: true);
           await outFile.writeAsBytes(data);
-          await _ref.read(projectServiceProvider.notifier).mirrorEntity(destPath);
         } else {
           final outDir = Directory(destPath);
           await outDir.create(recursive: true);
-          await _ref.read(projectServiceProvider.notifier).mirrorEntity(destPath);
         }
       }
       
@@ -223,7 +212,6 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
         final isDir = await Directory(path).exists();
         final entity = isDir ? Directory(path) : File(path);
         await entity.delete(recursive: true);
-        await _ref.read(projectServiceProvider.notifier).mirrorDelete(path);
       }
       await scanDirectory(state.currentPath);
     } catch (e) {
@@ -244,9 +232,6 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
         await File(oldPath).rename(newPath);
       }
 
-      await _ref.read(projectServiceProvider.notifier).mirrorDelete(oldPath);
-      await _ref.read(projectServiceProvider.notifier).mirrorEntity(newPath);
-      
       await scanDirectory(state.currentPath);
     } catch (e) {
       rethrow;

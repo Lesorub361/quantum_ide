@@ -44,6 +44,7 @@ class _RestClientPageState extends State<RestClientPage> {
 
     final service = RestClientService();
     final response = await service.sendRequest(request);
+    if (!mounted) return;
 
     setState(() {
       _response = response;

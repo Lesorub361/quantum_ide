@@ -44,16 +44,76 @@ class RoxumChatPanel extends ConsumerStatefulWidget {
 
 class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
   final TextEditingController _promptController = TextEditingController();
+  final FocusNode _promptFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   bool _pendingExpanded = false;
   int? _editingTurnIndex;
   final List<RoxumAttachment> _attachments = [];
+  bool _isInputFocused = false;
+  bool _hasPromptText = false;
+  bool _showScrollToBottom = false;
+  String? _dismissedActiveFilePath;
+
+  @override
+  void initState() {
+    super.initState();
+    _promptFocusNode.addListener(_handleFocusChange);
+    _promptFocusNode.onKeyEvent = _handlePromptKeyEvent;
+    _promptController.addListener(_handlePromptTextChange);
+    _scrollController.addListener(_handleScrollChange);
+  }
 
   @override
   void dispose() {
+    _promptFocusNode.removeListener(_handleFocusChange);
+    _promptFocusNode.dispose();
+    _promptController.removeListener(_handlePromptTextChange);
     _promptController.dispose();
+    _scrollController.removeListener(_handleScrollChange);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (_isInputFocused != _promptFocusNode.hasFocus) {
+      setState(() => _isInputFocused = _promptFocusNode.hasFocus);
+    }
+  }
+
+  void _handlePromptTextChange() {
+    final hasText = _promptController.text.trim().isNotEmpty;
+    if (_hasPromptText != hasText) {
+      setState(() => _hasPromptText = hasText);
+    }
+  }
+
+  void _handleScrollChange() {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    final distFromBottom = pos.maxScrollExtent - pos.pixels;
+    final shouldShow = pos.maxScrollExtent > 120 && distFromBottom > 120;
+    if (_showScrollToBottom != shouldShow) {
+      setState(() => _showScrollToBottom = shouldShow);
+    }
+  }
+
+  KeyEventResult _handlePromptKeyEvent(FocusNode node, KeyEvent event) {
+    final isDesktop =
+        Platform.isLinux || Platform.isWindows || Platform.isMacOS;
+    if (!isDesktop) return KeyEventResult.ignored;
+    if (event is KeyDownEvent &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+      final isShift = HardwareKeyboard.instance.isShiftPressed;
+      if (!isShift) {
+        final isGenerating = ref.read(roxumChatProvider).isGenerating;
+        if (!isGenerating) {
+          _sendPrompt();
+        }
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
   }
 
   void _scrollToBottom() {
@@ -133,7 +193,10 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     final attached = List<RoxumAttachment>.from(_attachments);
     _editingTurnIndex = null;
     _promptController.clear();
-    setState(() => _attachments.clear());
+    setState(() {
+      _attachments.clear();
+      _hasPromptText = false;
+    });
     ref.read(roxumChatProvider.notifier).sendPrompt(
           text,
           truncateFromIndex: truncateIdx,
@@ -142,11 +205,29 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     _scrollToBottom();
   }
 
+  void _clearCurrentChat(RoxumChatState chatState) {
+    final notifier = ref.read(roxumChatProvider.notifier);
+    if (chatState.currentSession.turns.isNotEmpty) {
+      notifier.deleteSession(chatState.currentSessionId);
+      if (ref.read(roxumChatProvider).currentSession.turns.isNotEmpty) {
+        notifier.createNewSession();
+      }
+    } else {
+      notifier.createNewSession();
+    }
+    setState(() {
+      _editingTurnIndex = null;
+      _attachments.clear();
+    });
+    _promptController.clear();
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatState = ref.watch(roxumChatProvider);
     final settings = ref.watch(settingsProvider);
     final editorState = ref.watch(editorProvider);
+    final mcpServers = ref.watch(mcpServiceProvider);
     final models = ref.read(roxumChatProvider.notifier).availableModels(settings);
     final session = chatState.currentSession;
 
@@ -172,11 +253,29 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
         ? rawFg
         : (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A));
     final mutedColor = textColor.withValues(alpha: 0.65);
-    final accentColor = palette?.accent ?? const Color(0xFF38BDF8);
+    final accentColor = palette?.accent ??
+        (isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7));
 
     final selectedModelId = models.any((m) => m.id == chatState.selectedModelId)
         ? chatState.selectedModelId
         : (models.isNotEmpty ? models.first.id : null);
+
+    final activeFilePath = editorState.activeFilePath;
+    if (activeFilePath != _dismissedActiveFilePath &&
+        _dismissedActiveFilePath != null &&
+        activeFilePath != null) {
+      // User switched to a different file; re-show chip cleanly on next frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _dismissedActiveFilePath != null) {
+          setState(() => _dismissedActiveFilePath = null);
+        }
+      });
+    }
+    final showActiveFileChip =
+        activeFilePath != null && activeFilePath != _dismissedActiveFilePath;
+
+    final enabledMcpCount = mcpServers.where((s) => s.isEnabled).length;
+    final hasOpenRouterKey = settings.openrouterApiKey.trim().isNotEmpty;
 
     final panelTheme = Theme.of(context).copyWith(
       brightness: isDark ? Brightness.dark : Brightness.light,
@@ -200,375 +299,858 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
       child: Container(
         color: bgColor,
         child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Column(
-            children: [
-              // ── Top Bar (Roxum style: Model selector + Mode + History + New) ──
-              Padding(
-                padding: const EdgeInsets.only(top: 8, bottom: 4),
-                child: Column(
+          top: true,
+          bottom: true,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final panelWidth = constraints.maxWidth;
+              final isNarrow = panelWidth < 400;
+
+              Widget wrapExpanded(Widget child) {
+                if (!widget.isExpanded) return child;
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 780),
+                    child: child,
+                  ),
+                );
+              }
+
+              return Column(
+                children: [
+                  // ── Compact Modern Header (1 row, 42px) ──
+                  _buildCompactHeader(
+                    context: context,
+                    chatState: chatState,
+                    session: session,
+                    models: models,
+                    enabledMcpCount: enabledMcpCount,
+                    isNarrow: isNarrow,
+                    textColor: textColor,
+                    mutedColor: mutedColor,
+                    accentColor: accentColor,
+                  ),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: textColor.withValues(alpha: 0.08),
+                  ),
+
+                  // ── Pending Edits Banner (Keep All / Undo All) ──
+                  if (chatState.pendingEdits.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 6, 10, 0),
+                      child: wrapExpanded(
+                        _buildPendingEditsBanner(
+                          chatState,
+                          surfaceColor,
+                          textColor,
+                          accentColor,
+                        ),
+                      ),
+                    ),
+
+                  // ── Messages List + Floating Scroll-to-Bottom Button ──
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: session.turns.isEmpty
+                              ? wrapExpanded(
+                                  _buildEmptyState(
+                                    context: context,
+                                    chatState: chatState,
+                                    models: models,
+                                    activeFilePath: activeFilePath,
+                                    textColor: textColor,
+                                    mutedColor: mutedColor,
+                                    surfaceColor: surfaceColor,
+                                    accentColor: accentColor,
+                                  ),
+                                )
+                              : wrapExpanded(
+                                  ListView.builder(
+                                    controller: _scrollController,
+                                    physics: const BouncingScrollPhysics(),
+                                    padding: const EdgeInsets.only(
+                                      top: 10,
+                                      bottom: 18,
+                                    ),
+                                    itemCount: session.turns.length,
+                                    itemBuilder: (context, index) {
+                                      final turn = session.turns[index];
+                                      final isLast =
+                                          index == session.turns.length - 1;
+                                      return _buildTurnItem(
+                                        context: context,
+                                        index: index,
+                                        turn: turn,
+                                        isGeneratingThis:
+                                            isLast && chatState.isGenerating,
+                                        panelWidth: widget.isExpanded
+                                            ? panelWidth.clamp(0.0, 780.0)
+                                            : panelWidth,
+                                        textColor: textColor,
+                                        surfaceColor: surfaceColor,
+                                        accentColor: accentColor,
+                                        isDark: isDark,
+                                      );
+                                    },
+                                  ),
+                                ),
+                        ),
+                        if (_showScrollToBottom && session.turns.isNotEmpty)
+                          Positioned(
+                            bottom: 10,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Material(
+                                color: surfaceColor,
+                                elevation: 3,
+                                shadowColor:
+                                    Colors.black.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(18),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: _scrollToBottom,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(18),
+                                      border: Border.all(
+                                        color:
+                                            accentColor.withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          LucideIcons.arrow_down,
+                                          size: 13,
+                                          color: accentColor,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Вниз',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: textColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Unified Modern Composer ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+                    child: wrapExpanded(
+                      _buildUnifiedComposer(
+                        context: context,
+                        chatState: chatState,
+                        models: models,
+                        selectedModelId: selectedModelId,
+                        activeFilePath:
+                            showActiveFileChip ? activeFilePath : null,
+                        hasOpenRouterKey: hasOpenRouterKey,
+                        surfaceColor: surfaceColor,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                        isDark: isDark,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactHeader({
+    required BuildContext context,
+    required RoxumChatState chatState,
+    required RoxumChatSession session,
+    required List<RoxumModelOption> models,
+    required int enabledMcpCount,
+    required bool isNarrow,
+    required Color textColor,
+    required Color mutedColor,
+    required Color accentColor,
+  }) {
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          // Clickable session title -> opens chat history
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => _showHistoryDialog(context, chatState, accentColor),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildModelSelector(
-                            models: models,
-                            selectedModelId: selectedModelId,
-                            textColor: textColor,
-                            isDark: isDark,
-                          ),
-                        ),
-                        if (widget.onToggleExpand != null) ...[
-                          const SizedBox(width: 4),
-                          IconButton(
-                            onPressed: widget.onToggleExpand,
-                            icon: Icon(
-                              widget.isExpanded
-                                  ? Icons.fullscreen_exit
-                                  : Icons.fullscreen,
-                              size: 18,
-                              color: mutedColor,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            tooltip: widget.isExpanded ? 'Свернуть' : 'Развернуть',
-                          ),
-                        ],
-                        if (widget.onClose != null)
-                          IconButton(
-                            onPressed: widget.onClose,
-                            icon: Icon(
-                              LucideIcons.x,
-                              size: 18,
-                              color: mutedColor,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                            tooltip: 'Закрыть',
-                          ),
-                      ],
+                    Icon(
+                      LucideIcons.message_square,
+                      size: 15,
+                      color: accentColor,
                     ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildModeSelector(
-                            chatState.chatMode,
-                            textColor,
-                            isDark,
-                          ),
+                    const SizedBox(width: 7),
+                    Flexible(
+                      child: Text(
+                        session.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13.5,
+                          color: textColor,
                         ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          onPressed: () => _showProvidersDialog(context),
-                          icon: Icon(
-                            LucideIcons.plug,
-                            size: 17,
-                            color: models.isEmpty
-                                ? Colors.orangeAccent
-                                : const Color(0xFF38BDF8),
-                          ),
-                          tooltip: 'Подключить провайдера / API',
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        IconButton(
-                          onPressed: () => _showMcpServersDialog(context),
-                          icon: Icon(
-                            LucideIcons.blocks,
-                            size: 17,
-                            color: ref
-                                    .watch(mcpServiceProvider)
-                                    .any((s) => s.isEnabled)
-                                ? const Color(0xFF22C55E)
-                                : mutedColor,
-                          ),
-                          tooltip: 'MCP серверы (Flutter / Context7 / Git)',
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        IconButton(
-                          onPressed: () =>
-                              _showToolPermissionsSheet(context, chatState),
-                          icon: Icon(
-                            LucideIcons.wrench,
-                            size: 18,
-                            color: mutedColor,
-                          ),
-                          tooltip: 'Инструменты агента',
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        IconButton(
-                          onPressed: () =>
-                              _showHistoryDialog(context, chatState),
-                          icon: Icon(
-                            Icons.history,
-                            size: 20,
-                            color: mutedColor,
-                          ),
-                          tooltip: 'История чатов',
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        IconButton(
-                          onPressed: () => ref
-                              .read(roxumChatProvider.notifier)
-                              .createNewSession(),
-                          icon: Icon(
-                            Icons.add_comment_outlined,
-                            size: 20,
-                            color: mutedColor,
-                          ),
-                          tooltip: 'Новый чат',
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            session.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 13,
-                              color: mutedColor,
-                            ),
-                          ),
-                        ),
-                        if (_editingTurnIndex != null)
-                          TextButton(
-                            onPressed: () {
-                              setState(() => _editingTurnIndex = null);
-                              _promptController.clear();
-                            },
-                            style: TextButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            child: const Text(
-                              'Отменить правку',
-                              style: TextStyle(fontSize: 11),
-                            ),
-                          ),
-                      ],
+                    const SizedBox(width: 4),
+                    Icon(
+                      LucideIcons.chevron_down,
+                      size: 14,
+                      color: mutedColor,
                     ),
                   ],
                 ),
               ),
-
-              // ── Pending Edits Banner (Keep All / Undo All) ──
-              if (chatState.pendingEdits.isNotEmpty)
-                _buildPendingEditsBanner(chatState, surfaceColor, textColor),
-
-              // ── Messages List ──
-              Expanded(
-                child: session.turns.isEmpty
-                    ? _buildEmptyState(textColor, mutedColor, surfaceColor)
-                    : ListView.builder(
-                        controller: _scrollController,
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: session.turns.length,
-                        itemBuilder: (context, index) {
-                          final turn = session.turns[index];
-                          final isLast = index == session.turns.length - 1;
-                          return _buildTurnItem(
-                            context: context,
-                            index: index,
-                            turn: turn,
-                            isGeneratingThis: isLast && chatState.isGenerating,
-                            textColor: textColor,
-                            surfaceColor: surfaceColor,
-                            isDark: isDark,
-                          );
-                        },
-                      ),
-              ),
-
-              // ── Token Counter + OpenRouter Limits Bar ──
-              if (chatState.sessionUsage.totalTokens > 0 ||
-                  settings.openrouterApiKey.trim().isNotEmpty)
-                _buildUsageTelemetryBar(
-                  chatState: chatState,
-                  hasOpenRouterKey: settings.openrouterApiKey.trim().isNotEmpty,
-                  surfaceColor: surfaceColor,
-                  textColor: textColor,
-                ),
-
-              // ── Active File Chip + Attachments + Roxum Input Box ──
-              Padding(
-                padding: const EdgeInsets.only(top: 6, bottom: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_attachments.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: _attachments.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final att = entry.value;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: surfaceColor,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: const Color(0xFF38BDF8)
-                                      .withValues(alpha: 0.4),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    att.isImage
-                                        ? Icons.image_outlined
-                                        : Icons.insert_drive_file_outlined,
-                                    size: 13,
-                                    color: const Color(0xFF38BDF8),
-                                  ),
-                                  const SizedBox(width: 5),
-                                  ConstrainedBox(
-                                    constraints:
-                                        const BoxConstraints(maxWidth: 140),
-                                    child: Text(
-                                      att.name,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  InkWell(
-                                    onTap: () => setState(
-                                      () => _attachments.removeAt(idx),
-                                    ),
-                                    child: Icon(
-                                      Icons.close,
-                                      size: 13,
-                                      color: mutedColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
+            ),
+          ),
+          // New chat
+          IconButton(
+            onPressed: () =>
+                ref.read(roxumChatProvider.notifier).createNewSession(),
+            icon: Icon(
+              LucideIcons.square_pen,
+              size: 17,
+              color: mutedColor,
+            ),
+            tooltip: 'Новый чат',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            padding: EdgeInsets.zero,
+          ),
+          // History
+          IconButton(
+            onPressed: () =>
+                _showHistoryDialog(context, chatState, accentColor),
+            icon: Icon(
+              LucideIcons.history,
+              size: 17,
+              color: mutedColor,
+            ),
+            tooltip: 'История чатов',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            padding: EdgeInsets.zero,
+          ),
+          if (isNarrow)
+            PopupMenuButton<String>(
+              tooltip: 'Ещё',
+              padding: EdgeInsets.zero,
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    LucideIcons.ellipsis_vertical,
+                    size: 18,
+                    color: mutedColor,
+                  ),
+                  if (models.isEmpty || enabledMcpCount > 0)
+                    Positioned(
+                      right: -2,
+                      top: -2,
+                      child: Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: models.isEmpty
+                              ? Colors.orangeAccent
+                              : const Color(0xFF22C55E),
+                          shape: BoxShape.circle,
                         ),
                       ),
-                    if (editorState.activeFilePath != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Container(
+                    ),
+                ],
+              ),
+              onSelected: (value) {
+                switch (value) {
+                  case 'tools':
+                    _showToolPermissionsSheet(context, chatState);
+                    break;
+                  case 'mcp':
+                    _showMcpServersDialog(context, accentColor);
+                    break;
+                  case 'providers':
+                    _showProvidersDialog(context, accentColor);
+                    break;
+                  case 'clear':
+                    _clearCurrentChat(chatState);
+                    break;
+                }
+              },
+              itemBuilder: (ctx) => [
+                PopupMenuItem(
+                  value: 'tools',
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.wrench, size: 16, color: mutedColor),
+                      const SizedBox(width: 10),
+                      const Text('Инструменты агента'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'mcp',
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.blocks,
+                        size: 16,
+                        color: enabledMcpCount > 0
+                            ? const Color(0xFF22C55E)
+                            : mutedColor,
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(child: Text('MCP-серверы')),
+                      if (enabledMcpCount > 0)
+                        Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
+                            horizontal: 6,
+                            vertical: 1,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0178B9).withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: const Color(0xFF0178B9).withValues(alpha: 0.35),
+                            color:
+                                const Color(0xFF22C55E).withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$enabledMcpCount',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF22C55E),
                             ),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.description_outlined,
-                                size: 12,
-                                color: Color(0xFF38BDF8),
-                              ),
-                              const SizedBox(width: 5),
-                              Flexible(
-                                child: Text(
-                                  p.basename(editorState.activeFilePath!),
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFF38BDF8),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
+                        ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'providers',
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.plug,
+                        size: 16,
+                        color:
+                            models.isEmpty ? Colors.orangeAccent : accentColor,
+                      ),
+                      const SizedBox(width: 10),
+                      const Text('API провайдеры'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'clear',
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.trash_2,
+                        size: 16,
+                        color: Colors.redAccent,
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        'Очистить чат',
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            IconButton(
+              onPressed: () => _showToolPermissionsSheet(context, chatState),
+              icon: Icon(
+                LucideIcons.wrench,
+                size: 17,
+                color: mutedColor,
+              ),
+              tooltip: 'Инструменты агента',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              onPressed: () => _showMcpServersDialog(context, accentColor),
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    LucideIcons.blocks,
+                    size: 17,
+                    color: enabledMcpCount > 0
+                        ? const Color(0xFF22C55E)
+                        : mutedColor,
+                  ),
+                  if (enabledMcpCount > 0)
+                    Positioned(
+                      right: -5,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 3.5,
+                          vertical: 0.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF22C55E),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$enabledMcpCount',
+                          style: const TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
                           ),
                         ),
                       ),
-                    TextField(
-                      controller: _promptController,
-                      cursorColor: textColor,
-                      style: TextStyle(color: textColor, fontSize: 13.5),
-                      minLines: 1,
-                      maxLines: 5,
-                      textInputAction: TextInputAction.newline,
-                      decoration: InputDecoration(
-                        labelText: 'Ask AI',
-                        labelStyle: TextStyle(color: mutedColor, fontSize: 13),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF0178B9),
-                            width: 1.5,
+                    ),
+                ],
+              ),
+              tooltip: 'MCP-серверы',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              padding: EdgeInsets.zero,
+            ),
+            IconButton(
+              onPressed: () => _showProvidersDialog(context, accentColor),
+              icon: Icon(
+                LucideIcons.plug,
+                size: 17,
+                color: models.isEmpty ? Colors.orangeAccent : accentColor,
+              ),
+              tooltip: 'API провайдеры',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              padding: EdgeInsets.zero,
+            ),
+            if (session.turns.isNotEmpty)
+              IconButton(
+                onPressed: () => _clearCurrentChat(chatState),
+                icon: Icon(
+                  LucideIcons.trash_2,
+                  size: 17,
+                  color: mutedColor,
+                ),
+                tooltip: 'Очистить чат',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                padding: EdgeInsets.zero,
+              ),
+          ],
+          if (widget.onToggleExpand != null)
+            IconButton(
+              onPressed: widget.onToggleExpand,
+              icon: Icon(
+                widget.isExpanded
+                    ? LucideIcons.minimize_2
+                    : LucideIcons.maximize_2,
+                size: 17,
+                color: mutedColor,
+              ),
+              tooltip: widget.isExpanded ? 'Свернуть' : 'Развернуть',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              padding: EdgeInsets.zero,
+            ),
+          if (widget.onClose != null)
+            IconButton(
+              onPressed: widget.onClose,
+              icon: Icon(
+                LucideIcons.x,
+                size: 18,
+                color: mutedColor,
+              ),
+              tooltip: 'Закрыть',
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+              padding: EdgeInsets.zero,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnifiedComposer({
+    required BuildContext context,
+    required RoxumChatState chatState,
+    required List<RoxumModelOption> models,
+    required String? selectedModelId,
+    required String? activeFilePath,
+    required bool hasOpenRouterKey,
+    required Color surfaceColor,
+    required Color textColor,
+    required Color mutedColor,
+    required Color accentColor,
+    required bool isDark,
+  }) {
+    final canSend = _hasPromptText || _attachments.isNotEmpty;
+    final hasTopChips = activeFilePath != null || _attachments.isNotEmpty;
+    final showTelemetry =
+        chatState.sessionUsage.totalTokens > 0 || hasOpenRouterKey;
+
+    final selectedModel = models.isEmpty
+        ? null
+        : models.firstWhere(
+            (m) => m.id == selectedModelId,
+            orElse: () => models.first,
+          );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Editing indicator banner directly above input
+        if (_editingTurnIndex != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: accentColor.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.pencil, size: 13, color: accentColor),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Редактирование сообщения',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    setState(() => _editingTurnIndex = null);
+                    _promptController.clear();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(LucideIcons.x, size: 15, color: mutedColor),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // Unified Composer Card
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _isInputFocused
+                  ? accentColor
+                  : textColor.withValues(alpha: 0.13),
+              width: _isInputFocused ? 1.4 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Top context / attachments strip
+              if (hasTopChips)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        if (activeFilePath != null)
+                          Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accentColor.withValues(alpha: 0.13),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: accentColor.withValues(alpha: 0.32),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  LucideIcons.file_code,
+                                  size: 12,
+                                  color: accentColor,
+                                ),
+                                const SizedBox(width: 5),
+                                ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 160),
+                                  child: Text(
+                                    p.basename(activeFilePath),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: accentColor,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () => setState(
+                                    () => _dismissedActiveFilePath =
+                                        activeFilePath,
+                                  ),
+                                  child: Tooltip(
+                                    message: 'Скрыть файл из контекста',
+                                    child: Icon(
+                                      LucideIcons.x,
+                                      size: 12,
+                                      color: accentColor.withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        prefixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              onPressed: chatState.isGenerating
-                                  ? null
-                                  : () => _pickAttachment(imagesOnly: true),
-                              icon: Icon(
-                                Icons.image_outlined,
-                                size: 18,
-                                color: mutedColor,
-                              ),
-                              tooltip: 'Прикрепить фото',
-                              visualDensity: VisualDensity.compact,
+                        ..._attachments.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final att = entry.value;
+                          return Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3.5,
                             ),
-                            IconButton(
-                              onPressed: chatState.isGenerating
-                                  ? null
-                                  : () => _pickAttachment(imagesOnly: false),
-                              icon: Icon(
-                                Icons.attach_file,
-                                size: 18,
-                                color: mutedColor,
+                            decoration: BoxDecoration(
+                              color: textColor.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: textColor.withValues(alpha: 0.14),
                               ),
-                              tooltip: 'Прикрепить файл',
-                              visualDensity: VisualDensity.compact,
                             ),
-                          ],
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  att.isImage
+                                      ? LucideIcons.image
+                                      : LucideIcons.paperclip,
+                                  size: 12,
+                                  color: accentColor,
+                                ),
+                                const SizedBox(width: 5),
+                                ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 130),
+                                  child: Text(
+                                    att.name,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () => setState(
+                                    () => _attachments.removeAt(idx),
+                                  ),
+                                  child: Icon(
+                                    LucideIcons.x,
+                                    size: 12,
+                                    color: mutedColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Center: Clean full-width TextField
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  hasTopChips ? 4 : 10,
+                  12,
+                  4,
+                ),
+                child: TextField(
+                  controller: _promptController,
+                  focusNode: _promptFocusNode,
+                  cursorColor: accentColor,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 13.5,
+                    height: 1.4,
+                  ),
+                  minLines: 1,
+                  maxLines: 5,
+                  textInputAction: TextInputAction.newline,
+                  decoration: InputDecoration(
+                    hintText: chatState.chatMode == RoxumChatMode.agent
+                        ? 'Опишите задачу для агента...'
+                        : 'Спросите о коде или проекте...',
+                    hintStyle: TextStyle(
+                      color: mutedColor.withValues(alpha: 0.7),
+                      fontSize: 13.5,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+
+              // Bottom action bar inside card (height 36px)
+              Container(
+                height: 36,
+                padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+                child: Row(
+                  children: [
+                    // Attach file
+                    _composerIconBtn(
+                      icon: LucideIcons.paperclip,
+                      tooltip: 'Прикрепить файл',
+                      color: mutedColor,
+                      onTap: chatState.isGenerating
+                          ? null
+                          : () => _pickAttachment(imagesOnly: false),
+                    ),
+                    // Attach photo
+                    _composerIconBtn(
+                      icon: LucideIcons.image,
+                      tooltip: 'Прикрепить фото',
+                      color: mutedColor,
+                      onTap: chatState.isGenerating
+                          ? null
+                          : () => _pickAttachment(imagesOnly: true),
+                    ),
+                    const SizedBox(width: 4),
+                    // Compact Mode Pill (Ask / Agent)
+                    _buildCompactModePill(
+                      mode: chatState.chatMode,
+                      textColor: textColor,
+                      accentColor: accentColor,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(width: 5),
+                    // Compact Model Pill
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _buildCompactModelPill(
+                          context: context,
+                          models: models,
+                          selectedModel: selectedModel,
+                          isRefreshing: chatState.isRefreshingModels,
+                          textColor: textColor,
+                          mutedColor: mutedColor,
+                          accentColor: accentColor,
+                          isDark: isDark,
                         ),
-                        suffixIcon: IconButton(
-                          onPressed: chatState.isGenerating
+                      ),
+                    ),
+                    // Compact Telemetry Pill (opens detail sheet)
+                    if (showTelemetry) ...[
+                      const SizedBox(width: 4),
+                      _buildTelemetryPill(
+                        context: context,
+                        chatState: chatState,
+                        hasOpenRouterKey: hasOpenRouterKey,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                      ),
+                    ],
+                    const SizedBox(width: 6),
+                    // Round Send / Stop Button (32x32)
+                    Tooltip(
+                      message: chatState.isGenerating
+                          ? 'Остановить генерацию'
+                          : 'Отправить',
+                      child: Material(
+                        color: chatState.isGenerating
+                            ? Colors.redAccent
+                            : (canSend
+                                ? accentColor
+                                : textColor.withValues(alpha: 0.12)),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: chatState.isGenerating
                               ? () => ref
                                   .read(roxumChatProvider.notifier)
                                   .stopGeneration()
-                              : _sendPrompt,
-                          icon: Icon(
-                            chatState.isGenerating
-                                ? Icons.stop_circle_outlined
-                                : Icons.send_rounded,
-                            color: chatState.isGenerating
-                                ? Colors.redAccent
-                                : const Color(0xFF38BDF8),
-                            size: 20,
+                              : (canSend ? _sendPrompt : null),
+                          child: SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: Icon(
+                              chatState.isGenerating
+                                  ? Icons.stop_rounded
+                                  : LucideIcons.arrow_up,
+                              size: 17,
+                              color: chatState.isGenerating
+                                  ? Colors.white
+                                  : (canSend
+                                      ? (ThemeData.estimateBrightnessForColor(
+                                                  accentColor) ==
+                                              Brightness.dark
+                                          ? Colors.white
+                                          : const Color(0xFF0F172A))
+                                      : mutedColor.withValues(alpha: 0.5)),
+                            ),
                           ),
                         ),
                       ),
@@ -579,43 +1161,129 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
             ],
           ),
         ),
-      ),
-    ),
+      ],
     );
   }
 
-  Widget _buildModelSelector({
-    required List<RoxumModelOption> models,
-    required String? selectedModelId,
+  Widget _composerIconBtn({
+    required IconData icon,
+    required String tooltip,
+    required Color color,
+    required VoidCallback? onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: SizedBox(
+          width: 30,
+          height: 30,
+          child: Icon(
+            icon,
+            size: 16,
+            color: onTap == null ? color.withValues(alpha: 0.35) : color,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactModePill({
+    required RoxumChatMode mode,
     required Color textColor,
+    required Color accentColor,
     required bool isDark,
   }) {
-    if (models.isEmpty) {
-      return InkWell(
-        onTap: () => _showProvidersDialog(context),
-        borderRadius: BorderRadius.circular(6),
+    final isAgent = mode == RoxumChatMode.agent;
+    return Tooltip(
+      message: isAgent
+          ? 'Режим Agent (правит файлы и запускает команды)'
+          : 'Режим Ask (только ответы без правки файлов)',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          final next = isAgent ? RoxumChatMode.ask : RoxumChatMode.agent;
+          ref.read(roxumChatProvider.notifier).setChatMode(next);
+        },
         child: Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: Colors.orange.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+            color: isAgent
+                ? accentColor.withValues(alpha: 0.16)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.05)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isAgent
+                  ? accentColor.withValues(alpha: 0.4)
+                  : textColor.withValues(alpha: 0.12),
+            ),
           ),
-          alignment: Alignment.centerLeft,
-          child: const Row(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.plug, size: 13, color: Colors.orangeAccent),
-              SizedBox(width: 6),
-              Expanded(
+              Icon(
+                isAgent ? LucideIcons.bot : LucideIcons.message_circle,
+                size: 12,
+                color: isAgent ? accentColor : textColor.withValues(alpha: 0.75),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                isAgent ? 'Agent' : 'Ask',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color:
+                      isAgent ? accentColor : textColor.withValues(alpha: 0.85),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactModelPill({
+    required BuildContext context,
+    required List<RoxumModelOption> models,
+    required RoxumModelOption? selectedModel,
+    required bool isRefreshing,
+    required Color textColor,
+    required Color mutedColor,
+    required Color accentColor,
+    required bool isDark,
+  }) {
+    if (models.isEmpty || selectedModel == null) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => _showProvidersDialog(context, accentColor),
+        child: Container(
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.orange.withValues(alpha: 0.45)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.plug, size: 12, color: Colors.orangeAccent),
+              SizedBox(width: 4),
+              Flexible(
                 child: Text(
-                  'Подключить провайдера / API',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.orangeAccent,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  'Подключить API',
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orangeAccent,
+                  ),
                 ),
               ),
             ],
@@ -624,366 +1292,528 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
       );
     }
 
-    final selected = models.firstWhere(
-      (m) => m.id == selectedModelId,
-      orElse: () => models.first,
-    );
-    final isRefreshing = ref.watch(roxumChatProvider).isRefreshingModels;
-
     return InkWell(
-      onTap: () => _showModelPickerDialog(context, models, selected.id),
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(14),
+      onTap: () =>
+          _showModelPickerDialog(context, models, selectedModel.id, accentColor),
       child: Container(
-        height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: isDark
               ? Colors.white.withValues(alpha: 0.06)
               : Colors.black.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.black.withValues(alpha: 0.08),
-          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: textColor.withValues(alpha: 0.11)),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              LucideIcons.sparkles,
-              size: 13,
-              color: Color(0xFF38BDF8),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
+            Icon(LucideIcons.sparkles, size: 11.5, color: accentColor),
+            const SizedBox(width: 4),
+            Flexible(
               child: Text(
-                '${selected.provider}: ${selected.name}',
+                selectedModel.name,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: textColor, fontSize: 12.5),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: textColor.withValues(alpha: 0.9),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-            if (selected.isFree) ...[
+            if (isRefreshing) ...[
               const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF22C55E).withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'FREE',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF22C55E),
-                  ),
-                ),
+              const SizedBox(
+                width: 10,
+                height: 10,
+                child: CircularProgressIndicator(strokeWidth: 1.5),
+              ),
+            ] else ...[
+              const SizedBox(width: 2),
+              Icon(
+                LucideIcons.chevron_down,
+                size: 12,
+                color: mutedColor,
               ),
             ],
-            const SizedBox(width: 4),
-            if (isRefreshing)
-              const SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 1.8),
-              )
-            else
-              Icon(
-                Icons.arrow_drop_down,
-                color: textColor.withValues(alpha: 0.6),
-                size: 18,
-              ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildTelemetryPill({
+    required BuildContext context,
+    required RoxumChatState chatState,
+    required bool hasOpenRouterKey,
+    required Color textColor,
+    required Color mutedColor,
+    required Color accentColor,
+  }) {
+    final total = chatState.sessionUsage.totalTokens;
+    final compactLabel = total >= 1000
+        ? '${(total / 1000).toStringAsFixed(1)}k'
+        : (total > 0 ? '$total' : 'OR');
+
+    return Tooltip(
+      message: 'Использование токенов и лимиты',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _showUsageTelemetrySheet(
+          context: context,
+          hasOpenRouterKey: hasOpenRouterKey,
+          accentColor: accentColor,
+        ),
+        child: Container(
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          decoration: BoxDecoration(
+            color: textColor.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: textColor.withValues(alpha: 0.1)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.gauge, size: 12, color: accentColor),
+              const SizedBox(width: 4),
+              Text(
+                compactLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: mutedColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showUsageTelemetrySheet({
+    required BuildContext context,
+    required bool hasOpenRouterKey,
+    required Color accentColor,
+  }) async {
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+
+    Widget buildContent(BuildContext ctx) {
+      return Consumer(
+        builder: (context, modalRef, _) {
+          final liveState = modalRef.watch(roxumChatProvider);
+          final u = liveState.sessionUsage;
+          final orLimits = liveState.openRouterLimits;
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(LucideIcons.gauge, size: 18, color: accentColor),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Телеметрия токенов и лимиты',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (hasOpenRouterKey)
+                      IconButton(
+                        onPressed: () => modalRef
+                            .read(roxumChatProvider.notifier)
+                            .refreshOpenRouterLimits(),
+                        icon: const Icon(LucideIcons.refresh_cw, size: 16),
+                        tooltip: 'Обновить лимиты OpenRouter',
+                      ),
+                  ],
+                ),
+                const Divider(height: 16),
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(LucideIcons.arrow_down, size: 16, color: accentColor),
+                  title: const Text('Входные токены (Prompt)'),
+                  trailing: Text(
+                    '${u.promptTokens}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(LucideIcons.arrow_up, size: 16, color: accentColor),
+                  title: const Text('Выходные токены (Completion)'),
+                  trailing: Text(
+                    '${u.completionTokens}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(LucideIcons.sigma, size: 16),
+                  title: const Text('Всего за сессию'),
+                  trailing: Text(
+                    '${u.totalTokens}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (u.costUsd > 0)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      LucideIcons.dollar_sign,
+                      size: 16,
+                      color: Color(0xFF22C55E),
+                    ),
+                    title: const Text('Стоимость сессии'),
+                    trailing: Text(
+                      '\$${u.costUsd.toStringAsFixed(4)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF22C55E),
+                      ),
+                    ),
+                  ),
+                if (orLimits != null) ...[
+                  const Divider(height: 16),
+                  Text(
+                    'OpenRouter (${orLimits.label})',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Потрачено всего: \$${orLimits.usageUsd.toStringAsFixed(4)} • Сегодня: \$${orLimits.usageDailyUsd.toStringAsFixed(4)}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  if (orLimits.limitRemainingUsd != null)
+                    Text(
+                      'Остаток лимита: \$${orLimits.limitRemainingUsd!.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFA78BFA),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  if (orLimits.freeDailyRemaining != null)
+                    Text(
+                      'Бесплатные запросы сегодня: ${orLimits.freeDailyRemaining} / ${orLimits.freeDailyLimit}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFA78BFA),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Закрыть'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    if (isNarrow) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetCtx) => SafeArea(child: buildContent(sheetCtx)),
+      );
+    } else {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: buildContent(dialogCtx),
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _showModelPickerDialog(
     BuildContext context,
     List<RoxumModelOption> initialModels,
     String currentSelectedId,
+    Color accentColor,
   ) async {
     String query = '';
     String filterTab = 'ALL'; // ALL, FREE, or provider name
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            final chatState = ref.watch(roxumChatProvider);
-            final settings = ref.watch(settingsProvider);
-            final models =
-                ref.read(roxumChatProvider.notifier).availableModels(settings);
-            final providers = <String>{for (final m in models) m.provider}.toList();
+    Widget buildPickerBody(BuildContext modalCtx) {
+      return StatefulBuilder(
+        builder: (ctx, setModalState) {
+          return Consumer(
+            builder: (context, modalRef, _) {
+              final chatState = modalRef.watch(roxumChatProvider);
+              final settings = modalRef.watch(settingsProvider);
+              final models = modalRef
+                  .read(roxumChatProvider.notifier)
+                  .availableModels(settings);
+              final providers = <String>{
+                for (final m in models) m.provider,
+              }.toList();
 
-            final filtered = models.where((m) {
-              if (filterTab == 'FREE' && !m.isFree) return false;
-              if (filterTab != 'ALL' &&
-                  filterTab != 'FREE' &&
-                  m.provider != filterTab) {
-                return false;
-              }
-              if (query.isNotEmpty) {
-                final q = query.toLowerCase();
-                return m.name.toLowerCase().contains(q) ||
-                    m.model.toLowerCase().contains(q) ||
-                    m.provider.toLowerCase().contains(q);
-              }
-              return true;
-            }).toList();
+              final filtered = models.where((m) {
+                if (filterTab == 'FREE' && !m.isFree) return false;
+                if (filterTab != 'ALL' &&
+                    filterTab != 'FREE' &&
+                    m.provider != filterTab) {
+                  return false;
+                }
+                if (query.isNotEmpty) {
+                  final q = query.toLowerCase();
+                  return m.name.toLowerCase().contains(q) ||
+                      m.model.toLowerCase().contains(q) ||
+                      m.provider.toLowerCase().contains(q);
+                }
+                return true;
+              }).toList();
 
-            return AlertDialog(
-              title: Row(
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(LucideIcons.sparkles,
-                      size: 18, color: Color(0xFF38BDF8)),
-                  const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text('Выбор модели', style: TextStyle(fontSize: 16)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.sparkles,
+                            size: 18, color: accentColor),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Выбор модели',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: chatState.isRefreshingModels
+                              ? null
+                              : () => modalRef
+                                  .read(roxumChatProvider.notifier)
+                                  .refreshAllModels(),
+                          icon: chatState.isRefreshingModels
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(LucideIcons.refresh_cw, size: 17),
+                          tooltip: 'Обновить список моделей',
+                        ),
+                      ],
+                    ),
                   ),
-                  IconButton(
-                    onPressed: chatState.isRefreshingModels
-                        ? null
-                        : () => ref
-                            .read(roxumChatProvider.notifier)
-                            .refreshAllModels(),
-                    icon: chatState.isRefreshingModels
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh, size: 18),
-                    tooltip: 'Обновить список моделей',
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 440,
-                height: 440,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      autofocus: true,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      autofocus: !isNarrow,
                       decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search, size: 18),
+                        prefixIcon: Icon(LucideIcons.search, size: 17),
                         hintText: 'Поиск модели (qwen, gemini, free...)',
                         isDense: true,
                         border: OutlineInputBorder(),
                       ),
                       onChanged: (v) => setModalState(() => query = v.trim()),
                     ),
-                    const SizedBox(height: 8),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          ChoiceChip(
-                            label: Text('Все (${models.length})'),
-                            selected: filterTab == 'ALL',
-                            onSelected: (_) =>
-                                setModalState(() => filterTab = 'ALL'),
+                  ),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        ChoiceChip(
+                          label: Text('Все (${models.length})'),
+                          selected: filterTab == 'ALL',
+                          onSelected: (_) =>
+                              setModalState(() => filterTab = 'ALL'),
+                        ),
+                        const SizedBox(width: 6),
+                        ChoiceChip(
+                          label: Text(
+                            'Бесплатные (${models.where((m) => m.isFree).length})',
                           ),
+                          selected: filterTab == 'FREE',
+                          selectedColor:
+                              const Color(0xFF22C55E).withValues(alpha: 0.25),
+                          onSelected: (_) =>
+                              setModalState(() => filterTab = 'FREE'),
+                        ),
+                        for (final prov in providers) ...[
                           const SizedBox(width: 6),
                           ChoiceChip(
-                            label: Text(
-                              'Бесплатные (${models.where((m) => m.isFree).length})',
-                            ),
-                            selected: filterTab == 'FREE',
-                            selectedColor:
-                                const Color(0xFF22C55E).withValues(alpha: 0.25),
+                            label: Text(prov),
+                            selected: filterTab == prov,
                             onSelected: (_) =>
-                                setModalState(() => filterTab = 'FREE'),
+                                setModalState(() => filterTab = prov),
                           ),
-                          for (final prov in providers) ...[
-                            const SizedBox(width: 6),
-                            ChoiceChip(
-                              label: Text(prov),
-                              selected: filterTab == prov,
-                              onSelected: (_) =>
-                                  setModalState(() => filterTab = prov),
-                            ),
-                          ],
                         ],
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: filtered.isEmpty
-                          ? const Center(
-                              child: Text('Модели не найдены'),
-                            )
-                          : ListView.builder(
-                              itemCount: filtered.length,
-                              itemBuilder: (_, i) {
-                                final m = filtered[i];
-                                final isSel = m.id ==
-                                    (chatState.selectedModelId ??
-                                        currentSelectedId);
-                                return ListTile(
-                                  dense: true,
-                                  selected: isSel,
-                                  leading: Icon(
-                                    isSel
-                                        ? Icons.check_circle
-                                        : LucideIcons.cpu,
-                                    size: 16,
-                                    color: isSel
-                                        ? const Color(0xFF38BDF8)
-                                        : null,
-                                  ),
-                                  title: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          m.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(child: Text('Модели не найдены'))
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            itemCount: filtered.length,
+                            itemBuilder: (_, i) {
+                              final m = filtered[i];
+                              final isSel = m.id ==
+                                  (chatState.selectedModelId ??
+                                      currentSelectedId);
+                              return ListTile(
+                                dense: true,
+                                selected: isSel,
+                                leading: Icon(
+                                  isSel
+                                      ? Icons.check_circle
+                                      : LucideIcons.cpu,
+                                  size: 16,
+                                  color: isSel ? accentColor : null,
+                                ),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        m.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (m.isFree)
+                                      Container(
+                                        margin: const EdgeInsets.only(left: 6),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 1,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF22C55E)
+                                              .withValues(alpha: 0.2),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'FREE',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color: Color(0xFF22C55E),
+                                          ),
                                         ),
                                       ),
-                                      if (m.isFree)
-                                        Container(
-                                          margin: const EdgeInsets.only(left: 6),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 5,
-                                            vertical: 1,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF22C55E)
-                                                .withValues(alpha: 0.2),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: const Text(
-                                            'FREE',
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFF22C55E),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  subtitle: Text(
-                                    '${m.provider} • ${m.model}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  onTap: () {
-                                    ref
-                                        .read(roxumChatProvider.notifier)
-                                        .selectModel(m.id);
-                                    Navigator.of(dialogCtx).pop();
-                                  },
-                                );
-                              },
-                            ),
+                                  ],
+                                ),
+                                subtitle: Text(
+                                  '${m.provider} • ${m.model}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                onTap: () {
+                                  modalRef
+                                      .read(roxumChatProvider.notifier)
+                                      .selectModel(m.id);
+                                  Navigator.of(modalCtx).pop();
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(dialogCtx).pop();
-                    _showProvidersDialog(context);
-                  },
-                  child: const Text('Настроить API'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: const Text('Закрыть'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(modalCtx).pop();
+                            _showProvidersDialog(context, accentColor);
+                          },
+                          child: const Text('Настроить API'),
+                        ),
+                        const SizedBox(width: 6),
+                        TextButton(
+                          onPressed: () => Navigator.of(modalCtx).pop(),
+                          child: const Text('Закрыть'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    }
 
-  Widget _buildModeSelector(
-    RoxumChatMode mode,
-    Color textColor,
-    bool isDark,
-  ) {
-    return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : Colors.black.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.08),
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<RoxumChatMode>(
-          value: mode,
-          isDense: true,
-          dropdownColor:
-              isDark ? const Color(0xFF1E2230) : const Color(0xFFFFFFFF),
-          icon: Icon(
-            Icons.arrow_drop_down,
-            color: textColor.withValues(alpha: 0.6),
-            size: 18,
+    if (isNarrow) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetCtx) {
+          final maxHeight = MediaQuery.sizeOf(sheetCtx).height * 0.85;
+          return SizedBox(
+            height: maxHeight,
+            child: buildPickerBody(sheetCtx),
+          );
+        },
+      );
+    } else {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480, maxHeight: 540),
+            child: buildPickerBody(dialogCtx),
           ),
-          style: TextStyle(color: textColor, fontSize: 13),
-          items: [
-            DropdownMenuItem(
-              value: RoxumChatMode.ask,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 14,
-                    color: textColor.withValues(alpha: 0.75),
-                  ),
-                  const SizedBox(width: 6),
-                  Text('Ask', style: TextStyle(color: textColor, fontSize: 13)),
-                ],
-              ),
-            ),
-            DropdownMenuItem(
-              value: RoxumChatMode.agent,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.smart_toy_outlined,
-                    size: 14,
-                    color: textColor.withValues(alpha: 0.75),
-                  ),
-                  const SizedBox(width: 6),
-                  Text('Agent', style: TextStyle(color: textColor, fontSize: 13)),
-                ],
-              ),
-            ),
-          ],
-          onChanged: (next) {
-            if (next != null) {
-              ref.read(roxumChatProvider.notifier).setChatMode(next);
-            }
-          },
         ),
-      ),
-    );
+      );
+    }
   }
 
   Widget _buildPendingEditsBanner(
     RoxumChatState chatState,
     Color surfaceColor,
     Color textColor,
+    Color accentColor,
   ) {
     final edits = chatState.pendingEdits.values.toList();
     final totalAdded = edits.fold<int>(0, (s, e) => s + e.addedLines);
@@ -994,81 +1824,97 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: surfaceColor,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: const Color(0xFF0178B9).withValues(alpha: 0.4),
+          color: accentColor.withValues(alpha: 0.4),
         ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               InkWell(
+                borderRadius: BorderRadius.circular(6),
                 onTap: () =>
                     setState(() => _pendingExpanded = !_pendingExpanded),
-                child: Row(
-                  children: [
-                    Icon(
-                      _pendingExpanded
-                          ? Icons.expand_less
-                          : Icons.expand_more,
-                      size: 18,
-                      color: textColor.withValues(alpha: 0.7),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${edits.length} файл(ов)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _pendingExpanded
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 18,
+                        color: textColor.withValues(alpha: 0.7),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '+$totalAdded',
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        color: Color(0xFF22C55E),
-                        fontWeight: FontWeight.w600,
+                      const SizedBox(width: 4),
+                      Text(
+                        '${edits.length} файл(ов)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '-$totalRemoved',
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        color: Color(0xFFEF4444),
-                        fontWeight: FontWeight.w600,
+                      const SizedBox(width: 6),
+                      Text(
+                        '+$totalAdded',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFF22C55E),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Text(
+                        '-$totalRemoved',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xFFEF4444),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const Spacer(),
-              TextButton(
-                onPressed: () =>
-                    ref.read(roxumChatProvider.notifier).undoAllEdits(),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                ),
-                child: const Text(
-                  'Отменить',
-                  style: TextStyle(fontSize: 11.5, color: Color(0xFFEF4444)),
-                ),
-              ),
-              TextButton(
-                onPressed: () =>
-                    ref.read(roxumChatProvider.notifier).keepAllEdits(),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                ),
-                child: const Text(
-                  'Принять',
-                  style: TextStyle(fontSize: 11.5, color: Color(0xFF22C55E)),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: () =>
+                        ref.read(roxumChatProvider.notifier).undoAllEdits(),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      minimumSize: const Size(0, 30),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: const Text(
+                      'Отменить',
+                      style: TextStyle(fontSize: 11.5, color: Color(0xFFEF4444)),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        ref.read(roxumChatProvider.notifier).keepAllEdits(),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      minimumSize: const Size(0, 30),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: const Text(
+                      'Принять',
+                      style: TextStyle(fontSize: 11.5, color: Color(0xFF22C55E)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1088,6 +1934,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 6),
                     Text(
                       '+${e.addedLines} -${e.removedLines}',
                       style: TextStyle(
@@ -1128,70 +1975,238 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     );
   }
 
-  Widget _buildEmptyState(
-    Color textColor,
-    Color mutedColor,
-    Color surfaceColor,
-  ) {
-    final quickPrompts = [
-      'Проверь ошибки в активном файле',
-      'Объясни структуру этого проекта',
-      'Найди TODO или проблемы производительности',
-    ];
+  Widget _buildEmptyState({
+    required BuildContext context,
+    required RoxumChatState chatState,
+    required List<RoxumModelOption> models,
+    required String? activeFilePath,
+    required Color textColor,
+    required Color mutedColor,
+    required Color surfaceColor,
+    required Color accentColor,
+  }) {
+    if (models.isEmpty) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    LucideIcons.plug,
+                    size: 28,
+                    color: Colors.orangeAccent,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Подключите AI-провайдера',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Добавьте API-ключ OpenRouter, Gemini, OpenAI, Anthropic или локальный OpenAI-совместимый сервер, чтобы начать работу с Roxum AI.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: mutedColor,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: () => _showProvidersDialog(context, accentColor),
+                  icon: const Icon(LucideIcons.plug, size: 16),
+                  label: const Text('Настроить API / OpenRouter'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final isAgent = chatState.chatMode == RoxumChatMode.agent;
+    final activeFileName =
+        activeFilePath != null ? p.basename(activeFilePath) : null;
+
+    final List<({IconData icon, String title, String prompt})> quickCards;
+    if (isAgent) {
+      quickCards = [
+        if (activeFileName != null)
+          (
+            icon: LucideIcons.bug,
+            title: 'Найти и исправить ошибки в $activeFileName',
+            prompt:
+                'Проверь ошибки и предупреждения в активном файле $activeFileName и исправь их.',
+          )
+        else
+          (
+            icon: LucideIcons.wrench,
+            title: 'Проверить диагностику и исправить проблемы',
+            prompt:
+                'Проверь диагностику проекта и исправь найденные ошибки компиляции или анализа.',
+          ),
+        (
+          icon: LucideIcons.sparkles,
+          title: activeFileName != null
+              ? 'Отрефакторить и оптимизировать $activeFileName'
+              : 'Найти TODO и узкие места производительности',
+          prompt: activeFileName != null
+              ? 'Улучши читаемость и производительность кода в $activeFileName.'
+              : 'Найди TODO и возможные проблемы производительности в проекте.',
+        ),
+        (
+          icon: LucideIcons.folder_tree,
+          title: 'Разобрать архитектуру проекта',
+          prompt: 'Изучи структуру проекта и кратко опиши основные модули.',
+        ),
+      ];
+    } else {
+      quickCards = [
+        if (activeFileName != null)
+          (
+            icon: LucideIcons.file_search,
+            title: 'Объяснить, как работает $activeFileName',
+            prompt:
+                'Объясни подробно логику и ключевые части файла $activeFileName.',
+          )
+        else
+          (
+            icon: LucideIcons.folder_tree,
+            title: 'Объяснить структуру этого проекта',
+            prompt: 'Объясни структуру и архитектуру этого проекта.',
+          ),
+        (
+          icon: LucideIcons.shield_alert,
+          title: activeFileName != null
+              ? 'Найти потенциальные баги в $activeFileName'
+              : 'Найти потенциальные баги и уязвимости',
+          prompt: activeFileName != null
+              ? 'Проверь $activeFileName на потенциальные баги, утечки и edge cases.'
+              : 'Какие потенциальные ошибки и узкие места есть в текущем коде?',
+        ),
+        (
+          icon: LucideIcons.lightbulb,
+          title: 'Предложить улучшения и тесты',
+          prompt:
+              'Предложи план рефакторинга и ключевые unit-тесты для текущего модуля.',
+        ),
+      ];
+    }
+
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0178B9).withValues(alpha: 0.14),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.smart_toy_outlined,
-                size: 28,
-                color: Color(0xFF38BDF8),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Roxum AI Agent',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Читает файлы, правит код с diff-предпросмотром, проверяет диагностику и запускает команды.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: mutedColor),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: quickPrompts.map((q) {
-                return ActionChip(
-                  backgroundColor: surfaceColor,
-                  side: BorderSide(color: textColor.withValues(alpha: 0.12)),
-                  label: Text(
-                    q,
-                    style: TextStyle(fontSize: 11.5, color: textColor),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
                   ),
-                  onPressed: () {
-                    _promptController.text = q;
-                    _sendPrompt();
-                  },
-                );
-              }).toList(),
-            ),
-          ],
+                  child: Icon(
+                    isAgent ? LucideIcons.bot : LucideIcons.message_circle,
+                    size: 26,
+                    color: accentColor,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isAgent ? 'Roxum AI Agent' : 'Roxum AI Ask',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isAgent
+                    ? 'Читает файлы, правит код с diff-предпросмотром, проверяет диагностику и запускает команды.'
+                    : 'Отвечает на вопросы по коду и архитектуре без изменения файлов.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.4,
+                  color: mutedColor,
+                ),
+              ),
+              const SizedBox(height: 16),
+              for (final card in quickCards)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: surfaceColor,
+                    borderRadius: BorderRadius.circular(11),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(11),
+                      onTap: () {
+                        _promptController.text = card.prompt;
+                        _sendPrompt();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 11,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(11),
+                          border: Border.all(
+                            color: textColor.withValues(alpha: 0.1),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(card.icon, size: 16, color: accentColor),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                card.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: textColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(
+                              LucideIcons.arrow_up_right,
+                              size: 14,
+                              color: mutedColor,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1202,12 +2217,15 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     required int index,
     required RoxumConversationTurn turn,
     required bool isGeneratingThis,
+    required double panelWidth,
     required Color textColor,
     required Color surfaceColor,
+    required Color accentColor,
     required bool isDark,
   }) {
+    final bubbleMaxWidth = (panelWidth * 0.85).clamp(200.0, 560.0);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1217,60 +2235,156 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
             child: GestureDetector(
               onLongPress: () => _showUserBubbleActions(index, turn),
               child: Container(
-                constraints: const BoxConstraints(maxWidth: 320),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 9,
-                ),
+                constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
+                padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0178B9).withValues(alpha: 0.22),
-                  borderRadius: BorderRadius.circular(12),
+                  color: accentColor.withValues(alpha: isDark ? 0.18 : 0.12),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: const Color(0xFF0178B9).withValues(alpha: 0.4),
+                    color: accentColor.withValues(alpha: 0.34),
                   ),
                 ),
-                child: Column(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (turn.attachmentNames.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 5),
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: turn.attachmentNames
-                              .map(
-                                (name) => Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(5),
-                                  ),
-                                  child: Text(
-                                    '📎 $name',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: textColor.withValues(alpha: 0.8),
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (turn.attachmentNames.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 5),
+                              child: Wrap(
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: turn.attachmentNames
+                                    .map(
+                                      (name) => Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: textColor.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              LucideIcons.paperclip,
+                                              size: 11,
+                                              color: accentColor,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            ConstrainedBox(
+                                              constraints:
+                                                  const BoxConstraints(
+                                                maxWidth: 150,
+                                              ),
+                                              child: Text(
+                                                name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  color: textColor.withValues(
+                                                    alpha: 0.85,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                          SelectableText(
+                            turn.userRequest,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
                       ),
-                    Text(
-                      turn.userRequest,
-                      style: TextStyle(color: textColor, fontSize: 13),
+                    ),
+                    const SizedBox(width: 2),
+                    SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: PopupMenuButton<String>(
+                        tooltip: 'Действия',
+                        padding: EdgeInsets.zero,
+                        iconSize: 15,
+                        icon: Icon(
+                          LucideIcons.ellipsis_vertical,
+                          size: 15,
+                          color: textColor.withValues(alpha: 0.55),
+                        ),
+                        onSelected: (action) {
+                          if (action == 'copy') {
+                            Clipboard.setData(
+                              ClipboardData(text: turn.userRequest),
+                            );
+                          } else if (action == 'edit') {
+                            setState(() => _editingTurnIndex = index);
+                            _promptController.text = turn.userRequest;
+                            _promptFocusNode.requestFocus();
+                          } else if (action == 'retry') {
+                            ref.read(roxumChatProvider.notifier).sendPrompt(
+                                  turn.userRequest,
+                                  truncateFromIndex: index,
+                                );
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'copy',
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.copy, size: 15),
+                                SizedBox(width: 8),
+                                Text('Копировать'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'edit',
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.pencil, size: 15),
+                                SizedBox(width: 8),
+                                Text('Редактировать'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'retry',
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.refresh_cw, size: 15),
+                                SizedBox(width: 8),
+                                Text('Повторить'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
 
           if (turn.timeline.isNotEmpty) ...[
             ..._buildChronologicalTimeline(
@@ -1278,6 +2392,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
               isGeneratingThis: isGeneratingThis,
               surfaceColor: surfaceColor,
               textColor: textColor,
+              accentColor: accentColor,
             ),
             if (isGeneratingThis)
               _buildGeneratingIndicator(
@@ -1286,7 +2401,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 textColor: textColor,
               )
             else if (turn.aiResponse.isNotEmpty)
-              _buildTurnFooter(turn, textColor),
+              _buildTurnFooter(index, turn, textColor),
           ] else ...[
             // ── Legacy / persisted turn rendering ──
             if (turn.reasoningText.isNotEmpty)
@@ -1321,8 +2436,9 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 isError: turn.isError,
                 surfaceColor: surfaceColor,
                 textColor: textColor,
+                accentColor: accentColor,
               ),
-              _buildTurnFooter(turn, textColor),
+              _buildTurnFooter(index, turn, textColor),
             ],
           ],
         ],
@@ -1335,6 +2451,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     required bool isGeneratingThis,
     required Color surfaceColor,
     required Color textColor,
+    required Color accentColor,
   }) {
     final widgets = <Widget>[];
     final items = turn.timeline;
@@ -1386,6 +2503,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                   isError: turn.isError && i == items.length - 1,
                   surfaceColor: surfaceColor,
                   textColor: textColor,
+                  accentColor: accentColor,
                 ),
               ),
             );
@@ -1452,102 +2570,107 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     required bool isError,
     required Color surfaceColor,
     required Color textColor,
+    required Color accentColor,
   }) {
     final isDark =
         ThemeData.estimateBrightnessForColor(surfaceColor) == Brightness.dark;
-    final inlineAccent =
-        isDark ? const Color(0xFF7DD3FC) : const Color(0xFF0284C7);
-    return Container(
-      padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(
-        color: isError
-            ? Colors.redAccent.withValues(alpha: 0.1)
-            : surfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isError
-              ? Colors.redAccent.withValues(alpha: 0.35)
-              : textColor.withValues(alpha: 0.08),
+    final inlineAccent = accentColor;
+    final markdown = GptMarkdown(
+      text,
+      style: TextStyle(
+        color: isError ? Colors.redAccent : textColor,
+        fontSize: 13.5,
+        height: 1.5,
+      ),
+      styleSheet: GptMarkdownStyleSheet(
+        heading: HeadingStyle(
+          textStyle: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.w700,
+          ),
+          dividerColor: textColor.withValues(alpha: 0.14),
+        ),
+        inlineCode: InlineCodeStyle(
+          color: inlineAccent,
+          backgroundColor: inlineAccent.withValues(alpha: 0.14),
+          borderColor: inlineAccent.withValues(alpha: 0.28),
+        ),
+        table: TableStyle(
+          headerBackground: isDark
+              ? Colors.white.withValues(alpha: 0.09)
+              : Colors.black.withValues(alpha: 0.06),
+          headerTextStyle: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.w700,
+            fontSize: 12.5,
+          ),
+          borderColor: textColor.withValues(alpha: 0.18),
+          rowStripeColor: textColor.withValues(alpha: 0.03),
+          overflow: TableOverflow.wrap,
+        ),
+        hr: HrStyle(
+          color: textColor.withValues(alpha: 0.14),
+          thickness: 1,
+        ),
+        link: LinkStyle(
+          color: inlineAccent,
         ),
       ),
-      child: GptMarkdown(
-        text,
-        style: TextStyle(
-          color: isError ? Colors.redAccent : textColor,
-          fontSize: 13,
-          height: 1.45,
+      codeBuilder: (ctx, name, code, closed) {
+        final isShell = _isShellCommandBlock(name, code);
+        final ed = ref.read(editorProvider);
+        final activeFile = (ed.openFiles.isNotEmpty &&
+                ed.activeTabIndex >= 0 &&
+                ed.activeTabIndex < ed.openFiles.length)
+            ? ed.openFiles[ed.activeTabIndex]
+            : null;
+        return RoxumCodeBlockCard(
+          code: code,
+          language: name,
+          isTerminalCommand: isShell,
+          surfaceColor: surfaceColor,
+          textColor: textColor,
+          onRunInTerminal: isShell
+              ? () {
+                  final cleaned = code
+                      .split('\n')
+                      .map((l) => l.trim())
+                      .where((l) => l.isNotEmpty && !l.startsWith('#'))
+                      .map((l) => l.startsWith(r'$ ') ? l.substring(2) : l)
+                      .join(' && ');
+                  if (cleaned.isEmpty) return;
+                  final panel = ref.read(panelProvider.notifier);
+                  panel.selectTab(PanelTab.terminal);
+                  panel.openPanel();
+                  ref
+                      .read(terminalTabsProvider.notifier)
+                      .sendCommand(cleaned);
+                }
+              : null,
+          onInsertIntoEditor: (!isShell)
+              ? () => _applyCodeBlockToTargetFile(code, activeFile)
+              : null,
+        );
+      },
+    );
+
+    if (isError) {
+      return Container(
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(
+          color: Colors.redAccent.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.redAccent.withValues(alpha: 0.35),
+          ),
         ),
-        styleSheet: GptMarkdownStyleSheet(
-          heading: HeadingStyle(
-            textStyle: TextStyle(
-              color: textColor,
-              fontWeight: FontWeight.w700,
-            ),
-            dividerColor: textColor.withValues(alpha: 0.14),
-          ),
-          inlineCode: InlineCodeStyle(
-            color: inlineAccent,
-            backgroundColor: inlineAccent.withValues(alpha: 0.14),
-            borderColor: inlineAccent.withValues(alpha: 0.28),
-          ),
-          table: TableStyle(
-            headerBackground: isDark
-                ? Colors.white.withValues(alpha: 0.09)
-                : Colors.black.withValues(alpha: 0.06),
-            headerTextStyle: TextStyle(
-              color: textColor,
-              fontWeight: FontWeight.w700,
-              fontSize: 12.5,
-            ),
-            borderColor: textColor.withValues(alpha: 0.18),
-            rowStripeColor: textColor.withValues(alpha: 0.03),
-            overflow: TableOverflow.wrap,
-          ),
-          hr: HrStyle(
-            color: textColor.withValues(alpha: 0.14),
-            thickness: 1,
-          ),
-          link: LinkStyle(
-            color: inlineAccent,
-          ),
-        ),
-        codeBuilder: (ctx, name, code, closed) {
-          final isShell = _isShellCommandBlock(name, code);
-          final ed = ref.read(editorProvider);
-          final activeFile = (ed.openFiles.isNotEmpty &&
-                  ed.activeTabIndex >= 0 &&
-                  ed.activeTabIndex < ed.openFiles.length)
-              ? ed.openFiles[ed.activeTabIndex]
-              : null;
-          return RoxumCodeBlockCard(
-            code: code,
-            language: name,
-            isTerminalCommand: isShell,
-            surfaceColor: surfaceColor,
-            textColor: textColor,
-            onRunInTerminal: isShell
-                ? () {
-                    final cleaned = code
-                        .split('\n')
-                        .map((l) => l.trim())
-                        .where((l) => l.isNotEmpty && !l.startsWith('#'))
-                        .map((l) => l.startsWith(r'$ ') ? l.substring(2) : l)
-                        .join(' && ');
-                    if (cleaned.isEmpty) return;
-                    final panel = ref.read(panelProvider.notifier);
-                    panel.selectTab(PanelTab.terminal);
-                    panel.openPanel();
-                    ref
-                        .read(terminalTabsProvider.notifier)
-                        .sendCommand(cleaned);
-                  }
-                : null,
-            onInsertIntoEditor: (!isShell)
-                ? () => _applyCodeBlockToTargetFile(code, activeFile)
-                : null,
-          );
-        },
-      ),
+        child: markdown,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+      child: markdown,
     );
   }
 
@@ -1644,10 +2767,15 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     );
   }
 
-  Widget _buildTurnFooter(RoxumConversationTurn turn, Color textColor) {
+  Widget _buildTurnFooter(
+    int index,
+    RoxumConversationTurn turn,
+    Color textColor,
+  ) {
     final hitStepLimit = turn.aiResponse.contains('Достигнут лимит шагов');
+    final muted = textColor.withValues(alpha: 0.55);
     return Padding(
-      padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+      padding: const EdgeInsets.only(top: 4, left: 2, right: 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1668,108 +2796,67 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
               ),
             ),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               if (turn.usage.totalTokens > 0)
-                Text(
-                  '↓${turn.usage.promptTokens} · ↑${turn.usage.completionTokens}${turn.usage.costUsd > 0 ? ' · \$${turn.usage.costUsd.toStringAsFixed(4)}' : ''}',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: textColor.withValues(alpha: 0.45),
+                Expanded(
+                  child: Text(
+                    '↓${turn.usage.promptTokens} · ↑${turn.usage.completionTokens}${turn.usage.costUsd > 0 ? ' · \$${turn.usage.costUsd.toStringAsFixed(4)}' : ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: textColor.withValues(alpha: 0.45),
+                    ),
                   ),
                 )
               else
-                const SizedBox.shrink(),
-              InkWell(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: turn.aiResponse));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Ответ скопирован'),
-                      duration: Duration(seconds: 1),
+                const Spacer(),
+              Tooltip(
+                message: 'Повторить ответ',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    ref.read(roxumChatProvider.notifier).sendPrompt(
+                          turn.userRequest,
+                          truncateFromIndex: index,
+                        );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(7),
+                    child: Icon(
+                      LucideIcons.refresh_cw,
+                      size: 14,
+                      color: muted,
                     ),
-                  );
-                },
-                child: Icon(
-                  Icons.copy_outlined,
-                  size: 14,
-                  color: textColor.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Tooltip(
+                message: 'Копировать ответ',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: turn.aiResponse));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Ответ скопирован'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(7),
+                    child: Icon(
+                      LucideIcons.copy,
+                      size: 14,
+                      color: muted,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildToolCallTile(
-    RoxumToolCallRecord tc,
-    Color surfaceColor,
-    Color textColor,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: textColor.withValues(alpha: 0.08)),
-      ),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 10),
-        childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        leading: tc.isRunning
-            ? const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Color(0xFF38BDF8),
-                ),
-              )
-            : Icon(
-                tc.success ? Icons.check_circle_outline : Icons.error_outline,
-                size: 15,
-                color: tc.success ? const Color(0xFF22C55E) : Colors.redAccent,
-              ),
-        title: Text(
-          tc.name,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: textColor,
-          ),
-        ),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Args: ${jsonEncode(tc.arguments)}',
-              style: TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: textColor.withValues(alpha: 0.7),
-              ),
-            ),
-          ),
-          if (tc.output.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                tc.output.length > 600
-                    ? '${tc.output.substring(0, 600)}...'
-                    : tc.output,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  color: textColor.withValues(alpha: 0.8),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -1933,150 +3020,142 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
   Future<void> _showHistoryDialog(
     BuildContext context,
     RoxumChatState chatState,
+    Color accentColor,
   ) async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        return AlertDialog(
-          title: const Text('История чатов'),
-          content: SizedBox(
-            width: 340,
-            height: 320,
-            child: ListView.builder(
-              itemCount: chatState.sessions.length,
-              itemBuilder: (_, i) {
-                final s = chatState.sessions[i];
-                final isCurrent = s.id == chatState.currentSessionId;
-                return ListTile(
-                  selected: isCurrent,
-                  title: Text(
-                    s.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text('${s.turns.length} сообщений'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    onPressed: () {
-                      ref.read(roxumChatProvider.notifier).deleteSession(s.id);
-                      Navigator.of(dialogCtx).pop();
-                    },
-                  ),
-                  onTap: () {
-                    ref.read(roxumChatProvider.notifier).switchSession(s.id);
-                    Navigator.of(dialogCtx).pop();
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('Закрыть'),
-            ),
-          ],
-        );
-      },
-    );
-  }
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
-  Widget _buildUsageTelemetryBar({
-    required RoxumChatState chatState,
-    required bool hasOpenRouterKey,
-    required Color surfaceColor,
-    required Color textColor,
-  }) {
-    final u = chatState.sessionUsage;
-    final orLimits = chatState.openRouterLimits;
-    return Container(
-      margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: textColor.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            LucideIcons.gauge,
-            size: 13,
-            color: Color(0xFF38BDF8),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 2,
-              children: [
-                Text(
-                  '↓ ${u.promptTokens}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: textColor.withValues(alpha: 0.75),
-                  ),
-                ),
-                Text(
-                  '↑ ${u.completionTokens}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: textColor.withValues(alpha: 0.75),
-                  ),
-                ),
-                Text(
-                  'Σ ${u.totalTokens}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: textColor,
-                  ),
-                ),
-                if (u.costUsd > 0)
-                  Text(
-                    '\$${u.costUsd.toStringAsFixed(4)}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF22C55E),
+    Widget buildBody(BuildContext modalCtx) {
+      return Consumer(
+        builder: (ctx, modalRef, _) {
+          final liveState = modalRef.watch(roxumChatProvider);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.history, size: 18, color: accentColor),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'История чатов',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                if (orLimits != null)
-                  Text(
-                    orLimits.limitRemainingUsd != null
-                        ? 'OR ост: \$${orLimits.limitRemainingUsd!.toStringAsFixed(2)}'
-                        : (orLimits.freeDailyRemaining != null
-                            ? 'OR Free: ${orLimits.freeDailyRemaining}/${orLimits.freeDailyLimit}'
-                            : 'OR: \$${orLimits.usageUsd.toStringAsFixed(3)}'),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFFA78BFA),
-                      fontWeight: FontWeight.w500,
+                    IconButton(
+                      onPressed: () {
+                        modalRef
+                            .read(roxumChatProvider.notifier)
+                            .createNewSession();
+                        Navigator.of(modalCtx).pop();
+                      },
+                      icon: const Icon(LucideIcons.square_pen, size: 17),
+                      tooltip: 'Новый чат',
                     ),
-                  ),
-              ],
-            ),
-          ),
-          if (hasOpenRouterKey)
-            InkWell(
-              onTap: () => ref
-                  .read(roxumChatProvider.notifier)
-                  .refreshOpenRouterLimits(),
-              child: Tooltip(
-                message: 'Обновить лимиты OpenRouter',
-                child: Icon(
-                  Icons.refresh,
-                  size: 14,
-                  color: textColor.withValues(alpha: 0.6),
+                  ],
                 ),
               ),
-            ),
-        ],
-      ),
-    );
+              const Divider(height: 1),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: liveState.sessions.length,
+                  itemBuilder: (_, i) {
+                    final s = liveState.sessions[i];
+                    final isCurrent = s.id == liveState.currentSessionId;
+                    return ListTile(
+                      dense: true,
+                      selected: isCurrent,
+                      leading: Icon(
+                        isCurrent
+                            ? LucideIcons.message_square_dot
+                            : LucideIcons.message_square,
+                        size: 16,
+                        color: isCurrent ? accentColor : null,
+                      ),
+                      title: Text(
+                        s.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        '${s.turns.length} сообщений',
+                        style: const TextStyle(fontSize: 11.5),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(LucideIcons.trash_2, size: 16),
+                        tooltip: 'Удалить чат',
+                        onPressed: () {
+                          modalRef
+                              .read(roxumChatProvider.notifier)
+                              .deleteSession(s.id);
+                        },
+                      ),
+                      onTap: () {
+                        modalRef
+                            .read(roxumChatProvider.notifier)
+                            .switchSession(s.id);
+                        Navigator.of(modalCtx).pop();
+                      },
+                    );
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(modalCtx).pop(),
+                    child: const Text('Закрыть'),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
+
+    if (isNarrow) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetCtx) {
+          final maxHeight = MediaQuery.sizeOf(sheetCtx).height * 0.72;
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: SafeArea(child: buildBody(sheetCtx)),
+          );
+        },
+      );
+    } else {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 460),
+            child: buildBody(dialogCtx),
+          ),
+        ),
+      );
+    }
   }
 
-  Future<void> _showProvidersDialog(BuildContext context) async {
+  Future<void> _showProvidersDialog(
+    BuildContext context,
+    Color accentColor,
+  ) async {
     final s = ref.read(settingsProvider);
     final openRouterCtrl = TextEditingController(text: s.openrouterApiKey);
     final customUrlCtrl = TextEditingController(text: s.customApiBaseUrl);
@@ -2104,11 +3183,11 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
         return StatefulBuilder(
           builder: (ctx, setModalState) {
             return AlertDialog(
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(LucideIcons.plug, size: 18, color: Color(0xFF38BDF8)),
-                  SizedBox(width: 8),
-                  Text('Провайдеры и API', style: TextStyle(fontSize: 16)),
+                  Icon(LucideIcons.plug, size: 18, color: accentColor),
+                  const SizedBox(width: 8),
+                  const Text('Провайдеры и API', style: TextStyle(fontSize: 16)),
                 ],
               ),
               content: SizedBox(
@@ -2148,11 +3227,13 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                                     try {
                                       final res = await RoxumAiClient
                                           .fetchOpenRouterKeyLimits(key);
+                                      if (!ctx.mounted) return;
                                       setModalState(() {
                                         limitsPreview = res;
                                         checkingLimits = false;
                                       });
                                     } catch (e) {
+                                      if (!ctx.mounted) return;
                                       setModalState(() {
                                         limitsError = e.toString();
                                         checkingLimits = false;
@@ -2188,7 +3269,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                           margin: const EdgeInsets.only(top: 6),
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0178B9).withValues(alpha: 0.1),
+                            color: accentColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Column(
@@ -2227,7 +3308,8 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                       TextField(
                         controller: customUrlCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'URL сервера (напр. http://10.61.156.225:8080/v1)',
+                          labelText:
+                              'URL сервера (напр. http://10.61.156.225:8080/v1)',
                           isDense: true,
                           border: OutlineInputBorder(),
                         ),
@@ -2257,6 +3339,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                                     baseUrl: customUrlCtrl.text.trim(),
                                     apiKey: customKeyCtrl.text.trim(),
                                   );
+                                  if (!ctx.mounted) return;
                                   setModalState(() {
                                     fetchedModels = list;
                                     if (list.isNotEmpty) {
@@ -2265,6 +3348,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                                     fetchingModels = false;
                                   });
                                 } catch (e) {
+                                  if (!ctx.mounted) return;
                                   setModalState(() {
                                     modelsError = e.toString();
                                     fetchingModels = false;
@@ -2300,7 +3384,10 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                             children: fetchedModels.map((id) {
                               final isSelected = discoveredPrimaryModel == id;
                               return ChoiceChip(
-                                label: Text(id, style: const TextStyle(fontSize: 11)),
+                                label: Text(
+                                  id,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
                                 selected: isSelected,
                                 onSelected: (_) => setModalState(
                                   () => discoveredPrimaryModel = id,
@@ -2396,14 +3483,22 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 FilledButton(
                   onPressed: () async {
                     final notifier = ref.read(settingsProvider.notifier);
-                    await notifier.setOpenrouterApiKey(openRouterCtrl.text.trim());
-                    await notifier.setCustomApiBaseUrl(customUrlCtrl.text.trim());
+                    await notifier.setOpenrouterApiKey(
+                      openRouterCtrl.text.trim(),
+                    );
+                    await notifier.setCustomApiBaseUrl(
+                      customUrlCtrl.text.trim(),
+                    );
                     await notifier.setCustomApiKey(customKeyCtrl.text.trim());
-                    await notifier.setCustomApiModel(discoveredPrimaryModel.trim());
+                    await notifier.setCustomApiModel(
+                      discoveredPrimaryModel.trim(),
+                    );
                     await notifier.setGeminiApiKey(geminiCtrl.text.trim());
                     await notifier.setDeepseekApiKey(deepseekCtrl.text.trim());
                     await notifier.setOpenaiApiKey(openaiCtrl.text.trim());
-                    await notifier.setAnthropicApiKey(anthropicCtrl.text.trim());
+                    await notifier.setAnthropicApiKey(
+                      anthropicCtrl.text.trim(),
+                    );
                     await notifier.setGroqApiKey(groqCtrl.text.trim());
                     await notifier.setXaiApiKey(xaiCtrl.text.trim());
                     await notifier.setMistralApiKey(mistralCtrl.text.trim());
@@ -2434,43 +3529,128 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     mistralCtrl.dispose();
   }
 
-  Future<void> _showMcpServersDialog(BuildContext context) async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogCtx) {
-        return Consumer(
-          builder: (ctx, modalRef, _) {
-            final servers = modalRef.watch(mcpServiceProvider);
-            final workspacePath =
-                modalRef.read(workspaceProvider).currentPath ?? '.';
-            final presets =
-                McpService.topPresets(workspacePath: workspacePath);
+  Future<void> _showMcpServersDialog(
+    BuildContext context,
+    Color accentColor,
+  ) async {
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
 
-            return AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(LucideIcons.blocks, size: 18, color: Color(0xFF22C55E)),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'MCP-серверы (Агент + Flutter)',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 440,
-                height: 430,
-                child: ListView(
+    Widget buildMcpBody(BuildContext modalCtx) {
+      return Consumer(
+        builder: (ctx, modalRef, _) {
+          final servers = modalRef.watch(mcpServiceProvider);
+          final mcpNotifier = modalRef.read(mcpServiceProvider.notifier);
+          final runtime = modalRef.read(runtimeServiceProvider);
+          final rawWorkspacePath =
+              modalRef.read(workspaceProvider).currentPath ?? '.';
+          final effectiveWorkspacePath =
+              (Platform.isAndroid && !runtime.useNativeRootMode)
+                  ? runtime.toProotPath(rawWorkspacePath)
+                  : rawWorkspacePath;
+          final presets = McpService.topPresets(
+            workspacePath: effectiveWorkspacePath,
+          );
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+                child: Row(
                   children: [
-                    if (servers.isNotEmpty) ...[
-                      const Text(
-                        'Подключённые серверы',
+                    Icon(
+                      LucideIcons.blocks,
+                      size: 18,
+                      color: servers.any((s) => s.isEnabled)
+                          ? const Color(0xFF22C55E)
+                          : accentColor,
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'MCP-серверы (Агент + Flutter)',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  children: [
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      value: mcpNotifier.internetAccess,
+                      onChanged: (val) => mcpNotifier.setInternetAccess(val),
+                      title: const Text(
+                        'Доступ MCP к интернету и документации',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
                         ),
+                      ),
+                      subtitle: const Text(
+                        'Разрешить web_search_docs, fetch_url_markdown и Context7',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                    ),
+                    const Divider(height: 16),
+                    if (servers.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Подключённые серверы',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          FutureBuilder<List<Map<String, dynamic>>>(
+                            future: mcpNotifier.getAvailableMcpTools(),
+                            builder: (context, snap) {
+                              final count = snap.data?.length;
+                              if (count == null) {
+                                return const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                  ),
+                                );
+                              }
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF22C55E)
+                                      .withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '$count активных инструментов',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF22C55E),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 6),
                       for (final s in servers)
@@ -2493,7 +3673,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                             style: const TextStyle(fontSize: 11),
                           ),
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
+                            icon: const Icon(LucideIcons.trash_2, size: 17),
                             onPressed: () => modalRef
                                 .read(mcpServiceProvider.notifier)
                                 .removeServer(s.name),
@@ -2548,22 +3728,60 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                   ],
                 ),
               ),
-              actions: [
-                FilledButton.tonalIcon(
-                  onPressed: () => _showAddCustomMcpDialog(dialogCtx, modalRef),
-                  icon: const Icon(LucideIcons.plus, size: 15),
-                  label: Text(AppLocalizations.of(context)!.addCustomMcp),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
                 ),
-                TextButton(
-                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: Text(AppLocalizations.of(context)!.close),
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: () =>
+                          _showAddCustomMcpDialog(modalCtx, modalRef),
+                      icon: const Icon(LucideIcons.plus, size: 15),
+                      label: Text(AppLocalizations.of(context)!.addCustomMcp),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(modalCtx).pop(),
+                      child: Text(AppLocalizations.of(context)!.close),
+                    ),
+                  ],
                 ),
-              ],
-            );
-          },
-        );
-      },
-    );
+              ),
+            ],
+          );
+        },
+      );
+    }
+
+    if (isNarrow) {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetCtx) {
+          final maxHeight = MediaQuery.sizeOf(sheetCtx).height * 0.85;
+          return SizedBox(
+            height: maxHeight,
+            child: buildMcpBody(sheetCtx),
+          );
+        },
+      );
+    } else {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogCtx) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480, maxHeight: 540),
+            child: buildMcpBody(dialogCtx),
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _showAddCustomMcpDialog(

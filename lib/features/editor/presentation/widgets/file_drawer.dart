@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:quantum_ide/shared/widgets/unified_load_meter.dart';
 import 'package:quantum_ide/features/editor/presentation/pages/editor_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -12,7 +11,6 @@ import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dar
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
-import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/problems_panel.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
@@ -51,6 +49,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
   // Persistent controller: recreating it on every build reset the cursor and caused jank while typing.
   final TextEditingController _searchController = TextEditingController();
   bool _isSearchVisible = false;
+  int _treeRefreshSeed = 0;
 
   @override
   void dispose() {
@@ -58,27 +57,67 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     super.dispose();
   }
 
-  Widget _buildFilterChip(WidgetRef ref, String label, String query, bool isSelected) {
+  String _resolveTabTitle(BuildContext context, int selectedTab) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (selectedTab) {
+      case 1:
+        return l10n.search;
+      case 2:
+        return l10n.structure;
+      case 3:
+        return l10n.disk;
+      case 4:
+        return l10n.problems;
+      case 5:
+        return 'Git';
+      case 7:
+        return l10n.packages;
+      case 10:
+        return l10n.liveShare;
+      case 11:
+        return l10n.plugins;
+      case 13:
+        return l10n.appLogs;
+      case 0:
+      default:
+        return l10n.explorer;
+    }
+  }
+
+  Widget _buildFilterChip(
+    WidgetRef ref,
+    String label,
+    String query,
+    bool isSelected, {
+    required Color accentColor,
+    required bool isTouchLayout,
+  }) {
     return InkWell(
       onTap: () => ref.read(fileSearchQueryProvider.notifier).state = query,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(6),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        padding: isTouchLayout
+            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+            : const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF4CD7F6).withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(4),
+          color: isSelected
+              ? accentColor.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected ? const Color(0xFF4CD7F6).withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.06),
+            color: isSelected
+                ? accentColor.withValues(alpha: 0.6)
+                : Colors.white.withValues(alpha: 0.06),
             width: 0.6,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 10.5,
+            fontSize: isTouchLayout ? 11.5 : 10.5,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-            color: isSelected ? const Color(0xFF4CD7F6) : Colors.white60,
+            color: isSelected ? accentColor : Colors.white60,
           ),
         ),
       ),
@@ -89,9 +128,14 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     required IconData icon,
     required String tooltip,
     required VoidCallback onPressed,
+    required Color accentColor,
+    required bool isTouchLayout,
     bool isActive = false,
     Color? color,
   }) {
+    final buttonSize = isTouchLayout ? 34.0 : 26.0;
+    final iconSize = isTouchLayout ? 16.0 : 13.5;
+
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 350),
@@ -103,25 +147,25 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
           hoverColor: Colors.white.withValues(alpha: 0.08),
           splashColor: Colors.white.withValues(alpha: 0.12),
           child: Container(
-            width: 26,
-            height: 26,
+            width: buttonSize,
+            height: buttonSize,
             margin: const EdgeInsets.symmetric(horizontal: 1.5),
             alignment: Alignment.center,
             decoration: isActive
                 ? BoxDecoration(
-                    color: const Color(0xFF4CD7F6).withValues(alpha: 0.16),
+                    color: accentColor.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: const Color(0xFF4CD7F6).withValues(alpha: 0.4),
+                      color: accentColor.withValues(alpha: 0.4),
                       width: 0.8,
                     ),
                   )
                 : null,
             child: Icon(
               icon,
-              size: 13.5,
+              size: iconSize,
               color: isActive
-                  ? const Color(0xFF4CD7F6)
+                  ? accentColor
                   : (color ?? Colors.white.withValues(alpha: 0.7)),
             ),
           ),
@@ -130,94 +174,143 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     );
   }
 
-  Widget _buildHeaderMenu(BuildContext context, WidgetRef ref, String workspacePath) {
+  Widget _buildHeaderMenu(
+    BuildContext context,
+    WidgetRef ref,
+    String workspacePath, {
+    required bool isTouchLayout,
+  }) {
     final l10n = AppLocalizations.of(context)!;
-    return PopupMenuButton<String>(
-      icon: const Icon(LucideIcons.ellipsis, size: 14, color: Colors.white60),
-      padding: EdgeInsets.zero,
-      tooltip: l10n.actionsTooltip,
-      color: const Color(0xFF1E2230),
-      elevation: 8,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final sortLabel = isRu ? 'Сортировка' : 'Sort';
+    final buttonSize = isTouchLayout ? 34.0 : 26.0;
+    final iconSize = isTouchLayout ? 16.0 : 14.0;
+    final itemHeight = isTouchLayout ? 40.0 : 32.0;
+
+    return SizedBox(
+      width: buttonSize,
+      height: buttonSize,
+      child: PopupMenuButton<String>(
+        icon: Icon(LucideIcons.ellipsis, size: iconSize, color: Colors.white70),
+        padding: EdgeInsets.zero,
+        tooltip: l10n.actionsTooltip,
+        color: const Color(0xFF1E2230),
+        elevation: 8,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
+        ),
+        onSelected: (value) {
+          switch (value) {
+            case 'new_folder':
+              showCreateDialog(context, ref, workspacePath, true);
+              break;
+            case 'collapse_all':
+              ref.read(expandedFoldersProvider.notifier).setExpanded({});
+              break;
+            case 'refresh':
+              setState(() => _treeRefreshSeed++);
+              ref.read(fileExplorerProvider.notifier).scanDirectory(workspacePath);
+              break;
+            case 'sort':
+              showSortMenu(context, ref);
+              break;
+            case 'git_download':
+              GitDownloadDialog.show(
+                context,
+                workspacePath: workspacePath,
+                gitNotifier: ref.read(gitProvider.notifier),
+              );
+              break;
+            case 'env':
+              showEnvironmentBottomSheet(context, ref);
+              break;
+            case 'clean_cache':
+              _cleanBuildCacheDialog(context, ref, workspacePath);
+              break;
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            value: 'new_folder',
+            height: itemHeight,
+            child: Row(
+              children: [
+                const Icon(LucideIcons.folder_plus, size: 15, color: Colors.white70),
+                const SizedBox(width: 10),
+                Text(l10n.newFolder, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'collapse_all',
+            height: itemHeight,
+            child: Row(
+              children: [
+                const Icon(LucideIcons.folder_closed, size: 15, color: Colors.white70),
+                const SizedBox(width: 10),
+                Text(l10n.collapseAll, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'refresh',
+            height: itemHeight,
+            child: Row(
+              children: [
+                const Icon(LucideIcons.refresh_cw, size: 15, color: Colors.white70),
+                const SizedBox(width: 10),
+                Text(l10n.refresh, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(height: 8),
+          PopupMenuItem(
+            value: 'sort',
+            height: itemHeight,
+            child: Row(
+              children: [
+                const Icon(LucideIcons.arrow_up_down, size: 15, color: Colors.white70),
+                const SizedBox(width: 10),
+                Text(sortLabel, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'git_download',
+            height: 36,
+            child: Row(
+              children: [
+                Icon(LucideIcons.cloud_download, size: 15, color: Color(0xFF10B981)),
+                SizedBox(width: 10),
+                Text('Загрузить из Git (файл/папка)', style: TextStyle(fontSize: 12.5, color: Colors.white)),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'env',
+            height: itemHeight,
+            child: Row(
+              children: [
+                const Icon(LucideIcons.wrench, size: 15, color: Colors.white70),
+                const SizedBox(width: 10),
+                Text(l10n.environment, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'clean_cache',
+            height: 36,
+            child: Row(
+              children: [
+                Icon(LucideIcons.sparkles, size: 15, color: Colors.amberAccent),
+                SizedBox(width: 10),
+                Text('Очистить кэш сборки', style: TextStyle(fontSize: 12.5, color: Colors.white)),
+              ],
+            ),
+          ),
+        ],
       ),
-      onSelected: (value) {
-        switch (value) {
-          case 'sort':
-            showSortMenu(context, ref);
-            break;
-          case 'git':
-            ref.read(drawerTabProvider.notifier).state = 5;
-            break;
-          case 'git_download':
-            GitDownloadDialog.show(context, workspacePath: workspacePath, gitNotifier: ref.read(gitProvider.notifier));
-            break;
-          case 'env':
-            showEnvironmentBottomSheet(context, ref);
-            break;
-          case 'clean_cache':
-            _cleanBuildCacheDialog(context, ref, workspacePath);
-            break;
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'sort',
-          height: 32,
-          child: Row(
-            children: [
-              const Icon(LucideIcons.arrow_up_down, size: 14, color: Colors.white70),
-              const SizedBox(width: 8),
-              Text(l10n.sortByDate.split(' ').first, style: const TextStyle(fontSize: 12, color: Colors.white)),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'git',
-          height: 32,
-          child: Row(
-            children: [
-              Icon(LucideIcons.git_branch, size: 14, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('Git', style: TextStyle(fontSize: 12, color: Colors.white)),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'git_download',
-          height: 32,
-          child: Row(
-            children: [
-              Icon(LucideIcons.cloud_download, size: 14, color: Color(0xFF10B981)),
-              SizedBox(width: 8),
-              Text('Загрузить из Git (файл/папка)', style: TextStyle(fontSize: 12, color: Colors.white)),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: 'env',
-          height: 32,
-          child: Row(
-            children: [
-              const Icon(LucideIcons.wrench, size: 14, color: Colors.white70),
-              const SizedBox(width: 8),
-              Text(l10n.environment, style: const TextStyle(fontSize: 12, color: Colors.white)),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'clean_cache',
-          height: 32,
-          child: Row(
-            children: [
-              Icon(LucideIcons.sparkles, size: 14, color: Colors.amberAccent),
-              SizedBox(width: 8),
-              Text('Очистить кэш сборки', style: TextStyle(fontSize: 12, color: Colors.white)),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -321,18 +414,18 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     IconData icon,
     String tooltip,
     bool isActive, {
+    required Color accentColor,
     int badgeCount = 0,
     Color badgeColor = const Color(0xFFFF3C3C),
-    bool isMobile = false,
+    bool isTouchLayout = false,
   }) {
-    const activeColor = Color(0xFF4CD7F6);
     final iconWidget = Icon(
       icon,
-      size: isMobile ? 15 : 16,
-      color: isActive ? activeColor : Colors.white.withValues(alpha: 0.45),
+      size: isTouchLayout ? 17.5 : 16.0,
+      color: isActive ? accentColor : Colors.white.withValues(alpha: 0.45),
     );
 
-    final itemSize = isMobile ? 38.0 : 42.0;
+    final itemSize = isTouchLayout ? 42.0 : 40.0;
 
     return Tooltip(
       message: tooltip,
@@ -369,14 +462,14 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                     child: Container(
                       width: 2.5,
                       decoration: BoxDecoration(
-                        color: activeColor,
+                        color: accentColor,
                         borderRadius: const BorderRadius.only(
                           topRight: Radius.circular(2),
                           bottomRight: Radius.circular(2),
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: activeColor.withValues(alpha: 0.5),
+                            color: accentColor.withValues(alpha: 0.5),
                             blurRadius: 4,
                           ),
                         ],
@@ -428,6 +521,8 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     ref.watch(fileSearchWatcher);
     final workspacePath = ref.watch(workspaceProvider.select((s) => s.currentPath ?? ''));
     final selectedTab = ref.watch(drawerTabProvider);
+    final currentQuery = ref.watch(fileSearchQueryProvider);
+    final l10n = AppLocalizations.of(context)!;
 
     // Оптимизировано: учитываем только реальные ошибки (error) и предупреждения (warning), не пугая пользователя красным бейджем из-за мелких подсказок (hint/info).
     final (errorCount, warningCount) = ref.watch(editorProvider.select((s) {
@@ -457,7 +552,8 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
       (s.status?.conflictedFiles.length ?? 0)
     ));
 
-    final isMobile = MediaQuery.of(context).size.width < 700;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTouchLayout = screenWidth < 768;
     final pluginState = ref.watch(quantumPluginServiceProvider);
     final disabledTabs = pluginState.disabledTabIds;
     final sidebarOrder = pluginState.sidebarLayout != null && pluginState.sidebarLayout!.sectionOrder.isNotEmpty
@@ -471,16 +567,18 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     final drawerPalette = settings.syncAppWithTerminalPalette
         ? resolveConduitPalette(settings.terminalTheme)
         : null;
+    final accentColor = drawerPalette?.accent ?? Theme.of(context).colorScheme.primary;
+    final dividerColor = drawerPalette?.border ?? Colors.white.withValues(alpha: 0.06);
 
     // Activity bar on the left
-    final activityBarWidth = isMobile ? 38.0 : 44.0;
+    final activityBarWidth = isTouchLayout ? 44.0 : 42.0;
     final activityBar = Container(
       width: activityBarWidth,
       decoration: BoxDecoration(
         color: drawerPalette?.canvas ?? const Color(0xFF090B0F),
         border: Border(
           right: BorderSide(
-            color: drawerPalette?.border ?? Colors.white.withValues(alpha: 0.05),
+            color: dividerColor,
             width: 0.5,
           ),
         ),
@@ -491,40 +589,122 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   for (final sec in sidebarOrder) ...[
                     if (!disabledTabs.contains(sec)) ...[
                       if (sec == 'explorer')
-                        _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          0,
+                          LucideIcons.files,
+                          l10n.explorer,
+                          selectedTab == 0,
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'search')
-                        _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          1,
+                          LucideIcons.search,
+                          l10n.search,
+                          selectedTab == 1,
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'structure')
-                        _buildActivityIcon(ref, 2, LucideIcons.list, AppLocalizations.of(context)!.structure, selectedTab == 2, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          2,
+                          LucideIcons.list,
+                          l10n.structure,
+                          selectedTab == 2,
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'disk')
-                        _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          3,
+                          LucideIcons.chart_pie,
+                          l10n.disk,
+                          selectedTab == 3,
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'problems')
                         _buildActivityIcon(
                           ref,
                           4,
                           LucideIcons.circle_alert,
-                          AppLocalizations.of(context)!.problems,
+                          l10n.problems,
                           selectedTab == 4,
+                          accentColor: accentColor,
                           badgeCount: totalProblems,
                           badgeColor: problemsBadgeColor,
-                          isMobile: isMobile,
+                          isTouchLayout: isTouchLayout,
                         ),
                       if (sec == 'git')
-                        _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          5,
+                          LucideIcons.git_branch,
+                          'Git',
+                          selectedTab == 5,
+                          accentColor: accentColor,
+                          badgeCount: gitChangesCount,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'preview')
-                        _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, ref.watch(floatingPreviewVisibleProvider), isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          6,
+                          LucideIcons.server,
+                          l10n.preview,
+                          ref.watch(floatingPreviewVisibleProvider),
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'packages')
-                        _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          7,
+                          LucideIcons.toy_brick,
+                          l10n.packages,
+                          selectedTab == 7,
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'liveShare')
-                        _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          10,
+                          LucideIcons.users,
+                          l10n.liveShare,
+                          selectedTab == 10,
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'plugins')
-                        _buildActivityIcon(ref, 11, LucideIcons.puzzle, 'Плагины', selectedTab == 11, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          11,
+                          LucideIcons.puzzle,
+                          l10n.plugins,
+                          selectedTab == 11,
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                       if (sec == 'appLogs')
-                        _buildActivityIcon(ref, 13, LucideIcons.terminal, 'Логи IDE', selectedTab == 13, isMobile: isMobile),
+                        _buildActivityIcon(
+                          ref,
+                          13,
+                          LucideIcons.terminal,
+                          l10n.appLogs,
+                          selectedTab == 13,
+                          accentColor: accentColor,
+                          isTouchLayout: isTouchLayout,
+                        ),
                     ],
                   ],
                 ],
@@ -534,7 +714,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
           const Divider(height: 1, color: Colors.white10),
           const SizedBox(height: 4),
           Tooltip(
-            message: AppLocalizations.of(context)!.settings,
+            message: l10n.settings,
             child: InkWell(
               onTap: () {
                 context.push('/settings');
@@ -542,7 +722,11 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               child: SizedBox(
                 width: activityBarWidth,
                 height: activityBarWidth,
-                child: const Icon(LucideIcons.settings, size: 16, color: Colors.white38),
+                child: Icon(
+                  LucideIcons.settings,
+                  size: isTouchLayout ? 17.5 : 16.0,
+                  color: Colors.white38,
+                ),
               ),
             ),
           ),
@@ -551,6 +735,77 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
       ),
     );
 
+    // Unified header displayed across ALL sidebar tabs
+    final unifiedHeader = Container(
+      height: isTouchLayout ? 44.0 : 38.0,
+      padding: EdgeInsets.only(left: isTouchLayout ? 12.0 : 10.0, right: 6.0),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: dividerColor, width: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _resolveTabTitle(context, selectedTab).toUpperCase(),
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+                color: Colors.white70,
+              ),
+            ),
+          ),
+          if (selectedTab == 0 && workspacePath.isNotEmpty) ...[
+            _buildHeaderAction(
+              icon: LucideIcons.file_plus,
+              tooltip: l10n.newFile,
+              accentColor: accentColor,
+              isTouchLayout: isTouchLayout,
+              onPressed: () => showCreateDialog(context, ref, workspacePath, false),
+            ),
+            _buildHeaderAction(
+              icon: LucideIcons.list_filter,
+              tooltip: l10n.searchFiles,
+              accentColor: accentColor,
+              isTouchLayout: isTouchLayout,
+              isActive: _isSearchVisible || currentQuery.isNotEmpty,
+              onPressed: () {
+                setState(() {
+                  _isSearchVisible = !_isSearchVisible;
+                  if (!_isSearchVisible) {
+                    ref.read(fileSearchQueryProvider.notifier).state = '';
+                    _searchController.clear();
+                  }
+                });
+              },
+            ),
+            _buildHeaderMenu(
+              context,
+              ref,
+              workspacePath,
+              isTouchLayout: isTouchLayout,
+            ),
+          ],
+          if (!widget.isInline)
+            _buildHeaderAction(
+              icon: LucideIcons.x,
+              tooltip: l10n.close,
+              accentColor: accentColor,
+              isTouchLayout: isTouchLayout,
+              color: Colors.white60,
+              onPressed: () {
+                final scaffold = Scaffold.maybeOf(context);
+                if (scaffold != null && scaffold.isDrawerOpen) {
+                  scaffold.closeDrawer();
+                } else {
+                  Navigator.of(context).maybePop();
+                }
+              },
+            ),
+        ],
+      ),
+    );
 
     Widget activePanel;
     switch (selectedTab) {
@@ -583,215 +838,211 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         break;
       case 0:
       default:
-        final currentQuery = ref.watch(fileSearchQueryProvider);
-        activePanel = Stack(
+        activePanel = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // VS Code Style sleek compact header bar
-                Container(
-                  height: 38,
-                  padding: const EdgeInsets.only(left: 10, right: 6),
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5)),
-                  ),
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          AppLocalizations.of(context)!.explorer.toUpperCase(),
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
-                            color: Colors.white70,
+            // Compact Filter & Quick Chips dropdown (only when filter is toggled or active)
+            if (workspacePath.isNotEmpty && (_isSearchVisible || currentQuery.isNotEmpty)) ...[
+              Padding(
+                padding: EdgeInsets.fromLTRB(8, isTouchLayout ? 8 : 6, 8, isTouchLayout ? 8 : 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: isTouchLayout ? 36.0 : 28.0,
+                      child: TextField(
+                        onChanged: (value) => ref.read(fileSearchQueryProvider.notifier).state = value,
+                        controller: () {
+                          if (_searchController.text != currentQuery) {
+                            _searchController.value = TextEditingValue(
+                              text: currentQuery,
+                              selection: TextSelection.collapsed(offset: currentQuery.length),
+                            );
+                          }
+                          return _searchController;
+                        }(),
+                        decoration: InputDecoration(
+                          hintText: l10n.searchFiles,
+                          hintStyle: TextStyle(
+                            fontSize: isTouchLayout ? 12.5 : 11.5,
+                            color: Colors.white30,
                           ),
+                          prefixIcon: Icon(
+                            LucideIcons.list_filter,
+                            size: isTouchLayout ? 15 : 13,
+                            color: Colors.white38,
+                          ),
+                          prefixIconConstraints: BoxConstraints(
+                            minWidth: isTouchLayout ? 32 : 26,
+                            minHeight: isTouchLayout ? 32 : 26,
+                          ),
+                          suffixIcon: currentQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: Icon(
+                                    LucideIcons.x,
+                                    size: isTouchLayout ? 14 : 12,
+                                    color: Colors.white54,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: BoxConstraints(
+                                    minWidth: isTouchLayout ? 32 : 24,
+                                    minHeight: isTouchLayout ? 32 : 24,
+                                  ),
+                                  onPressed: () {
+                                    ref.read(fileSearchQueryProvider.notifier).state = '';
+                                    _searchController.clear();
+                                  },
+                                )
+                              : null,
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            vertical: isTouchLayout ? 8 : 4,
+                            horizontal: 8,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: accentColor, width: 1.0),
+                          ),
+                          fillColor: Colors.white.withValues(alpha: 0.04),
+                          filled: true,
+                        ),
+                        style: TextStyle(
+                          fontSize: isTouchLayout ? 12.5 : 11.5,
+                          color: Colors.white,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      if (workspacePath.isNotEmpty) ...[
-                        _buildHeaderAction(
-                          icon: LucideIcons.file_plus,
-                          tooltip: AppLocalizations.of(context)!.newFile,
-                          onPressed: () => showCreateDialog(context, ref, workspacePath, false),
+                    ),
+                    SizedBox(height: isTouchLayout ? 8 : 4),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          _buildFilterChip(
+                            ref,
+                            l10n.all,
+                            '',
+                            currentQuery == '',
+                            accentColor: accentColor,
+                            isTouchLayout: isTouchLayout,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildFilterChip(
+                            ref,
+                            'Dart',
+                            '.dart',
+                            currentQuery == '.dart',
+                            accentColor: accentColor,
+                            isTouchLayout: isTouchLayout,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildFilterChip(
+                            ref,
+                            'YAML',
+                            '.yaml',
+                            currentQuery == '.yaml',
+                            accentColor: accentColor,
+                            isTouchLayout: isTouchLayout,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildFilterChip(
+                            ref,
+                            'JSON',
+                            '.json',
+                            currentQuery == '.json',
+                            accentColor: accentColor,
+                            isTouchLayout: isTouchLayout,
+                          ),
+                          const SizedBox(width: 6),
+                          _buildFilterChip(
+                            ref,
+                            'Web',
+                            '.html',
+                            currentQuery == '.html',
+                            accentColor: accentColor,
+                            isTouchLayout: isTouchLayout,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: Colors.white10),
+            ],
+            if (workspacePath.isNotEmpty)
+              Expanded(
+                child: DragTarget<String>(
+                  onWillAcceptWithDetails: (details) {
+                    final draggedPath = details.data;
+                    final parentDir = p.dirname(draggedPath);
+                    if (parentDir == workspacePath) return false;
+                    return true;
+                  },
+                  onAcceptWithDetails: (details) async {
+                    final draggedPath = details.data;
+                    try {
+                      await ref.read(fileExplorerProvider.notifier).moveEntity(draggedPath, workspacePath);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(AppLocalizations.of(context)!.elementMovedToRoot)),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(AppLocalizations.of(context)!.moveError(e.toString()))),
+                        );
+                      }
+                    }
+                  },
+                  builder: (context, candidateData, rejectedData) {
+                    final isOver = candidateData.isNotEmpty;
+                    return Container(
+                      color: isOver ? accentColor.withValues(alpha: 0.08) : Colors.transparent,
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildBookmarksSection(
+                              context,
+                              ref,
+                              workspacePath,
+                              accentColor: accentColor,
+                              isTouchLayout: isTouchLayout,
+                            ),
+                            if (ref.watch(bookmarksProvider).isNotEmpty)
+                              const Divider(height: 1, color: Colors.white10, indent: 12, endIndent: 12),
+                            FileDrawerTree(
+                              key: ValueKey('file_tree_${workspacePath}_$_treeRefreshSeed'),
+                              workspacePath: workspacePath,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                         ),
-                        _buildHeaderAction(
-                          icon: LucideIcons.folder_plus,
-                          tooltip: AppLocalizations.of(context)!.newFolder,
-                          onPressed: () => showCreateDialog(context, ref, workspacePath, true),
-                        ),
-                        _buildHeaderAction(
-                          icon: LucideIcons.folder_closed,
-                          tooltip: AppLocalizations.of(context)!.collapseAll,
-                          onPressed: () {
-                            ref.read(expandedFoldersProvider.notifier).setExpanded({});
-                          },
-                        ),
-                        _buildHeaderAction(
-                          icon: LucideIcons.search,
-                          tooltip: AppLocalizations.of(context)!.searchFiles,
-                          isActive: _isSearchVisible || currentQuery.isNotEmpty,
-                          onPressed: () {
-                            setState(() {
-                              _isSearchVisible = !_isSearchVisible;
-                              if (!_isSearchVisible) {
-                                ref.read(fileSearchQueryProvider.notifier).state = '';
-                                _searchController.clear();
-                              }
-                            });
-                          },
-                        ),
-                        _buildHeaderMenu(context, ref, workspacePath),
-                      ],
-                      if (!widget.isInline)
-                        _buildHeaderAction(
-                          icon: LucideIcons.x,
-                          tooltip: AppLocalizations.of(context)!.close,
-                          color: Colors.white60,
-                          onPressed: () {
-                            final scaffold = Scaffold.maybeOf(context);
-                            if (scaffold != null && scaffold.isDrawerOpen) {
-                              scaffold.closeDrawer();
-                            } else {
-                              Navigator.of(context).maybePop();
-                            }
-                          },
-                        ),
-                    ],
+                      ),
+                    );
+                  },
+                ),
+              )
+            else
+              Expanded(
+                child: Center(
+                  child: Text(
+                    l10n.projectNotOpened,
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ),
-                // Compact Search & Filters dropdown (only when search is toggled or active)
-                if (workspacePath.isNotEmpty && (_isSearchVisible || currentQuery.isNotEmpty)) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          height: 28,
-                          child: TextField(
-                            onChanged: (value) => ref.read(fileSearchQueryProvider.notifier).state = value,
-                            controller: () {
-                              if (_searchController.text != currentQuery) {
-                                _searchController.value = TextEditingValue(
-                                  text: currentQuery,
-                                  selection: TextSelection.collapsed(offset: currentQuery.length),
-                                );
-                              }
-                              return _searchController;
-                            }(),
-                            decoration: InputDecoration(
-                              hintText: AppLocalizations.of(context)!.searchFiles,
-                              hintStyle: const TextStyle(fontSize: 11.5, color: Colors.white30),
-                              prefixIcon: const Icon(LucideIcons.search, size: 13, color: Colors.white38),
-                              prefixIconConstraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                              suffixIcon: currentQuery.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(LucideIcons.x, size: 12, color: Colors.white54),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                                      onPressed: () => ref.read(fileSearchQueryProvider.notifier).state = '',
-                                    )
-                                  : null,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(4),
-                                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(4),
-                                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(4),
-                                borderSide: const BorderSide(color: Color(0xFF4CD7F6), width: 1.0),
-                              ),
-                              fillColor: Colors.white.withValues(alpha: 0.04),
-                              filled: true,
-                            ),
-                            style: const TextStyle(fontSize: 11.5, color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: Row(
-                            children: [
-                              _buildFilterChip(ref, AppLocalizations.of(context)!.all, '', currentQuery == ''),
-                              const SizedBox(width: 4),
-                              _buildFilterChip(ref, 'Dart', '.dart', currentQuery == '.dart'),
-                              const SizedBox(width: 4),
-                              _buildFilterChip(ref, 'YAML', '.yaml', currentQuery == '.yaml'),
-                              const SizedBox(width: 4),
-                              _buildFilterChip(ref, 'JSON', '.json', currentQuery == '.json'),
-                              const SizedBox(width: 4),
-                              _buildFilterChip(ref, 'Web', '.html', currentQuery == '.html'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1, color: Colors.white10),
-                ],
-                if (workspacePath.isNotEmpty)
-                  Expanded(
-                    child: DragTarget<String>(
-                      onWillAcceptWithDetails: (details) {
-                        final draggedPath = details.data;
-                        final parentDir = p.dirname(draggedPath);
-                        if (parentDir == workspacePath) return false;
-                        return true;
-                      },
-                      onAcceptWithDetails: (details) async {
-                        final draggedPath = details.data;
-                        try {
-                          await ref.read(fileExplorerProvider.notifier).moveEntity(draggedPath, workspacePath);
-                          if (context.mounted) {
-                            final l10n = AppLocalizations.of(context)!;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(l10n.elementMovedToRoot)),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            final l10n = AppLocalizations.of(context)!;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(l10n.moveError(e.toString()))),
-                            );
-                          }
-                        }
-                      },
-                      builder: (context, candidateData, rejectedData) {
-                        final isOver = candidateData.isNotEmpty;
-                        return Container(
-                          color: isOver ? Colors.blue.withValues(alpha: 0.05) : Colors.transparent,
-                          child: SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildBookmarksSection(context, ref, workspacePath),
-                                if (ref.watch(bookmarksProvider).isNotEmpty)
-                                  const Divider(height: 1, color: Colors.white10, indent: 14, endIndent: 14),
-                                FileDrawerTree(workspacePath: workspacePath),
-                                const SizedBox(height: 16),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  )
-                else
-                  Expanded(child: Center(child: Text(AppLocalizations.of(context)!.projectNotOpened, style: const TextStyle(color: Colors.grey)))),
-                const SizedBox(height: 12),
-              ],
-            ),
+              ),
           ],
         );
     }
@@ -801,7 +1052,13 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         children: [
           activityBar,
           Expanded(
-            child: activePanel,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                unifiedHeader,
+                Expanded(child: activePanel),
+              ],
+            ),
           ),
         ],
       ),
@@ -823,11 +1080,10 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
       );
     }
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final drawerWidth = isMobile
-        ? (screenWidth * 0.84).clamp(280.0, 380.0).clamp(0.0, screenWidth)
+    final drawerWidth = isTouchLayout
+        ? (screenWidth * 0.85).clamp(280.0, 380.0).clamp(0.0, screenWidth)
         : 340.0;
-    
+
     return GlassContainer(
       blur: 30,
       opacity: 0.92,
@@ -848,71 +1104,57 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     );
   }
 
-  Widget _buildBookmarksSection(BuildContext context, WidgetRef ref, String workspacePath) {
+  Widget _buildBookmarksSection(
+    BuildContext context,
+    WidgetRef ref,
+    String workspacePath, {
+    required Color accentColor,
+    required bool isTouchLayout,
+  }) {
     final bookmarks = ref.watch(bookmarksProvider);
     if (bookmarks.isEmpty) {
       return const SizedBox.shrink();
     }
     final title = AppLocalizations.of(context)!.bookmarks;
+    final activeFilePath = ref.watch(editorProvider.select((s) => s.activeFilePath));
 
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         key: const PageStorageKey<String>('bookmarks_expansion_tile'),
-        leading: const Icon(LucideIcons.star, size: 16, color: Colors.amberAccent),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+        leading: const Icon(LucideIcons.star, size: 13.5, color: Colors.amberAccent),
+        minTileHeight: isTouchLayout ? 36 : 30,
         title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: Colors.white70,
+          title.toUpperCase(),
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.7,
+            color: Colors.white60,
           ),
         ),
         dense: true,
-        iconColor: Colors.white70,
+        iconColor: Colors.white60,
         collapsedIconColor: Colors.white30,
-        childrenPadding: const EdgeInsets.only(left: 12, bottom: 4),
+        childrenPadding: const EdgeInsets.only(bottom: 6),
         initiallyExpanded: true,
         children: bookmarks.map((filePath) {
           final fileName = p.basename(filePath);
           final relativePath = p.relative(filePath, from: workspacePath);
           final iconInfo = FileIconHelper.getIconInfo(fileName, false, false);
+          final isActive = activeFilePath == filePath;
+
           return MouseRegion(
             cursor: SystemMouseCursors.click,
-            child: ListTile(
-              dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-              minLeadingWidth: 20,
-              leading: Icon(
-                iconInfo.icon,
-                size: 15,
-                color: iconInfo.color,
-              ),
-              title: Text(
-                fileName,
-                style: const TextStyle(fontSize: 12.5, color: Colors.white),
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                relativePath,
-                style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.35)),
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: IconButton(
-                icon: const Icon(LucideIcons.star_off, size: 12, color: Colors.redAccent),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () {
-                  ref.read(bookmarksProvider.notifier).toggleBookmark(filePath);
-                },
-              ),
+            child: InkWell(
               onTap: () async {
                 final ext = p.extension(filePath).toLowerCase();
-                final isPreviewable = ext == '.md' || 
-                    ext == '.png' || 
-                    ext == '.jpg' || 
-                    ext == '.jpeg' || 
-                    ext == '.gif' || 
+                final isPreviewable = ext == '.md' ||
+                    ext == '.png' ||
+                    ext == '.jpg' ||
+                    ext == '.jpeg' ||
+                    ext == '.gif' ||
                     ext == '.webp';
                 if (isPreviewable) {
                   Navigator.push(
@@ -931,6 +1173,71 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                   }
                 }
               },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: EdgeInsets.only(
+                  left: 8,
+                  right: 4,
+                  top: isTouchLayout ? 5 : 3,
+                  bottom: isTouchLayout ? 5 : 3,
+                ),
+                decoration: BoxDecoration(
+                  color: isActive ? accentColor.withValues(alpha: 0.12) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      iconInfo.icon,
+                      size: isTouchLayout ? 16.0 : 14.5,
+                      color: iconInfo.color,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            fileName,
+                            style: TextStyle(
+                              fontSize: isTouchLayout ? 13.0 : 12.0,
+                              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                              color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            relativePath,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white.withValues(alpha: 0.35),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: IconButton(
+                        icon: Icon(
+                          LucideIcons.star_off,
+                          size: 13.5,
+                          color: Colors.redAccent.withValues(alpha: 0.8),
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+                        tooltip: AppLocalizations.of(context)!.removeFromBookmarks,
+                        onPressed: () {
+                          ref.read(bookmarksProvider.notifier).toggleBookmark(filePath);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
         }).toList(),
@@ -939,130 +1246,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
   }
 }
 
-// ─── Панель Системной Статистики (Изолировано) ─────────────────────────────
-
-
-
-class DrawerStatsPanel extends ConsumerWidget {
-  const DrawerStatsPanel({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(systemStatsProvider);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(LucideIcons.activity, size: 14, color: Colors.cyanAccent),
-              const SizedBox(width: 6),
-              Text(
-                AppLocalizations.of(context)!.system,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: Colors.white54,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: UnifiedLoadMeter(stats: stats, compact: true)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('GPU', style: GoogleFonts.inter(fontSize: 11, color: Colors.white38)),
-                        Expanded(
-                          child: Text(
-                            '${(stats.gpuUsage * 100).toStringAsFixed(0)}%', 
-                            textAlign: TextAlign.right,
-                            style: GoogleFonts.jetBrainsMono(fontSize: 11, color: _getLoadColor(stats.gpuUsage), fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: stats.gpuUsage,
-                        minHeight: 3,
-                        backgroundColor: Colors.white.withValues(alpha: 0.05),
-                        valueColor: AlwaysStoppedAnimation<Color>(_getLoadColor(stats.gpuUsage)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('RAM', style: GoogleFonts.inter(fontSize: 11, color: Colors.white38)),
-                        Expanded(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              stats.appRamFormatted,
-                              style: GoogleFonts.jetBrainsMono(fontSize: 11, color: _getLoadColor(stats.ramUsage), fontWeight: FontWeight.bold)
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: stats.ramUsage,
-                        minHeight: 3,
-                        backgroundColor: Colors.white.withValues(alpha: 0.05),
-                        valueColor: AlwaysStoppedAnimation<Color>(_getLoadColor(stats.ramUsage)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getLoadColor(double value) {
-    if (value < 0.6) return Colors.greenAccent;
-    if (value < 0.85) return Colors.amberAccent;
-    return Colors.redAccent;
-  }
-}
-
-// ─── Заголовок AppBar (Изолировано) ──────────────────────────────────────────
-
-
-
 class FileDrawerTree extends StatefulWidget {
   final String workspacePath;
   const FileDrawerTree({super.key, required this.workspacePath});
@@ -1070,8 +1253,6 @@ class FileDrawerTree extends StatefulWidget {
   @override
   State<FileDrawerTree> createState() => FileDrawerTreeState();
 }
-
-
 
 class FileDrawerTreeState extends State<FileDrawerTree> {
   @override
@@ -1084,37 +1265,3 @@ class FileDrawerTreeState extends State<FileDrawerTree> {
     );
   }
 }
-
-
-
-class DrawerActionIcon extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  const DrawerActionIcon({super.key, 
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        hoverColor: Colors.white.withValues(alpha: 0.05),
-        splashColor: Colors.white.withValues(alpha: 0.1),
-        child: Padding(
-          padding: const EdgeInsets.all(6.0),
-          child: Icon(icon, size: 15, color: Colors.white70),
-        ),
-      ),
-    );
-  }
-}
-
-
-

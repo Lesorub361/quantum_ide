@@ -110,10 +110,14 @@ class GhostQAService {
 
   /// Update active workspace path to look for project-level owner key.
   void onWorkspaceChanged(String? workspacePath) {
+    if (_activeWorkspacePath == workspacePath && _authorizedCache != null) {
+      return;
+    }
     _activeWorkspacePath = workspacePath;
     if (_authorizedCache != true) {
-      if (_computeAuthorization()) {
-        _authorizedCache = true;
+      final auth = _computeAuthorization();
+      _authorizedCache = auth;
+      if (auth) {
         _startHttpServerIfAuthorized();
       }
     }
@@ -121,16 +125,13 @@ class GhostQAService {
 
   /// Check whether the current user is verified as the project owner/developer.
   bool get isAuthorized {
-    if (_authorizedCache == true) return true;
+    if (_authorizedCache != null) return _authorizedCache!;
     final auth = _computeAuthorization();
-    if (auth) {
-      _authorizedCache = true;
-      if (_server == null) {
-        _startHttpServerIfAuthorized();
-      }
-      return true;
+    _authorizedCache = auth;
+    if (auth && _server == null) {
+      _startHttpServerIfAuthorized();
     }
-    return false;
+    return auth;
   }
 
   /// Manually authorize (e.g. from developer settings or secret passkey).

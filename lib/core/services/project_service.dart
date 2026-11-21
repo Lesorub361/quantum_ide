@@ -15,273 +15,279 @@ import '../services/runtime_service.dart';
 import '../services/workspace_service.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../services/build_resource_optimizer.dart';
+import '../services/talker_service.dart';
+
+class SdCardExportResult {
+  final int projectCount;
+  final int copiedFiles;
+  final int skippedFiles;
+  final int copiedApks;
+  final String destinationPath;
+  final String? errorMessage;
+
+  const SdCardExportResult({
+    required this.projectCount,
+    required this.copiedFiles,
+    required this.skippedFiles,
+    required this.copiedApks,
+    required this.destinationPath,
+    this.errorMessage,
+  });
+
+  bool get isSuccess => errorMessage == null;
+}
 
 class ProjectService extends StateNotifier<List<Project>> {
   final Ref _ref;
   static const _externalPath = '/storage/emulated/0/QuantumIDE';
-  StreamSubscription? _watcherSubscription;
-  Timer? _syncTimer;
-  
-  // SD card sync is OFF by default — only enable when explicitly turned on in settings
-  static const _sdSyncPrefKey = 'settings_sd_card_sync';
+  static const Set<String> _sdExportSkipDirs = {
+    '.git',
+    '.dart_tool',
+    '.idea',
+    '.gradle',
+    'build',
+    'node_modules',
+    'local_plugins',
+    '.quantum',
+    '.cxx',
+    '.widget_preview',
+    'external',
+  };
 
   ProjectService(Ref ref) : _ref = ref, super([]) {
     _loadAndScanProjects();
-    _initSyncIfEnabled();
-  }
-
-  @override
-  void dispose() {
-    _watcherSubscription?.cancel();
-    _syncTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _initSyncIfEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    final sdSyncEnabled = prefs.getBool(_sdSyncPrefKey) ?? true;
-    if (sdSyncEnabled && Platform.isAndroid) {
-      _startFileWatcher();
-      _startPeriodicSync();
-    }
-  }
-
-  /// Call when user toggles SD card sync in Settings.
-  Future<void> setSdCardSyncEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_sdSyncPrefKey, enabled);
-    if (enabled && Platform.isAndroid) {
-      _startFileWatcher();
-      _startPeriodicSync();
-    } else {
-      _watcherSubscription?.cancel();
-      _syncTimer?.cancel();
-    }
-  }
-
-  void _startPeriodicSync() {
-    _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(minutes: 5), (timer) async {
-      await syncAllProjects();
-    });
-  }
-
-  Future<void> syncAllProjects() async {
-    final runtime = _ref.read(runtimeServiceProvider);
-    final projectsDir = Directory(p.join(runtime.appDirectory, 'projects'));
-    if (!await projectsDir.exists()) return;
-    
-    try {
-      await _syncDirectory(projectsDir, Directory(_externalPath));
-      await _syncApkFiles(projectsDir);
-    } catch (e) {
-      debugPrint('Periodic sync failed: $e');
-    }
-  }
-
-  Future<void> _syncApkFiles(Directory projectsDir) async {
-    try {
-      await for (final projectEntity in projectsDir.list(recursive: false)) {
-        if (projectEntity is Directory) {
-          final name = p.basename(projectEntity.path);
-          if (name == 'external') continue;
-          final buildDir = Directory(p.join(projectEntity.path, 'build'));
-          try {
-            if (await buildDir.exists()) {
-              await for (final entity in buildDir.list(recursive: true)) {
-                try {
-                  if (entity is File && entity.path.endsWith('.apk')) {
-                    final relativePath = p.relative(entity.path, from: projectsDir.path);
-                    final extPath = p.join(_externalPath, relativePath);
-                    final extFile = File(extPath);
-                    
-                    if (!await extFile.parent.exists()) {
-                      await extFile.parent.create(recursive: true);
-                    }
-                    
-                    bool shouldCopy = false;
-                    try {
-                      if (!await extFile.exists()) {
-                        shouldCopy = true;
-                      } else {
-                        final sourceTime = await entity.lastModified();
-                        final destTime = await extFile.lastModified();
-                        if (sourceTime.isAfter(destTime)) {
-                          shouldCopy = true;
-                        }
-                      }
-                    } catch (_) {
-                      shouldCopy = true;
-                    }
-
-                    if (shouldCopy) {
-                      await entity.copy(extPath);
-                      debugPrint('Synced APK to phone memory: $extPath');
-                    }
-                  }
-                } catch (e) {
-                  debugPrint('Sync: Error processing APK file ${entity.path}: $e');
-                }
-              }
-            }
-          } catch (e) {
-            debugPrint('Sync: Error scanning build folder ${buildDir.path}: $e');
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Sync: Error listing projects directory: $e');
-    }
-  }
-
-  Future<void> _syncDirectory(Directory source, Directory destination) async {
-    try {
-      if (!await source.exists()) return;
-      if (!await destination.exists()) {
-        try {
-          await destination.create(recursive: true);
-        } catch (e) {
-          debugPrint('Sync: Failed to create directory ${destination.path}: $e');
-          return;
-        }
-      }
-    } catch (e) {
-      debugPrint('Sync: Failed to check source/destination: $e');
-      return;
-    }
-
-    bool shouldSkipDir(String name) =>
-        name == 'external' ||
-        name == '.git' ||
-        name == '.dart_tool' ||
-        name == '.idea' ||
-        name == '.gradle' ||
-        name == 'build' ||
-        name == 'node_modules' ||
-        name == 'local_plugins' ||
-        name == '.quantum' ||
-        name == '.cxx' ||
-        name == '.widget_preview';
-
-    final Set<String> sourceNames = {};
-    try {
-      await for (final entity in source.list(recursive: false)) {
-        final name = p.basename(entity.path);
-        if (shouldSkipDir(name)) continue;
-        sourceNames.add(name);
-
-        final destPath = p.join(destination.path, name);
-        try {
-          if (entity is Directory) {
-            await _syncDirectory(entity, Directory(destPath));
-          } else if (entity is File) {
-            final isLink = await FileSystemEntity.isLink(entity.path);
-            if (isLink) continue;
-
-            final destFile = File(destPath);
-            try {
-              final srcStat = await entity.stat();
-              if (!await destFile.exists()) {
-                if (srcStat.size > 0) {
-                  await entity.copy(destPath);
-                }
-              } else {
-                final destStat = await destFile.stat();
-                if (srcStat.size == 0 && destStat.size > 0) {
-                  // Internal file became 0 bytes — restore it from external mirror!
-                  await destFile.copy(entity.path);
-                } else if (destStat.size > 0 &&
-                    destStat.modified.isAfter(srcStat.modified.add(const Duration(seconds: 1)))) {
-                  // External file was edited more recently — pull into internal!
-                  await destFile.copy(entity.path);
-                  try {
-                    await entity.setLastModified(destStat.modified);
-                  } catch (_) {}
-                } else if (srcStat.size > 0 &&
-                    srcStat.modified.isAfter(destStat.modified.add(const Duration(seconds: 1)))) {
-                  await entity.copy(destPath);
-                }
-              }
-            } catch (e) {
-              debugPrint('Sync: Failed to sync file ${entity.path} <-> $destPath: $e');
-            }
-          }
-        } catch (e) {
-          debugPrint('Sync: Error processing entity $name: $e');
-        }
-      }
-    } catch (e) {
-      debugPrint('Sync: Error listing directory ${source.path}: $e');
-    }
-
-    // Pull new files created in external mirror into internal project
-    if (destination.path != _externalPath) {
-      try {
-        await for (final destEntity in destination.list(recursive: false)) {
-          final name = p.basename(destEntity.path);
-          if (shouldSkipDir(name)) continue;
-          if (!sourceNames.contains(name)) {
-            final srcTarget = p.join(source.path, name);
-            try {
-              if (destEntity is File && await destEntity.length() > 0) {
-                await destEntity.copy(srcTarget);
-              } else if (destEntity is Directory) {
-                await _copyDirectory(destEntity, Directory(srcTarget));
-              }
-            } catch (_) {}
-          }
-        }
-      } catch (_) {}
-    }
-  }
-
-  final Map<String, Timer> _mirrorDebouncers = {};
-
-  void _startFileWatcher() async {
-    final runtime = _ref.read(runtimeServiceProvider);
-    final projectsDir = Directory(p.join(runtime.appDirectory, 'projects'));
-    if (!await projectsDir.exists()) await projectsDir.create(recursive: true);
-
-    _watcherSubscription = projectsDir.watch(recursive: !Platform.isAndroid).listen((event) async {
-      final path = event.path;
-      // Skip noise before checking filesystem
-      if (path.contains('/.dart_tool/') || 
-          path.contains('/.git/') || 
-          path.contains('/.idea/') ||
-          path.contains('/.gradle/') ||
-          path.contains('/build/') ||
-          path.contains('/node_modules/') ||
-          path.contains('/external/') ||
-          path.contains('/local_plugins/') ||
-          path.contains('/.quantum/') ||
-          path.contains('/.cxx/')) {
-        return;
-      }
-
-      if (event is FileSystemCreateEvent || event is FileSystemModifyEvent) {
-        _mirrorDebouncers[path]?.cancel();
-        _mirrorDebouncers[path] = Timer(const Duration(seconds: 5), () async {
-          final type = await FileSystemEntity.type(path);
-          if (type == FileSystemEntityType.file) {
-            mirrorEntity(path);
-          }
-          _mirrorDebouncers.remove(path);
-        });
-      } else if (event is FileSystemDeleteEvent) {
-        mirrorDelete(path);
-      }
-    }, onError: (e) {
-      debugPrint('ProjectService watch error: $e');
-    });
   }
 
   static const _key = 'user_projects';
+
+  Future<String?> _ensureSdCardPermission() async {
+    if (!Platform.isAndroid) {
+      return 'Экспорт на SD-карту доступен только на Android';
+    }
+    var status = await Permission.manageExternalStorage.status;
+    if (!status.isGranted) {
+      status = await Permission.manageExternalStorage.request();
+    }
+    if (!status.isGranted) {
+      return 'Нет разрешения на доступ к памяти устройства';
+    }
+    return null;
+  }
+
+  Future<SdCardExportResult> exportProjectToSdCard(Project project) async {
+    final permissionError = await _ensureSdCardPermission();
+    if (permissionError != null) {
+      return SdCardExportResult(
+        projectCount: 0,
+        copiedFiles: 0,
+        skippedFiles: 0,
+        copiedApks: 0,
+        destinationPath: p.join(_externalPath, project.name),
+        errorMessage: permissionError,
+      );
+    }
+
+    final result = await _exportSingleProjectToSdCard(project);
+    if (result.isSuccess) {
+      TalkerService.info(
+        'SD export [${project.name}]: copied=${result.copiedFiles}, skipped=${result.skippedFiles}, apks=${result.copiedApks} -> ${result.destinationPath}',
+      );
+    } else {
+      TalkerService.error('SD export failed [${project.name}]: ${result.errorMessage}');
+    }
+    return result;
+  }
+
+  Future<SdCardExportResult> exportAllProjectsToSdCard({
+    void Function(int done, int total, String currentName)? onProgress,
+  }) async {
+    final permissionError = await _ensureSdCardPermission();
+    if (permissionError != null) {
+      return SdCardExportResult(
+        projectCount: 0,
+        copiedFiles: 0,
+        skippedFiles: 0,
+        copiedApks: 0,
+        destinationPath: _externalPath,
+        errorMessage: permissionError,
+      );
+    }
+
+    final internalProjects = state.where((proj) => proj.isInternal).toList();
+    final total = internalProjects.length;
+    int exportedProjects = 0;
+    int totalCopied = 0;
+    int totalSkipped = 0;
+    int totalApks = 0;
+    String? lastError;
+
+    for (int i = 0; i < total; i++) {
+      final project = internalProjects[i];
+      onProgress?.call(i, total, project.name);
+      final res = await _exportSingleProjectToSdCard(project);
+      if (res.isSuccess) {
+        exportedProjects++;
+        totalCopied += res.copiedFiles;
+        totalSkipped += res.skippedFiles;
+        totalApks += res.copiedApks;
+      } else {
+        lastError = res.errorMessage;
+      }
+      onProgress?.call(i + 1, total, project.name);
+    }
+
+    final summary = SdCardExportResult(
+      projectCount: exportedProjects,
+      copiedFiles: totalCopied,
+      skippedFiles: totalSkipped,
+      copiedApks: totalApks,
+      destinationPath: _externalPath,
+      errorMessage: exportedProjects == 0 && lastError != null ? lastError : null,
+    );
+
+    if (summary.isSuccess) {
+      TalkerService.info(
+        'SD export all: projects=${summary.projectCount}/$total, copied=${summary.copiedFiles}, skipped=${summary.skippedFiles}, apks=${summary.copiedApks} -> $_externalPath',
+      );
+    } else {
+      TalkerService.error('SD export all failed: ${summary.errorMessage}');
+    }
+    return summary;
+  }
+
+  Future<SdCardExportResult> _exportSingleProjectToSdCard(Project project) async {
+    final destRoot = p.join(_externalPath, project.name);
+    final sourceDir = Directory(project.path);
+    if (!await sourceDir.exists()) {
+      return SdCardExportResult(
+        projectCount: 0,
+        copiedFiles: 0,
+        skippedFiles: 0,
+        copiedApks: 0,
+        destinationPath: destRoot,
+        errorMessage: 'Папка проекта не найдена: ${project.path}',
+      );
+    }
+
+    int copiedFiles = 0;
+    int skippedFiles = 0;
+    int copiedApks = 0;
+
+    try {
+      final destDir = Directory(destRoot);
+      if (!await destDir.exists()) {
+        await destDir.create(recursive: true);
+      }
+
+      Future<void> copyDirIncremental(Directory src, Directory dst) async {
+        if (!await dst.exists()) {
+          await dst.create(recursive: true);
+        }
+        await for (final entity in src.list(recursive: false, followLinks: false)) {
+          if (await FileSystemEntity.isLink(entity.path)) continue;
+          final name = p.basename(entity.path);
+          if (entity is Directory) {
+            if (_sdExportSkipDirs.contains(name)) continue;
+            await copyDirIncremental(entity, Directory(p.join(dst.path, name)));
+          } else if (entity is File) {
+            final destPath = p.join(dst.path, name);
+            final destFile = File(destPath);
+            try {
+              final srcStat = await entity.stat();
+              bool shouldCopy = !await destFile.exists();
+              if (!shouldCopy) {
+                final destStat = await destFile.stat();
+                if (srcStat.size != destStat.size ||
+                    srcStat.modified.isAfter(
+                      destStat.modified.add(const Duration(seconds: 1)),
+                    )) {
+                  shouldCopy = true;
+                }
+              }
+              if (shouldCopy) {
+                await entity.copy(destPath);
+                try {
+                  await destFile.setLastModified(srcStat.modified);
+                } catch (_) {}
+                copiedFiles++;
+              } else {
+                skippedFiles++;
+              }
+            } catch (_) {
+              skippedFiles++;
+            }
+          }
+        }
+      }
+
+      await copyDirIncremental(sourceDir, destDir);
+
+      // Copy built .apk artifacts into <destRoot>/apk/
+      final apkSearchDirs = [
+        Directory(p.join(project.path, 'build')),
+        Directory(p.join(project.path, 'app', 'build')),
+      ];
+      final apkDestDir = Directory(p.join(destRoot, 'apk'));
+      for (final buildDir in apkSearchDirs) {
+        if (!await buildDir.exists()) continue;
+        try {
+          await for (final entity in buildDir.list(recursive: true, followLinks: false)) {
+            if (entity is! File) continue;
+            if (!entity.path.toLowerCase().endsWith('.apk')) continue;
+            if (await FileSystemEntity.isLink(entity.path)) continue;
+            try {
+              if (!await apkDestDir.exists()) {
+                await apkDestDir.create(recursive: true);
+              }
+              final apkTargetPath = p.join(apkDestDir.path, p.basename(entity.path));
+              final apkTargetFile = File(apkTargetPath);
+              final srcStat = await entity.stat();
+              bool shouldCopy = !await apkTargetFile.exists();
+              if (!shouldCopy) {
+                final destStat = await apkTargetFile.stat();
+                if (srcStat.size != destStat.size ||
+                    srcStat.modified.isAfter(
+                      destStat.modified.add(const Duration(seconds: 1)),
+                    )) {
+                  shouldCopy = true;
+                }
+              }
+              if (shouldCopy) {
+                await entity.copy(apkTargetPath);
+                try {
+                  await apkTargetFile.setLastModified(srcStat.modified);
+                } catch (_) {}
+                copiedApks++;
+              }
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+
+      return SdCardExportResult(
+        projectCount: 1,
+        copiedFiles: copiedFiles,
+        skippedFiles: skippedFiles,
+        copiedApks: copiedApks,
+        destinationPath: destRoot,
+      );
+    } catch (e) {
+      return SdCardExportResult(
+        projectCount: 0,
+        copiedFiles: copiedFiles,
+        skippedFiles: skippedFiles,
+        copiedApks: copiedApks,
+        destinationPath: destRoot,
+        errorMessage: 'Ошибка экспорта: $e',
+      );
+    }
+  }
 
   Future<void> _loadAndScanProjects() async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString(_key);
     List<Project> savedProjects = [];
-    
+
     if (data != null) {
       final List<dynamic> list = json.decode(data);
       savedProjects = list.map((e) => Project.fromJson(e)).toList();
@@ -354,68 +360,8 @@ class ProjectService extends StateNotifier<List<Project>> {
       }
     }
 
-    // Scan external directory
-    if (Platform.isAndroid) {
-      try {
-        final externalDir = Directory(_externalPath);
-        if (!await externalDir.exists()) {
-          await externalDir.create(recursive: true);
-        }
-
-        final List<Project> scannedProjects = [];
-        final entities = await externalDir.list().toList();
-        
-        for (final entity in entities) {
-          if (entity is Directory) {
-            final path = entity.path;
-            final name = p.basename(path);
-            
-            // Skip hidden folders
-            if (name.startsWith('.')) continue;
-
-            // Check if already in saved projects or is a mirror
-            final bool isAlreadyInternal = savedProjects.any((p) => p.name == name && p.isInternal);
-            if (isAlreadyInternal) continue;
-
-            // AUTOMATIC MIGRATION: If found on SD card but not internally, migrate NOW
-            final runtime = _ref.read(runtimeServiceProvider);
-            final internalPath = p.join(runtime.appDirectory, 'projects', name);
-            
-            if (!await Directory(internalPath).exists()) {
-              debugPrint('Auto-migrating $name to internal storage...');
-              final targetDir = Directory(internalPath);
-              await targetDir.create(recursive: true);
-              await _copyDirectory(entity, targetDir);
-            }
-
-            // Identify type based on files
-            final ProjectType type = _identifyProjectType(internalPath);
-
-            scannedProjects.add(Project(
-              id: const Uuid().v4(),
-              name: name,
-              path: internalPath,
-              type: type,
-              lastOpened: DateTime.now(),
-              isInternal: true,
-            ));
-          }
-        }
-
-        savedProjects.addAll(scannedProjects);
-      } catch (e) {
-        debugPrint('Failed to scan/migrate external projects: $e');
-      }
-    }
-
     state = savedProjects;
     state.sort((a, b) => b.lastOpened.compareTo(a.lastOpened));
-    
-    // Save the newly scanned projects if any
-    final newlyScanned = state.where((p) => !savedProjects.contains(p)).toList();
-    if (newlyScanned.isNotEmpty) {
-      await _persistProjects();
-    }
   }
 
   ProjectType _identifyProjectType(String path) {
@@ -560,10 +506,6 @@ class ProjectService extends StateNotifier<List<Project>> {
     );
 
     await saveProject(project);
-    if (!PlatformUtils.isDesktop) {
-      // Mirror user-visible files in background on Android
-      _mirrorInitialFiles(finalPath, name);
-    }
     return project;
   }
 
@@ -587,187 +529,6 @@ class ProjectService extends StateNotifier<List<Project>> {
       } catch (e) {
         debugPrint('Skipped copying ${entity.path}: $e');
       }
-    }
-  }
-
-  Future<void> mirrorEntity(String internalPath) async {
-    // External /storage/emulated/0/QuantumIDE auto-mirroring disabled for faster editor I/O.
-    return;
-  }
-
-  /// Fast bidirectional sync disabled — projects stay in fast internal storage.
-  Future<List<String>> syncExternalIntoWorkspace(String internalWorkspacePath) async {
-    return const [];
-  }
-
-  Future<void> _unusedDisabledMirror(String internalPath) async {
-    if (!Platform.isAndroid) return;
-    
-    final runtime = _ref.read(runtimeServiceProvider);
-    final projectsPath = p.join(runtime.appDirectory, 'projects');
-    
-    if (!internalPath.startsWith(projectsPath)) return;
-    if (internalPath.contains('/external/') ||
-        internalPath.contains('/local_plugins/') ||
-        internalPath.contains('/.git/') ||
-        internalPath.contains('/.dart_tool/') ||
-        internalPath.contains('/.gradle/') ||
-        internalPath.contains('/build/') ||
-        internalPath.contains('/.cxx/') ||
-        internalPath.contains('/node_modules/') ||
-        internalPath.contains('/.quantum/')) {
-      return;
-    }
-    
-    try {
-      final relative = p.relative(internalPath, from: projectsPath);
-      final externalPath = p.join('/storage/emulated/0/QuantumIDE', relative);
-      
-      final type = await FileSystemEntity.type(internalPath);
-      
-      if (type == FileSystemEntityType.file) {
-        final entity = File(internalPath);
-        final extFile = File(externalPath);
-        final intLen = await entity.length();
-        if (intLen == 0 && await extFile.exists() && await extFile.length() > 0) {
-          // Never overwrite a non-empty external file with 0 bytes; restore internal instead!
-          await extFile.copy(internalPath);
-          return;
-        }
-        if (!await extFile.parent.exists()) await extFile.parent.create(recursive: true);
-        await entity.copy(externalPath);
-      } else if (type == FileSystemEntityType.directory) {
-        final entity = Directory(internalPath);
-        final extDir = Directory(externalPath);
-        if (!await extDir.exists()) await extDir.create(recursive: true);
-        
-        // Recursive copy for directories asynchronously
-        await for (final item in entity.list(recursive: true)) {
-          if (item is File) {
-            final itemRelative = p.relative(item.path, from: internalPath);
-            final itemExternal = p.join(externalPath, itemRelative);
-            final itemExtFile = File(itemExternal);
-            final intLen = await item.length();
-            if (intLen == 0 && await itemExtFile.exists() && await itemExtFile.length() > 0) {
-              await itemExtFile.copy(item.path);
-              continue;
-            }
-            if (!await itemExtFile.parent.exists()) await itemExtFile.parent.create(recursive: true);
-            await item.copy(itemExternal);
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Mirroring failed: $e');
-    }
-  }
-
-  /// Fast bidirectional sync for the active workspace:
-  /// Pulls any newer or non-empty files from /storage/emulated/0/QuantumIDE/<project>
-  /// into the internal workspace and returns the list of updated internal file paths.
-  Future<List<String>> _unusedDisabledSyncExternal(String internalWorkspacePath) async {
-    if (!Platform.isAndroid) return const [];
-    final runtime = _ref.read(runtimeServiceProvider);
-    final projectsPath = p.join(runtime.appDirectory, 'projects');
-    if (!internalWorkspacePath.startsWith(projectsPath)) return const [];
-
-    final relativeProject = p.relative(internalWorkspacePath, from: projectsPath);
-    final externalProjectPath = p.join('/storage/emulated/0/QuantumIDE', relativeProject);
-    final extDir = Directory(externalProjectPath);
-    if (!await extDir.exists()) return const [];
-
-    final List<String> updatedPaths = [];
-
-    Future<void> scanDir(Directory currentExtDir) async {
-      try {
-        await for (final entity in currentExtDir.list(recursive: false, followLinks: false)) {
-          final name = p.basename(entity.path);
-          if (name == '.git' ||
-              name == 'build' ||
-              name == '.dart_tool' ||
-              name == '.gradle' ||
-              name == '.idea' ||
-              name == 'node_modules' ||
-              name == 'local_plugins' ||
-              name == '.cxx' ||
-              name == '.quantum' ||
-              name == '.widget_preview') {
-            continue;
-          }
-          if (entity is Directory) {
-            await scanDir(entity);
-          } else if (entity is File) {
-            final lower = name.toLowerCase();
-            if (lower.endsWith('.apk') || lower.endsWith('.zip') || lower.endsWith('.pdf') || lower.endsWith('.doc')) {
-              continue;
-            }
-            try {
-              final extStat = await entity.stat();
-              if (extStat.size <= 0) continue;
-
-              final rel = p.relative(entity.path, from: externalProjectPath);
-              final intFile = File(p.join(internalWorkspacePath, rel));
-
-              bool shouldPull = false;
-              if (!await intFile.exists()) {
-                shouldPull = true;
-              } else {
-                final intStat = await intFile.stat();
-                if (intStat.size == 0 && extStat.size > 0) {
-                  shouldPull = true;
-                } else if (extStat.modified.isAfter(intStat.modified.add(const Duration(seconds: 1)))) {
-                  shouldPull = true;
-                }
-              }
-
-              if (shouldPull) {
-                if (!await intFile.parent.exists()) {
-                  await intFile.parent.create(recursive: true);
-                }
-                await entity.copy(intFile.path);
-                try {
-                  await intFile.setLastModified(extStat.modified);
-                } catch (_) {}
-                updatedPaths.add(intFile.path);
-              }
-            } catch (_) {}
-          }
-        }
-      } catch (_) {}
-    }
-
-    await scanDir(extDir);
-    return updatedPaths;
-  }
-
-  Future<void> mirrorDelete(String internalPath) async {
-    final runtime = _ref.read(runtimeServiceProvider);
-    final projectsPath = p.join(runtime.appDirectory, 'projects');
-    if (!internalPath.startsWith(projectsPath)) return;
-    if (internalPath.contains('/external/') ||
-        internalPath.contains('/local_plugins/') ||
-        internalPath.contains('/.git/') ||
-        internalPath.contains('/.dart_tool/') ||
-        internalPath.contains('/.gradle/') ||
-        internalPath.contains('/build/')) {
-      return;
-    }
-
-    try {
-      final relative = p.relative(internalPath, from: projectsPath);
-      final externalPath = p.join('/storage/emulated/0/QuantumIDE', relative);
-      
-      final file = File(externalPath);
-      if (await file.exists()) {
-        await file.delete();
-      } else {
-        final dir = Directory(externalPath);
-        if (await dir.exists()) {
-          await dir.delete(recursive: true);
-        }
-      }
-    } catch (e) {
-      debugPrint('Mirror delete failed: $e');
     }
   }
 
@@ -856,7 +617,6 @@ class ProjectService extends StateNotifier<List<Project>> {
     }
 
     if (usedCli) {
-      await _mirrorInitialFiles(path, name);
       await _createQuantumRulesFiles(path, name);
       return;
     }
@@ -907,9 +667,6 @@ class ProjectService extends StateNotifier<List<Project>> {
       default:
         await _createFile(p.join(path, 'README.md'), '# $name\nCreated with QuantumIDE\n');
     }
-
-    // Trigger a manual mirror of these initial files
-    _mirrorInitialFiles(path, name);
 
     // Auto-create QuantumIDE AI rules and agents file
     await _createQuantumRulesFiles(path, name);
@@ -1731,41 +1488,6 @@ fi
     } catch (_) {}
   }
 
-
-  Future<void> _mirrorInitialFiles(String internalPath, String name) async {
-    if (!Platform.isAndroid) return;
-    // Only mirror if it's an internal project
-    if (!internalPath.contains('/files/projects/')) return;
-
-    try {
-      final externalBase = '/storage/emulated/0/QuantumIDE/$name';
-      final internalDir = Directory(internalPath);
-      if (!await internalDir.exists()) return;
-
-      await for (final entity in internalDir.list(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          final relative = p.relative(entity.path, from: internalPath);
-          if (relative.startsWith('.git/') ||
-              relative.startsWith('build/') ||
-              relative.startsWith('.dart_tool/') ||
-              relative.startsWith('node_modules/')) {
-            continue;
-          }
-          try {
-            final externalPath = p.join(externalBase, relative);
-            final extFile = File(externalPath);
-            if (!await extFile.parent.exists()) {
-              await extFile.parent.create(recursive: true);
-            }
-            await entity.copy(externalPath);
-          } catch (_) {}
-        }
-      }
-    } catch (e) {
-      debugPrint('Initial mirroring failed: $e');
-    }
-  }
-
   String _getAndroidSdkPath() {
     if (Platform.isAndroid) {
       return '/root/android-sdk';
@@ -1956,15 +1678,6 @@ server.listen(port, () => {
         final dir = Directory(project.path);
         if (await dir.exists()) {
           await dir.delete(recursive: true);
-        }
-
-        // Also delete external mirror if it exists
-        if (project.path.contains('/files/projects/')) {
-          final externalPath = p.join('/storage/emulated/0/QuantumIDE', project.name);
-          final externalDir = Directory(externalPath);
-          if (await externalDir.exists()) {
-            await externalDir.delete(recursive: true);
-          }
         }
       } catch (e) {
         debugPrint('Failed to delete project files: $e');

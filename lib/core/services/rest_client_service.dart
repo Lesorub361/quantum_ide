@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/services/network_inspector_service.dart';
 
 class RestClientService {
   static final RestClientService _instance = RestClientService._internal();
@@ -12,12 +13,11 @@ class RestClientService {
 
   Future<RestResponse> sendRequest(RestRequest request) async {
     final stopwatch = Stopwatch()..start();
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 30)
+      ..badCertificateCallback = (_, _, _) => true;
     try {
       final uri = Uri.parse(request.url);
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 30);
-      client.badCertificateCallback = (_, _, _) => true;
-
       final httpRequest = await client.openUrl(request.method, uri);
 
       request.headers.forEach((key, value) {
@@ -46,19 +46,49 @@ class RestClientService {
         size: responseBody.length,
       );
 
-      _history.insert(0, RestRequestHistory(
-        request: request,
-        response: response,
-        timestamp: DateTime.now(),
-      ));
+      _history.insert(
+        0,
+        RestRequestHistory(
+          request: request,
+          response: response,
+          timestamp: DateTime.now(),
+        ),
+      );
 
       if (_history.length > 50) {
         _history.removeLast();
       }
 
+      NetworkInspectorService.addRequest(
+        NetworkRequestItem(
+          id: '${DateTime.now().microsecondsSinceEpoch}',
+          url: request.url,
+          method: request.method,
+          statusCode: response.statusCode,
+          requestHeaders: Map<String, dynamic>.from(request.headers),
+          requestData: request.body,
+          responseHeaders: Map<String, dynamic>.from(responseHeaders),
+          responseData: responseBody,
+          timestamp: DateTime.now(),
+          durationMs: stopwatch.elapsed.inMilliseconds,
+        ),
+      );
+
       return response;
     } catch (e) {
       stopwatch.stop();
+      NetworkInspectorService.addRequest(
+        NetworkRequestItem(
+          id: '${DateTime.now().microsecondsSinceEpoch}',
+          url: request.url,
+          method: request.method,
+          requestHeaders: Map<String, dynamic>.from(request.headers),
+          requestData: request.body,
+          timestamp: DateTime.now(),
+          durationMs: stopwatch.elapsed.inMilliseconds,
+          error: e.toString(),
+        ),
+      );
       return RestResponse(
         statusCode: 0,
         body: 'Error: $e',
@@ -67,6 +97,8 @@ class RestClientService {
         size: 0,
         error: e.toString(),
       );
+    } finally {
+      client.close(force: true);
     }
   }
 }

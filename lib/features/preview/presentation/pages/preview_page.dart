@@ -32,7 +32,8 @@ class _PreviewPageState extends ConsumerState<PreviewPage> {
       );
     }
 
-    final activeFile = openFiles[editorState.activeTabIndex];
+    final safeIndex = editorState.activeTabIndex.clamp(0, openFiles.length - 1);
+    final activeFile = openFiles[safeIndex];
     final content = activeFile.controller.text;
 
     return Scaffold(

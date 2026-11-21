@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/fast_syntax_engine.dart';
+import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
@@ -312,11 +314,18 @@ class RoxumAgenticTools {
       final server = t['server']?.toString() ?? 'mcp';
       final tool = t['name']?.toString() ?? '';
       if (tool.isEmpty) continue;
-      final safeName =
+      var safeName =
           'mcp__${server.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}__${tool.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}';
+      if (safeName.length > 64) {
+        final hash = (server.hashCode ^ tool.hashCode)
+            .abs()
+            .toRadixString(36);
+        final prefixMax = (63 - hash.length).clamp(16, 56);
+        safeName = '${safeName.substring(0, prefixMax)}_$hash';
+      }
       _mcpToolRegistry[safeName] = (server: server, tool: tool);
-      final schema = (t['inputSchema'] as Map?)?.cast<String, dynamic>() ??
-          const {'type': 'object', 'properties': <String, dynamic>{}};
+      final rawSchema = (t['inputSchema'] as Map?)?.cast<String, dynamic>();
+      final schema = _normalizeMcpInputSchema(rawSchema);
       out.add({
         'type': 'function',
         'function': {
@@ -329,13 +338,70 @@ class RoxumAgenticTools {
     return out;
   }
 
+  static Map<String, dynamic> _normalizeMcpInputSchema(
+    Map<String, dynamic>? raw,
+  ) {
+    if (raw == null || raw.isEmpty) {
+      return const {'type': 'object', 'properties': <String, dynamic>{}};
+    }
+    final cleaned = <String, dynamic>{
+      'type': raw['type']?.toString() ?? 'object',
+      'properties': (raw['properties'] is Map)
+          ? Map<String, dynamic>.from(raw['properties'] as Map)
+          : <String, dynamic>{},
+      if (raw['required'] is List && (raw['required'] as List).isNotEmpty)
+        'required': List<String>.from(
+          (raw['required'] as List).map((e) => e.toString()),
+        ),
+    };
+    return cleaned;
+  }
+
+  static String formatMcpResult(Map<String, dynamic> res) {
+    final content = res['content'];
+    if (content is String) return content;
+    if (content is List) {
+      final parts = <String>[];
+      for (final item in content) {
+        if (item is Map && item['text'] != null) {
+          parts.add(item['text'].toString());
+        } else {
+          parts.add(jsonEncode(item));
+        }
+      }
+      if (parts.isNotEmpty) return parts.join('\n');
+    }
+    if (res['diagnostics'] is String) {
+      return res['diagnostics'] as String;
+    }
+    return jsonEncode(res);
+  }
+
   Future<RoxumToolExecutionResult> execute(
     String name,
     Map<String, dynamic> args,
   ) async {
     try {
       if (name.startsWith('mcp__')) {
-        final target = _mcpToolRegistry[name];
+        var target = _mcpToolRegistry[name];
+        if (target == null) {
+          // Fallback: parse `mcp__<server>__<tool>` directly if registry was cleared
+          final parts = name.split('__');
+          if (parts.length >= 3) {
+            final srv = parts[1];
+            final fn = parts.sublist(2).join('__');
+            final servers = _ref.read(mcpServiceProvider);
+            final matchedServer = servers
+                .where(
+                  (s) =>
+                      s.name.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_') == srv,
+                )
+                .firstOrNull;
+            if (matchedServer != null) {
+              target = (server: matchedServer.name, tool: fn);
+            }
+          }
+        }
         if (target == null) {
           return RoxumToolExecutionResult(
             success: false,
@@ -347,7 +413,7 @@ class RoxumAgenticTools {
             .executeMcpTool(target.server, target.tool, args);
         return RoxumToolExecutionResult(
           success: res['isError'] != true,
-          output: jsonEncode(res),
+          output: formatMcpResult(res),
         );
       }
       switch (name) {
@@ -633,7 +699,7 @@ class RoxumAgenticTools {
     return RoxumToolExecutionResult(success: true, output: jsonEncode(results));
   }
 
-  Future<void> _recordAndWrite(
+  Future<String> _recordAndWrite(
     String path,
     String newContent, {
     required bool existedBefore,
@@ -658,6 +724,21 @@ class RoxumAgenticTools {
     onPendingEditsChanged?.call(Map<String, RoxumPendingEdit>.from(pendingEdits));
 
     await _ref.read(editorProvider.notifier).reloadFileFromDisk(path);
+    try {
+      await LiveTelemetryService.instance.onFileUpdated?.call(path);
+    } catch (_) {}
+
+    try {
+      final diags = FastSyntaxEngine.instance.analyze(path, newContent);
+      if (diags.isNotEmpty) {
+        final summary = diags
+            .take(5)
+            .map((d) => 'Line ${d.range.index + 1}: ${d.message}')
+            .join('; ');
+        return '\n[FastSyntaxEngine Warning: $summary — please verify brackets/quotes!]';
+      }
+    } catch (_) {}
+    return '';
   }
 
   static ({int added, int removed}) _computeDiffCounts(
@@ -687,7 +768,7 @@ class RoxumAgenticTools {
     final file = File(path);
     final existed = await file.exists();
     final original = existed ? await file.readAsString() : '';
-    await _recordAndWrite(
+    final syntaxWarn = await _recordAndWrite(
       path,
       content,
       existedBefore: existed,
@@ -695,7 +776,8 @@ class RoxumAgenticTools {
     );
     return RoxumToolExecutionResult(
       success: true,
-      output: 'Wrote ${_relativePath(path)} (${content.split('\n').length} lines).',
+      output:
+          'Wrote ${_relativePath(path)} (${content.split('\n').length} lines).$syntaxWarn',
     );
   }
 
@@ -726,7 +808,7 @@ class RoxumAgenticTools {
       );
     }
     final updated = original.replaceFirst(oldText, newText);
-    await _recordAndWrite(
+    final syntaxWarn = await _recordAndWrite(
       path,
       updated,
       existedBefore: true,
@@ -734,7 +816,7 @@ class RoxumAgenticTools {
     );
     return RoxumToolExecutionResult(
       success: true,
-      output: 'Updated ${_relativePath(path)}.',
+      output: 'Updated ${_relativePath(path)}.$syntaxWarn',
     );
   }
 
@@ -761,9 +843,10 @@ class RoxumAgenticTools {
     final original = await file.readAsString();
     final lines = original.split('\n');
     final idx = (line - 1).clamp(0, lines.length);
-    final insertIdx = position == 'before' ? idx : (idx + 1).clamp(0, lines.length);
+    final insertIdx =
+        position == 'before' ? idx : (idx + 1).clamp(0, lines.length);
     lines.insertAll(insertIdx, text.split('\n'));
-    await _recordAndWrite(
+    final syntaxWarn = await _recordAndWrite(
       path,
       lines.join('\n'),
       existedBefore: true,
@@ -771,7 +854,8 @@ class RoxumAgenticTools {
     );
     return RoxumToolExecutionResult(
       success: true,
-      output: 'Inserted text at line $line ($position) in ${_relativePath(path)}.',
+      output:
+          'Inserted text at line $line ($position) in ${_relativePath(path)}.$syntaxWarn',
     );
   }
 
@@ -802,7 +886,7 @@ class RoxumAgenticTools {
       );
     }
     final updated = original.replaceAll(search, replace);
-    await _recordAndWrite(
+    final syntaxWarn = await _recordAndWrite(
       path,
       updated,
       existedBefore: true,
@@ -810,7 +894,7 @@ class RoxumAgenticTools {
     );
     return RoxumToolExecutionResult(
       success: true,
-      output: 'Replaced all occurrences in ${_relativePath(path)}.',
+      output: 'Replaced all occurrences in ${_relativePath(path)}.$syntaxWarn',
     );
   }
 

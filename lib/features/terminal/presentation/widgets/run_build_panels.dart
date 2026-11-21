@@ -46,6 +46,74 @@ xt.TerminalTheme _resolveAppTerminalTheme(String themeName) {
   return resolveConduitPalette(themeName).terminalTheme;
 }
 
+final _cachedProjectTypeProvider =
+    FutureProvider.family<ProjectType, String>((ref, path) async {
+      if (path.isEmpty) return ProjectType.other;
+      final dir = Directory(path);
+      if (!await dir.exists()) return ProjectType.other;
+      try {
+        bool hasPubspec = false;
+        bool hasPackageJson = false;
+        bool hasPyFile = false;
+        bool hasHtmlFile = false;
+        bool hasGradle = false;
+        bool hasCargo = false;
+        await for (final file in dir.list(followLinks: false)) {
+          final name = p.basename(file.path).toLowerCase();
+          if (name == 'pubspec.yaml') hasPubspec = true;
+          if (name == 'package.json') hasPackageJson = true;
+          if (name.endsWith('.py')) hasPyFile = true;
+          if (name == 'index.html' || name.endsWith('.html')) {
+            hasHtmlFile = true;
+          }
+          if (name == 'build.gradle' ||
+              name == 'build.gradle.kts' ||
+              name == 'settings.gradle' ||
+              name == 'settings.gradle.kts') {
+            hasGradle = true;
+          }
+          if (name == 'cargo.toml') hasCargo = true;
+        }
+        if (hasPubspec) {
+          try {
+            final pubspecContent = await File(
+              p.join(path, 'pubspec.yaml'),
+            ).readAsString();
+            if (pubspecContent.contains('flutter:')) return ProjectType.flutter;
+            return ProjectType.dart;
+          } catch (_) {
+            return ProjectType.flutter;
+          }
+        }
+        if (hasGradle) {
+          if (await File(p.join(path, 'build.gradle.kts')).exists() ||
+              await File(p.join(path, 'app', 'build.gradle.kts')).exists()) {
+            return ProjectType.androidKotlin;
+          }
+          final mainDir = Directory(p.join(path, 'app', 'src', 'main'));
+          if (await mainDir.exists()) {
+            try {
+              bool hasJava = false;
+              await for (final e in mainDir.list(
+                recursive: true,
+                followLinks: false,
+              )) {
+                if (e.path.endsWith('.kt')) return ProjectType.androidKotlin;
+                if (e.path.endsWith('.java')) hasJava = true;
+              }
+              if (hasJava) return ProjectType.androidJava;
+            } catch (_) {}
+          }
+          return ProjectType.androidKotlin;
+        }
+        if (hasCargo) return ProjectType.rust;
+        if (hasPackageJson) return ProjectType.nodejs;
+        if (hasPyFile) return ProjectType.python;
+        if (hasHtmlFile) return ProjectType.web;
+      } catch (_) {}
+      return ProjectType.other;
+    });
+
 class SidebarRunPanel extends ConsumerStatefulWidget {
   const SidebarRunPanel({super.key});
 
@@ -58,64 +126,13 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
 
   ProjectType _detectProjectType(String? path, ProjectType registeredType) {
     if (registeredType != ProjectType.other) return registeredType;
-    if (path == null) return ProjectType.other;
-    final dir = Directory(path);
-    if (!dir.existsSync()) return ProjectType.other;
-    try {
-      final files = dir.listSync();
-      bool hasPubspec = false;
-      bool hasPackageJson = false;
-      bool hasPyFile = false;
-      bool hasHtmlFile = false;
-      bool hasGradle = false;
-      bool hasCargo = false;
-      for (final file in files) {
-        final name = file.path.split(Platform.pathSeparator).last.toLowerCase();
-        if (name == 'pubspec.yaml') hasPubspec = true;
-        if (name == 'package.json') hasPackageJson = true;
-        if (name.endsWith('.py')) hasPyFile = true;
-        if (name == 'index.html' || name.endsWith('.html')) hasHtmlFile = true;
-        if (name == 'build.gradle' || name == 'build.gradle.kts' ||
-            name == 'settings.gradle' || name == 'settings.gradle.kts') {
-          hasGradle = true;
-        }
-        if (name == 'cargo.toml') hasCargo = true;
-      }
-      if (hasPubspec) {
-        try {
-          final pubspecContent = File('$path${Platform.pathSeparator}pubspec.yaml').readAsStringSync();
-          if (pubspecContent.contains('flutter:')) return ProjectType.flutter;
-          return ProjectType.dart;
-        } catch (_) {
-          return ProjectType.flutter;
-        }
-      }
-      if (hasGradle) {
-        final mainDir = Directory(p.join(path, 'app', 'src', 'main'));
-        if (mainDir.existsSync()) {
-          try {
-            final entities = mainDir.listSync(recursive: true);
-            if (entities.any((e) => e.path.endsWith('.kt'))) return ProjectType.androidKotlin;
-            if (entities.any((e) => e.path.endsWith('.java'))) return ProjectType.androidJava;
-          } catch (_) {}
-        }
-        if (File(p.join(path, 'build.gradle.kts')).existsSync() ||
-            File(p.join(path, 'app', 'build.gradle.kts')).existsSync()) {
-          return ProjectType.androidKotlin;
-        }
-        return ProjectType.androidKotlin;
-      }
-      if (hasCargo) return ProjectType.rust;
-      if (hasPackageJson) return ProjectType.nodejs;
-      if (hasPyFile) return ProjectType.python;
-      if (hasHtmlFile) return ProjectType.web;
-    } catch (_) {}
-    return ProjectType.other;
+    if (path == null || path.isEmpty) return ProjectType.other;
+    return ref.watch(_cachedProjectTypeProvider(path)).valueOrNull ??
+        ProjectType.other;
   }
 
   Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {
     ref.read(projectSyncProvider.notifier).cancelSync();
-    await ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
     unawaited(ShizukuBridge.instance.boostForBuild());
     final runtime = ref.read(runtimeServiceProvider);
     final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
@@ -771,7 +788,6 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
   Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {
     ref.read(projectSyncProvider.notifier).cancelSync();
-    await ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
     unawaited(ShizukuBridge.instance.boostForBuild());
     unawaited(ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: false));
     final runtime = ref.read(runtimeServiceProvider);
@@ -873,59 +889,9 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
   ProjectType _detectProjectType(String? path, ProjectType registeredType) {
     if (registeredType != ProjectType.other) return registeredType;
-    if (path == null) return ProjectType.other;
-    final dir = Directory(path);
-    if (!dir.existsSync()) return ProjectType.other;
-    try {
-      final files = dir.listSync();
-      bool hasPubspec = false;
-      bool hasPackageJson = false;
-      bool hasPyFile = false;
-      bool hasHtmlFile = false;
-      bool hasGradle = false;
-      bool hasCargo = false;
-      for (final file in files) {
-        final name = file.path.split(Platform.pathSeparator).last.toLowerCase();
-        if (name == 'pubspec.yaml') hasPubspec = true;
-        if (name == 'package.json') hasPackageJson = true;
-        if (name.endsWith('.py')) hasPyFile = true;
-        if (name == 'index.html' || name.endsWith('.html')) hasHtmlFile = true;
-        if (name == 'build.gradle' || name == 'build.gradle.kts' ||
-            name == 'settings.gradle' || name == 'settings.gradle.kts') {
-          hasGradle = true;
-        }
-        if (name == 'cargo.toml') hasCargo = true;
-      }
-      if (hasPubspec) {
-        try {
-          final pubspecContent = File('$path${Platform.pathSeparator}pubspec.yaml').readAsStringSync();
-          if (pubspecContent.contains('flutter:')) return ProjectType.flutter;
-          return ProjectType.dart;
-        } catch (_) {
-          return ProjectType.flutter;
-        }
-      }
-      if (hasGradle) {
-        final mainDir = Directory(p.join(path, 'app', 'src', 'main'));
-        if (mainDir.existsSync()) {
-          try {
-            final entities = mainDir.listSync(recursive: true);
-            if (entities.any((e) => e.path.endsWith('.kt'))) return ProjectType.androidKotlin;
-            if (entities.any((e) => e.path.endsWith('.java'))) return ProjectType.androidJava;
-          } catch (_) {}
-        }
-        if (File(p.join(path, 'build.gradle.kts')).existsSync() ||
-            File(p.join(path, 'app', 'build.gradle.kts')).existsSync()) {
-          return ProjectType.androidKotlin;
-        }
-        return ProjectType.androidKotlin;
-      }
-      if (hasCargo) return ProjectType.rust;
-      if (hasPackageJson) return ProjectType.nodejs;
-      if (hasPyFile) return ProjectType.python;
-      if (hasHtmlFile) return ProjectType.web;
-    } catch (_) {}
-    return ProjectType.other;
+    if (path == null || path.isEmpty) return ProjectType.other;
+    return ref.watch(_cachedProjectTypeProvider(path)).valueOrNull ??
+        ProjectType.other;
   }
 
   @override

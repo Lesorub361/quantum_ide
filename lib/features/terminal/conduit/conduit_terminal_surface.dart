@@ -119,10 +119,11 @@ class _ConduitTerminalSurfaceState extends State<ConduitTerminalSurface> {
     final effectiveTheme =
         widget.customTheme ?? widget.palette.terminalThemeFor(widget.brightness);
 
-    return ClipRect(
-      child: ColoredBox(
-        color: effectiveTheme.background,
-        child: Listener(
+    return RepaintBoundary(
+      child: ClipRect(
+        child: ColoredBox(
+          color: effectiveTheme.background,
+          child: Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: _handlePointerDown,
           onPointerMove: _handlePointerMove,
@@ -150,7 +151,7 @@ class _ConduitTerminalSurfaceState extends State<ConduitTerminalSurface> {
                 'monospace',
               ],
             ),
-            padding: const EdgeInsets.fromLTRB(0, 6, 0, 4),
+            padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
             cursorType: TerminalCursorType.block,
             alwaysShowCursor: true,
             simulateScroll: true,
@@ -158,6 +159,7 @@ class _ConduitTerminalSurfaceState extends State<ConduitTerminalSurface> {
             onSecondaryTapDown: widget.onSecondaryTapDown,
           ),
         ),
+      ),
       ),
     );
   }

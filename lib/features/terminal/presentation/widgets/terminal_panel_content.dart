@@ -41,6 +41,7 @@ import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart'
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/device_mirror_panel.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agent_panel.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/run_build_panels.dart';
 import 'package:quantum_ide/core/services/quantum_ai_agent_service.dart';
@@ -78,7 +79,12 @@ class TerminalFocusNode extends FocusNode {
 
 class TerminalPanelContent extends ConsumerStatefulWidget {
   final bool onlyTerminal;
-  const TerminalPanelContent({super.key, this.onlyTerminal = false});
+  final VoidCallback? onBack;
+  const TerminalPanelContent({
+    super.key,
+    this.onlyTerminal = false,
+    this.onBack,
+  });
 
   @override
   ConsumerState<TerminalPanelContent> createState() =>
@@ -268,77 +274,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     _suggestionsDebounceTimer?.cancel();
     _suggestionsNotifier.dispose();
     super.dispose();
-  }
-
-  ProjectType _detectProjectType(String? path, ProjectType registeredType) {
-    if (registeredType != ProjectType.other) {
-      return registeredType;
-    }
-    if (path == null) return ProjectType.other;
-
-    final dir = Directory(path);
-    if (!dir.existsSync()) return ProjectType.other;
-
-    try {
-      final files = dir.listSync();
-      bool hasPubspec = false;
-      bool hasPackageJson = false;
-      bool hasPyFile = false;
-      bool hasHtmlFile = false;
-      bool hasGradle = false;
-      bool hasCargo = false;
-
-      for (final file in files) {
-        final name = file.path.split(Platform.pathSeparator).last.toLowerCase();
-        if (name == 'pubspec.yaml') hasPubspec = true;
-        if (name == 'package.json') hasPackageJson = true;
-        if (name.endsWith('.py')) hasPyFile = true;
-        if (name == 'index.html' || name.endsWith('.html')) hasHtmlFile = true;
-        if (name == 'build.gradle' ||
-            name == 'build.gradle.kts' ||
-            name == 'settings.gradle' ||
-            name == 'settings.gradle.kts' ||
-            name == 'gradlew') {
-          hasGradle = true;
-        }
-        if (name == 'cargo.toml') hasCargo = true;
-      }
-
-      if (hasPubspec) {
-        try {
-          final pubspecContent = File(
-            p.join(path, 'pubspec.yaml'),
-          ).readAsStringSync();
-          if (pubspecContent.contains('flutter:')) return ProjectType.flutter;
-          return ProjectType.dart;
-        } catch (_) {
-          return ProjectType.flutter;
-        }
-      }
-      if (hasGradle) {
-        final mainDir = Directory(p.join(path, 'app', 'src', 'main'));
-        if (mainDir.existsSync()) {
-          try {
-            final entities = mainDir.listSync(recursive: true);
-            if (entities.any((e) => e.path.endsWith('.kt')))
-              return ProjectType.androidKotlin;
-            if (entities.any((e) => e.path.endsWith('.java')))
-              return ProjectType.androidJava;
-          } catch (_) {}
-        }
-        if (File(p.join(path, 'build.gradle.kts')).existsSync() ||
-            File(p.join(path, 'app', 'build.gradle.kts')).existsSync()) {
-          return ProjectType.androidKotlin;
-        }
-        return ProjectType.androidKotlin;
-      }
-      if (hasCargo) return ProjectType.rust;
-      if (hasPackageJson) return ProjectType.nodejs;
-      if (hasPyFile) return ProjectType.python;
-      if (hasHtmlFile) return ProjectType.web;
-    } catch (_) {}
-
-    return ProjectType.other;
   }
 
   Future<void> _loadPathBinaries() async {
@@ -1018,6 +953,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
+  final Set<PanelTab> _visitedTabs = {PanelTab.terminal};
+
   Widget _buildBody(
     PanelState state,
     List<TerminalSession> sessions,
@@ -1025,19 +962,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   ) {
     const tabs = PanelTab.values;
     final index = tabs.indexOf(state.selectedTab);
+    _visitedTabs.add(state.selectedTab);
 
     return IndexedStack(
       index: index,
-      children: tabs
-          .map(
-            (tab) => _getTabWidget(
-              tab,
-              sessions,
-              notifier,
-              tab == state.selectedTab,
-            ),
-          )
-          .toList(),
+      children: tabs.map((tab) {
+        if (!_visitedTabs.contains(tab)) {
+          return const SizedBox.shrink();
+        }
+        return _getTabWidget(
+          tab,
+          sessions,
+          notifier,
+          tab == state.selectedTab,
+        );
+      }).toList(),
     );
   }
 
@@ -1082,847 +1021,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   Widget _buildGitView() {
     return const SidebarGitPanel(isBottomPanel: true);
-  }
-
-  Widget _buildRunView({Key? key}) {
-    return Consumer(
-      key: key,
-      builder: (context, ref, _) {
-        final l10n = AppLocalizations.of(context)!;
-        final dedicatedState = ref.watch(dedicatedTerminalProvider);
-        final session = dedicatedState.sessions[DedicatedTerminalType.run];
-        final workspaceState = ref.watch(workspaceProvider);
-        final allProjects = ref.watch(projectServiceProvider);
-
-        final currentProject = allProjects.firstWhere(
-          (p) => p.path == workspaceState.currentPath,
-          orElse: () => Project(
-            id: '',
-            name: 'Default',
-            path: workspaceState.currentPath ?? '',
-            type: ProjectType.other,
-            lastOpened: DateTime.now(),
-          ),
-        );
-
-        final projectType = _detectProjectType(
-          workspaceState.currentPath,
-          currentProject.type,
-        );
-        final String title;
-        final List<Widget> actions = [];
-
-        switch (projectType) {
-          case ProjectType.flutter:
-            title = l10n.flutterProject;
-            if (Platform.isAndroid) {
-              actions.addAll([
-                _buildActionButton(
-                  l10n.run,
-                  LucideIcons.play,
-                  Colors.greenAccent,
-                  () => _runDedicatedCommand(
-                    DedicatedTerminalType.run,
-                    'flutter run -d web-server --web-port 8080',
-                  ),
-                ),
-                _buildActionButton(
-                  'Hot Reload',
-                  LucideIcons.zap,
-                  Colors.yellow,
-                  () => _sendRawKeyToDedicatedTerminal(
-                    DedicatedTerminalType.run,
-                    'r',
-                  ),
-                ),
-                _buildActionButton(
-                  l10n.stop,
-                  LucideIcons.square,
-                  Colors.redAccent,
-                  () => _sendRawKeyToDedicatedTerminal(
-                    DedicatedTerminalType.run,
-                    'q',
-                  ),
-                ),
-              ]);
-            } else {
-              actions.addAll([
-                _buildActionButton(
-                  l10n.runPC,
-                  LucideIcons.laptop,
-                  Colors.cyanAccent,
-                  () => _runDedicatedCommand(
-                    DedicatedTerminalType.run,
-                    'flutter run -d linux',
-                  ),
-                ),
-                _buildActionButton(
-                  l10n.runMob,
-                  LucideIcons.smartphone,
-                  Colors.greenAccent,
-                  () => _runDedicatedCommand(
-                    DedicatedTerminalType.run,
-                    'flutter run -d android',
-                  ),
-                ),
-                _buildActionButton(
-                  'Hot Reload',
-                  LucideIcons.zap,
-                  Colors.yellow,
-                  () => _sendRawKeyToDedicatedTerminal(
-                    DedicatedTerminalType.run,
-                    'r',
-                  ),
-                ),
-                _buildActionButton(
-                  l10n.stop,
-                  LucideIcons.square,
-                  Colors.redAccent,
-                  () => _sendRawKeyToDedicatedTerminal(
-                    DedicatedTerminalType.run,
-                    'q',
-                  ),
-                ),
-              ]);
-            }
-            break;
-          case ProjectType.python:
-            title = l10n.pythonProject;
-            actions.addAll([
-              _buildActionButton(
-                l10n.run,
-                LucideIcons.play,
-                Colors.greenAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'python3 main.py || python3 app.py || (py_file=\$(find . -maxdepth 2 -name "*.py" | head -n 1); if [ -n "\$py_file" ]; then python3 "\$py_file"; else echo "No python file found. Please create main.py"; fi)',
-                ),
-              ),
-              _buildActionButton(
-                l10n.stop,
-                LucideIcons.square,
-                Colors.redAccent,
-                () => _sendRawKeyToDedicatedTerminal(
-                  DedicatedTerminalType.run,
-                  String.fromCharCode(3),
-                ),
-              ),
-            ]);
-            break;
-          case ProjectType.nodejs:
-            title = l10n.nodejsProject;
-            actions.addAll([
-              _buildActionButton(
-                l10n.run,
-                LucideIcons.play,
-                Colors.greenAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'npm start || node index.js || node server.js || node app.js || (js_file=\$(find . -maxdepth 2 -name "*.js" ! -path "*/node_modules/*" | head -n 1); if [ -n "\$js_file" ]; then node "\$js_file"; else echo "No JS file found. Please create index.js or package.json"; fi)',
-                ),
-              ),
-              _buildActionButton(
-                l10n.stop,
-                LucideIcons.square,
-                Colors.redAccent,
-                () => _sendRawKeyToDedicatedTerminal(
-                  DedicatedTerminalType.run,
-                  String.fromCharCode(3),
-                ),
-              ),
-            ]);
-            break;
-          case ProjectType.dart:
-            title = l10n.dartProject;
-            actions.addAll([
-              _buildActionButton(
-                l10n.run,
-                LucideIcons.play,
-                Colors.greenAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'dart run || dart bin/main.dart || dart main.dart || (dart_file=\$(find . -maxdepth 2 -name "*.dart" | head -n 1); if [ -n "\$dart_file" ]; then dart "\$dart_file"; else echo "No Dart file found. Please create bin/main.dart"; fi)',
-                ),
-              ),
-              _buildActionButton(
-                l10n.stop,
-                LucideIcons.square,
-                Colors.redAccent,
-                () => _sendRawKeyToDedicatedTerminal(
-                  DedicatedTerminalType.run,
-                  String.fromCharCode(3),
-                ),
-              ),
-            ]);
-            break;
-          case ProjectType.web:
-            title = l10n.webProject;
-            actions.addAll([
-              _buildActionButton(
-                l10n.startServer,
-                LucideIcons.play,
-                Colors.greenAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080',
-                ),
-              ),
-              _buildActionButton(
-                l10n.stop,
-                LucideIcons.square,
-                Colors.redAccent,
-                () => _sendRawKeyToDedicatedTerminal(
-                  DedicatedTerminalType.run,
-                  String.fromCharCode(3),
-                ),
-              ),
-            ]);
-            break;
-          case ProjectType.androidKotlin:
-            title = 'Android (Kotlin)';
-            actions.addAll([
-              _buildActionButton(
-                'Build Debug (KT)',
-                LucideIcons.bug,
-                Colors.yellow,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  '${_ktRepairCmd}chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"',
-                  displayCmd: './gradlew assembleDebug',
-                ),
-              ),
-              _buildActionButton(
-                'Install (KT)',
-                LucideIcons.smartphone,
-                Colors.greenAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug',
-                  displayCmd: './gradlew installDebug',
-                ),
-              ),
-              _buildActionButton(
-                l10n.stop,
-                LucideIcons.square,
-                Colors.redAccent,
-                () => _sendRawKeyToDedicatedTerminal(
-                  DedicatedTerminalType.run,
-                  String.fromCharCode(3),
-                ),
-              ),
-            ]);
-            break;
-          case ProjectType.androidJava:
-            title = 'Android (Java)';
-            actions.addAll([
-              _buildActionButton(
-                'Build Debug (Java)',
-                LucideIcons.bug,
-                Colors.yellow,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"',
-                  displayCmd: './gradlew assembleDebug',
-                ),
-              ),
-              _buildActionButton(
-                'Install (Java)',
-                LucideIcons.smartphone,
-                Colors.greenAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug',
-                  displayCmd: './gradlew installDebug',
-                ),
-              ),
-              _buildActionButton(
-                l10n.stop,
-                LucideIcons.square,
-                Colors.redAccent,
-                () => _sendRawKeyToDedicatedTerminal(
-                  DedicatedTerminalType.run,
-                  String.fromCharCode(3),
-                ),
-              ),
-            ]);
-            break;
-          case ProjectType.shell:
-          case ProjectType.other:
-            title = l10n.genericProject;
-            actions.addAll([
-              _buildActionButton(
-                l10n.run,
-                LucideIcons.play,
-                Colors.greenAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'bash main.sh || bash run.sh || ./run.sh || ./main.sh || (sh_file=\$(find . -maxdepth 2 -name "*.sh" | head -n 1); if [ -n "\$sh_file" ]; then bash "\$sh_file"; else echo "No run script (.sh) found."; fi)',
-                ),
-              ),
-              _buildActionButton(
-                l10n.stop,
-                LucideIcons.square,
-                Colors.redAccent,
-                () => _sendRawKeyToDedicatedTerminal(
-                  DedicatedTerminalType.run,
-                  String.fromCharCode(3),
-                ),
-              ),
-            ]);
-            break;
-          case ProjectType.rust:
-            title = l10n.rustProject;
-            actions.addAll([
-              _buildActionButton(
-                l10n.run,
-                LucideIcons.play,
-                Colors.greenAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'cargo run',
-                ),
-              ),
-              _buildActionButton(
-                l10n.buildPC,
-                LucideIcons.laptop,
-                Colors.cyanAccent,
-                () => _runDedicatedCommand(
-                  DedicatedTerminalType.run,
-                  'cargo build',
-                ),
-              ),
-              _buildActionButton(
-                l10n.stop,
-                LucideIcons.square,
-                Colors.redAccent,
-                () => _sendRawKeyToDedicatedTerminal(
-                  DedicatedTerminalType.run,
-                  String.fromCharCode(3),
-                ),
-              ),
-            ]);
-            break;
-        }
-
-        actions.add(
-          _buildActionButton(
-            l10n.copy,
-            LucideIcons.copy,
-            Colors.white60,
-            () => _copyTerminalOutput(DedicatedTerminalType.run),
-          ),
-        );
-
-        return Column(
-          children: [
-            _buildActionHeader(title, actions),
-            Expanded(
-              child: session != null
-                  ? _buildTerminalWidget(session)
-                  : Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            LucideIcons.rocket,
-                            size: 48,
-                            color: Colors.white10,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            AppLocalizations.of(context)!.typeRunToStart,
-                            style: const TextStyle(
-                              color: Colors.white24,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildSubTabButton(int index, String label, IconData icon) {
-    final isActive = _buildSubTab == index;
-    return GestureDetector(
-      onTap: () => setState(() => _buildSubTab = index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isActive
-              ? Colors.cyanAccent.withValues(alpha: 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isActive
-                ? Colors.cyanAccent.withValues(alpha: 0.25)
-                : Colors.transparent,
-            width: 0.6,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 12,
-              color: isActive ? Colors.cyanAccent : Colors.white38,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                color: isActive ? Colors.white : Colors.white38,
-                fontSize: 10.5,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBuildLogsView({Key? key}) {
-    return Consumer(
-      key: key,
-      builder: (context, ref, _) {
-        final l10n = AppLocalizations.of(context)!;
-        final dedicatedState = ref.watch(dedicatedTerminalProvider);
-        final session = dedicatedState.sessions[DedicatedTerminalType.build];
-        final ws = ref.watch(workspaceProvider).currentPath ?? '';
-        final allProjects = ref.watch(projectServiceProvider);
-        final currentProject = allProjects.firstWhere(
-          (p) => p.path == ws,
-          orElse: () => Project(
-            id: '',
-            name: 'Default',
-            path: ws,
-            type: ProjectType.other,
-            lastOpened: DateTime.now(),
-          ),
-        );
-        final projectType = _detectProjectType(
-          ws.isNotEmpty ? ws : null,
-          currentProject.type,
-        );
-        final isFlutter =
-            projectType == ProjectType.flutter ||
-            (ws.isNotEmpty && File(p.join(ws, 'pubspec.yaml')).existsSync());
-        final isKotlin = projectType == ProjectType.androidKotlin;
-        final isJava = projectType == ProjectType.androidJava;
-        final isRust = projectType == ProjectType.rust;
-        final isNode = projectType == ProjectType.nodejs;
-        final isPython = projectType == ProjectType.python;
-        final isWeb = projectType == ProjectType.web;
-        final isDart = projectType == ProjectType.dart;
-
-        return Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.01),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.05),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  _buildSubTabButton(0, l10n.console, LucideIcons.terminal),
-                  const SizedBox(width: 8),
-                  _buildSubTabButton(1, l10n.signApk, LucideIcons.pen_tool),
-                ],
-              ),
-            ),
-            Expanded(
-              child: _buildSubTab == 0
-                  ? Column(
-                      children: [
-                        _buildActionHeader(l10n.build, [
-                          if (isFlutter) ...[
-                            _buildActionButton(
-                              'Debug APK',
-                              LucideIcons.bug,
-                              Colors.yellow,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --debug --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
-                                displayCmd: 'flutter build apk --debug',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'APK (D8 · без R8)',
-                              LucideIcons.zap,
-                              const Color(0xFF10B981),
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && QUANTUM_DISABLE_R8=1 flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK (D8 · без R8): ./app-release.apk"',
-                                displayCmd: 'flutter build apk --release (D8 · без R8)',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Release APK (R8)',
-                              LucideIcons.package,
-                              Colors.orange,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK (R8): ./app-release.apk"',
-                                displayCmd: 'flutter build apk --release (R8)',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'AAB с D8 (без R8)',
-                              LucideIcons.zap,
-                              Colors.tealAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && QUANTUM_DISABLE_R8=1 flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB · D8 без R8): ./app-release.aab"',
-                                displayCmd: 'flutter build appbundle --release (D8 · без R8)',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'AAB с R8 (Google Play)',
-                              LucideIcons.rocket,
-                              Colors.purpleAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB · R8): ./app-release.aab"',
-                                displayCmd: 'flutter build appbundle --release (R8)',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Split APKs',
-                              LucideIcons.boxes,
-                              Colors.amberAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation && (for apk in build/app/outputs/flutter-apk/*.apk; do cp -f "\$apk" ./ 2>/dev/null; done) && echo "✓ Split APKs (v7/v8/x64) ready in project root"',
-                                displayCmd:
-                                    'flutter build apk --release --split-per-abi',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Pub Get',
-                              LucideIcons.download,
-                              Colors.blue,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'flutter pub get',
-                                displayCmd: 'flutter pub get',
-                              ),
-                            ),
-                            _buildActionButton(
-                              l10n.buildPC,
-                              LucideIcons.laptop,
-                              Colors.cyanAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'flutter pub get && flutter build linux --release',
-                                displayCmd: 'flutter build linux --release',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Web-сервер',
-                              LucideIcons.globe,
-                              const Color(0xFF38BDF8),
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'flutter run -d web-server --web-port=8080 --web-hostname=0.0.0.0',
-                                displayCmd: 'Web-сервер (localhost:8080)',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Clean',
-                              LucideIcons.trash_2,
-                              Colors.red,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'flutter clean',
-                                displayCmd: 'flutter clean',
-                              ),
-                            ),
-                          ] else if (isKotlin) ...[
-                            _buildActionButton(
-                              'Debug APK (KT)',
-                              LucideIcons.bug,
-                              Colors.yellow,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '$_ktRepairCmd(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
-                                displayCmd: './gradlew assembleDebug',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Release APK (KT)',
-                              LucideIcons.package,
-                              Colors.orange,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '$_ktRepairCmd(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
-                                displayCmd: './gradlew assembleRelease',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Clean (KT)',
-                              LucideIcons.trash_2,
-                              Colors.red,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk',
-                                displayCmd: './gradlew clean',
-                              ),
-                            ),
-                          ] else if (isJava) ...[
-                            _buildActionButton(
-                              'Debug APK (Java)',
-                              LucideIcons.bug,
-                              Colors.yellow,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
-                                displayCmd: './gradlew assembleDebug',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Release APK (Java)',
-                              LucideIcons.package,
-                              Colors.orange,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                '(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
-                                displayCmd: './gradlew assembleRelease',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Clean (Java)',
-                              LucideIcons.trash_2,
-                              Colors.red,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk',
-                                displayCmd: './gradlew clean',
-                              ),
-                            ),
-                          ] else if (isRust) ...[
-                            _buildActionButton(
-                              'Cargo Build',
-                              LucideIcons.hammer,
-                              Colors.orange,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'cargo build',
-                                displayCmd: 'cargo build',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Release',
-                              LucideIcons.package,
-                              Colors.greenAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'cargo build --release',
-                                displayCmd: 'cargo build --release',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Check',
-                              LucideIcons.circle_check,
-                              Colors.cyanAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'cargo check',
-                                displayCmd: 'cargo check',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Test',
-                              LucideIcons.flask_conical,
-                              Colors.blue,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'cargo test',
-                                displayCmd: 'cargo test',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Clean',
-                              LucideIcons.trash_2,
-                              Colors.red,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'cargo clean',
-                                displayCmd: 'cargo clean',
-                              ),
-                            ),
-                          ] else if (isNode) ...[
-                            _buildActionButton(
-                              'npm install',
-                              LucideIcons.download,
-                              Colors.cyanAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'npm install',
-                                displayCmd: 'npm install',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'npm build',
-                              LucideIcons.hammer,
-                              Colors.amber,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'npm run build || npx tsc || echo "No build script"',
-                                displayCmd: 'npm run build',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Clean',
-                              LucideIcons.trash_2,
-                              Colors.red,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'rm -rf node_modules',
-                                displayCmd: 'rm -rf node_modules',
-                              ),
-                            ),
-                          ] else if (isPython) ...[
-                            _buildActionButton(
-                              'Install deps',
-                              LucideIcons.download,
-                              Colors.purple,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'pip3 install -r requirements.txt || pip install -r requirements.txt || echo "No requirements.txt"',
-                                displayCmd: 'pip install -r requirements.txt',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Freeze',
-                              LucideIcons.file_text,
-                              Colors.blue,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'pip3 freeze > requirements.txt',
-                                displayCmd: 'pip freeze > requirements.txt',
-                              ),
-                            ),
-                          ] else if (isWeb) ...[
-                            _buildActionButton(
-                              'Start Server',
-                              LucideIcons.play,
-                              Colors.greenAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'python3 -m http.server 8080 || npx http-server -p 8080',
-                                displayCmd: 'python3 -m http.server 8080',
-                              ),
-                            ),
-                          ] else if (isDart) ...[
-                            _buildActionButton(
-                              'Compile Exe',
-                              LucideIcons.package,
-                              Colors.orange,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'dart compile exe bin/main.dart',
-                                displayCmd: 'dart compile exe',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Pub Get',
-                              LucideIcons.download,
-                              Colors.blue,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'dart pub get',
-                                displayCmd: 'dart pub get',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Analyze',
-                              LucideIcons.circle_check,
-                              Colors.cyanAccent,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'dart analyze',
-                                displayCmd: 'dart analyze',
-                              ),
-                            ),
-                          ] else ...[
-                            _buildActionButton(
-                              'Debug APK',
-                              LucideIcons.bug,
-                              Colors.yellow,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"',
-                                displayCmd: './gradlew assembleDebug',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Release APK',
-                              LucideIcons.package,
-                              Colors.orange,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
-                                displayCmd: './gradlew assembleRelease',
-                              ),
-                            ),
-                            _buildActionButton(
-                              'Clean',
-                              LucideIcons.trash_2,
-                              Colors.red,
-                              () => _runDedicatedCommand(
-                                DedicatedTerminalType.build,
-                                'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk',
-                                displayCmd: './gradlew clean',
-                              ),
-                            ),
-                          ],
-                          _buildActionButton(
-                            l10n.stop,
-                            LucideIcons.square,
-                            Colors.redAccent,
-                            () => ref.read(dedicatedTerminalProvider.notifier).stopBuildProcess(),
-                          ),
-                          _buildActionButton(
-                            l10n.copy,
-                            LucideIcons.copy,
-                            Colors.white60,
-                            () => _copyTerminalOutput(
-                              DedicatedTerminalType.build,
-                            ),
-                          ),
-                        ]),
-                        Expanded(
-                          child: session != null
-                              ? _buildTerminalWidget(session)
-                              : Center(
-                                  child: Text(
-                                    l10n.buildLogs,
-                                    style: const TextStyle(
-                                      color: Colors.white38,
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ],
-                    )
-                  : const ApkSignerWidget(),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   Widget _buildAppLogsView({Key? key}) {
@@ -3529,15 +2627,26 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               InkWell(
                 onTap: () async {
                   await ref.read(editorProvider.notifier).openFile(path);
-                  ref.read(panelProvider.notifier).selectTab(PanelTab.aiAgent);
+                  if (context.mounted) {
+                    final scaffold = Scaffold.maybeOf(context);
+                    if (MediaQuery.sizeOf(context).width < 768 &&
+                        scaffold != null &&
+                        scaffold.hasEndDrawer) {
+                      scaffold.openEndDrawer();
+                    } else {
+                      ref.read(panelProvider.notifier).closePanel();
+                      ref.read(rightAiPanelOpenProvider.notifier).state = true;
+                    }
+                  }
                   final prompt =
                       'Пожалуйста, исправь следующую ошибку в файле $fileName на строке $lineNum:\n'
                       '```\n${d.message}\n```\n'
                       'Файл: $path\n'
                       'Изучи контекст и код вокруг строки $lineNum и примени исправление.';
-                  await ref
-                      .read(quantumAiAgentServiceProvider)
-                      .sendMessage(prompt);
+                  ref.read(roxumChatProvider.notifier).setChatMode(
+                        RoxumChatMode.agent,
+                      );
+                  await ref.read(roxumChatProvider.notifier).sendPrompt(prompt);
                 },
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
@@ -4146,11 +3255,18 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       palette: palette,
       brightness: Brightness.dark,
       fullscreen: ref.watch(panelProvider).isMaximized,
-      onToggleFullscreen: () {
-        ref.read(panelProvider.notifier).toggleMaximized();
-      },
-      onOpenAppearance: () {
-        showConduitAppearanceSheet(context, ref);
+      onToggleFullscreen: widget.onlyTerminal
+          ? null
+          : () {
+              ref.read(panelProvider.notifier).toggleMaximized();
+            },
+      onToggleKeyboard: () {
+        final node = _getFocusNode(keyId);
+        if (node.hasFocus) {
+          node.unfocus();
+        } else {
+          node.requestFocus();
+        }
       },
       onPaste: () => _pasteToTerminal(currentSession),
     );

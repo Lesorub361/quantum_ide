@@ -2,12 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/network_inspector_service.dart';
 import 'package:quantum_ide/core/services/secure_storage_service.dart';
 
 class GitHubService {
   static final GitHubService _instance = GitHubService._internal();
   factory GitHubService() => _instance;
-  GitHubService._internal();
+  GitHubService._internal() {
+    _dio.interceptors.add(NetworkInspectorService.dioInterceptor);
+  }
 
   final Dio _dio = Dio(
     BaseOptions(

@@ -25,7 +25,6 @@ class SettingsState {
   final double glassmorphismOpacity;
   final double glassmorphismBlur;
   final String hotkeysJson;
-  final bool sdCardSync;
   final bool formatOnSave;
   final bool hardwareKeyboardMode;
   final bool syncAppWithTerminalPalette;
@@ -55,7 +54,6 @@ class SettingsState {
     this.glassmorphismOpacity = 0.15,
     this.glassmorphismBlur = 0.0,
     this.hotkeysJson = '{}',
-    this.sdCardSync = true,
     this.formatOnSave = false,
     this.hardwareKeyboardMode = false,
     this.syncAppWithTerminalPalette = true,
@@ -112,7 +110,6 @@ class SettingsState {
     double? glassmorphismOpacity,
     double? glassmorphismBlur,
     String? hotkeysJson,
-    bool? sdCardSync,
     bool? formatOnSave,
     bool? hardwareKeyboardMode,
     bool? syncAppWithTerminalPalette,
@@ -156,7 +153,6 @@ class SettingsState {
       glassmorphismOpacity: glassmorphismOpacity ?? this.glassmorphismOpacity,
       glassmorphismBlur: glassmorphismBlur ?? this.glassmorphismBlur,
       hotkeysJson: hotkeysJson ?? this.hotkeysJson,
-      sdCardSync: sdCardSync ?? this.sdCardSync,
       formatOnSave: formatOnSave ?? this.formatOnSave,
       hardwareKeyboardMode: hardwareKeyboardMode ?? this.hardwareKeyboardMode,
       syncAppWithTerminalPalette:
@@ -206,7 +202,6 @@ class SettingsService extends StateNotifier<SettingsState> {
   static const _keyGlassmorphismOpacity = 'settings_glassmorphism_opacity';
   static const _keyGlassmorphismBlur = 'settings_glassmorphism_blur';
   static const _keyHotkeys = 'settings_hotkeys';
-  static const _keySdCardSync = 'settings_sd_card_sync';
   static const _keyFormatOnSave = 'settings_format_on_save_v2';
   static const _keyDeepseekApiKey = 'settings_deepseek_api_key';
   static const _keyOpenrouterApiKey = 'settings_openrouter_api_key';
@@ -250,7 +245,6 @@ class SettingsService extends StateNotifier<SettingsState> {
       glassmorphismOpacity: prefs.getDouble(_keyGlassmorphismOpacity) ?? 0.15,
       glassmorphismBlur: prefs.getDouble(_keyGlassmorphismBlur) ?? 0.0,
       hotkeysJson: prefs.getString(_keyHotkeys) ?? '{}',
-      sdCardSync: prefs.getBool(_keySdCardSync) ?? true,
       formatOnSave: prefs.getBool(_keyFormatOnSave) ?? false,
       hardwareKeyboardMode: prefs.getBool('settings_hardware_keyboard_mode') ?? false,
       syncAppWithTerminalPalette:
@@ -451,12 +445,6 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(hotkeysJson: json);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyHotkeys, json);
-  }
-
-  Future<void> setSdCardSync(bool v) async {
-    state = state.copyWith(sdCardSync: v);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keySdCardSync, v);
   }
 
   Future<void> setFormatOnSave(bool v) async {

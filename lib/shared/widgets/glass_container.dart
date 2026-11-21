@@ -59,9 +59,9 @@ class GlassContainer extends ConsumerWidget {
           child: current,
         ),
       );
-    } else {
+    } else if (borderRadius != null && borderRadius != BorderRadius.zero) {
       current = ClipRRect(
-        borderRadius: borderRadius ?? BorderRadius.zero,
+        borderRadius: borderRadius!,
         child: current,
       );
     }

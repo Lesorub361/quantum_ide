@@ -22,48 +22,11 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/build_complet
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 
-class StatusBar extends ConsumerStatefulWidget {
+class StatusBar extends ConsumerWidget {
   const StatusBar({super.key});
 
   @override
-  ConsumerState<StatusBar> createState() => _StatusBarState();
-}
-
-class _StatusBarState extends ConsumerState<StatusBar> {
-  CodeLineEditingController? _subscribedController;
-  CodeLineEditingValue? _cursorValue;
-  bool _pendingUpdate = false;
-
-  @override
-  void dispose() {
-    _subscribedController?.removeListener(_onControllerChanged);
-    super.dispose();
-  }
-
-  void _onControllerChanged() {
-    if (!mounted) return;
-    if (!_pendingUpdate) {
-      _pendingUpdate = true;
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _pendingUpdate = false;
-        setState(() {
-          _cursorValue = _subscribedController?.value;
-        });
-      });
-    }
-  }
-
-  void _switchController(CodeLineEditingController? newController) {
-    if (newController == _subscribedController) return;
-    _subscribedController?.removeListener(_onControllerChanged);
-    _subscribedController = newController;
-    _cursorValue = newController?.value;
-    newController?.addListener(_onControllerChanged);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final editorState = ref.watch(editorProvider);
     final gitState = ref.watch(gitProvider);
 
@@ -74,10 +37,7 @@ class _StatusBarState extends ConsumerState<StatusBar> {
         ? editorState.openFiles[editorState.activeTabIndex]
         : null;
 
-    _switchController(activeFile?.controller);
-
     final workspacePath = ref.watch(workspaceProvider).currentPath ?? '';
-    final pos = _cursorValue?.selection.extent;
     final (errorsCount, warningsCount, hintsCount) = _getDiagnosticsCounts(
       editorState.allDiagnostics,
       workspacePath,
@@ -105,11 +65,6 @@ class _StatusBarState extends ConsumerState<StatusBar> {
           builder: (context, constraints) {
             final isNarrow = constraints.maxWidth < 520;
             final isUltraNarrow = constraints.maxWidth < 370;
-            final lineNum = (pos?.index ?? 0) + 1;
-            final colNum = (pos?.offset ?? 0) + 1;
-            final cursorLabel = isNarrow
-                ? 'Стр $lineNum:$colNum'
-                : AppLocalizations.of(context)!.lineCol(lineNum, colNum);
 
             return Row(
               children: [
@@ -267,10 +222,9 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                         const SizedBox(width: 5),
                       ],
 
-                      _StatusBarPill(
-                        icon: isNarrow ? null : LucideIcons.navigation,
-                        label: cursorLabel,
-                        color: Colors.white70,
+                      _CursorPositionPill(
+                        controller: activeFile.controller,
+                        isNarrow: isNarrow,
                       ),
                       SizedBox(width: isNarrow ? 5 : 8),
 
@@ -1581,4 +1535,79 @@ class _ShizukuStatusChip extends StatelessWidget {
     );
   }
 }
+
+class _CursorPositionPill extends StatefulWidget {
+  final CodeLineEditingController controller;
+  final bool isNarrow;
+
+  const _CursorPositionPill({
+    required this.controller,
+    required this.isNarrow,
+  });
+
+  @override
+  State<_CursorPositionPill> createState() => _CursorPositionPillState();
+}
+
+class _CursorPositionPillState extends State<_CursorPositionPill> {
+  CodeLineEditingValue? _cursorValue;
+  bool _pendingUpdate = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _cursorValue = widget.controller.value;
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CursorPositionPill oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChanged);
+      _cursorValue = widget.controller.value;
+      widget.controller.addListener(_onControllerChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    if (!mounted) return;
+    if (!_pendingUpdate) {
+      _pendingUpdate = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _pendingUpdate = false;
+        final next = widget.controller.value;
+        if (next.selection.extent != _cursorValue?.selection.extent) {
+          setState(() {
+            _cursorValue = next;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pos = _cursorValue?.selection.extent;
+    final lineNum = (pos?.index ?? 0) + 1;
+    final colNum = (pos?.offset ?? 0) + 1;
+    final cursorLabel = widget.isNarrow
+        ? 'Стр $lineNum:$colNum'
+        : AppLocalizations.of(context)!.lineCol(lineNum, colNum);
+
+    return _StatusBarPill(
+      icon: widget.isNarrow ? null : LucideIcons.navigation,
+      label: cursorLabel,
+      color: Colors.white70,
+    );
+  }
+}
+
 

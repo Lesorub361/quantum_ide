@@ -10,7 +10,6 @@ class LiveTelemetryService {
   LiveTelemetryService._();
   static final LiveTelemetryService instance = LiveTelemetryService._();
 
-  static const String _sharedDir = '/storage/emulated/0/QuantumIDE';
   File? _statusFile;
   File? _buildOutputFile;
   File? _globalLogFile;
@@ -37,7 +36,6 @@ class LiveTelemetryService {
   bool get isBuilding => currentBuildStatus.toLowerCase() == 'running';
   String currentBuildCommand = '';
   DateTime? buildStartTime;
-  Future<List<String>> Function()? onSyncRequested;
   Future<void> Function(String path)? onFileUpdated;
 
   Future<void> init() async {
@@ -53,7 +51,10 @@ class LiveTelemetryService {
 
   void _startTimer() {
     _periodicTimer?.cancel();
-    _periodicTimer = Timer.periodic(const Duration(seconds: 8), (_) => flushStatus());
+    if (_statusFile != null) {
+      _periodicTimer =
+          Timer.periodic(const Duration(seconds: 8), (_) => flushStatus());
+    }
   }
 
   Future<void> _startLocalServer() async {
@@ -76,11 +77,6 @@ class LiveTelemetryService {
             request.response
               ..headers.contentType = ContentType.text
               ..write(_recentLogs.join('\n'));
-          } else if (uri == '/sync') {
-            final updated = await (onSyncRequested?.call() ?? Future.value(<String>[]));
-            request.response
-              ..headers.contentType = ContentType.json
-              ..write(jsonEncode({'status': 'ok', 'updatedFiles': updated}));
           } else if (uri == '/read') {
             final reqPath = request.uri.queryParameters['path'];
             if (reqPath == null || reqPath.isEmpty) {
@@ -115,16 +111,6 @@ class LiveTelemetryService {
               final f = File(fullPath);
               await f.parent.create(recursive: true);
               await f.writeAsString(body, flush: true);
-
-              // Also mirror to /storage/emulated/0/QuantumIDE/<project> if inside internal workspace
-              if (ws != null && fullPath.startsWith(ws)) {
-                final rel = p.relative(fullPath, from: ws);
-                final extFile = File(p.join(_sharedDir, p.basename(ws), rel));
-                try {
-                  await extFile.parent.create(recursive: true);
-                  await extFile.writeAsString(body, flush: true);
-                } catch (_) {}
-              }
 
               await onFileUpdated?.call(fullPath);
               logEvent('Remote file updated: $fullPath (${body.length} bytes)');

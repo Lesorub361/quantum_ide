@@ -60,15 +60,18 @@ class DiffBackgroundPainter extends CustomPainter {
     final val = notifier?.value;
     if (val == null || markers.isEmpty) return;
 
+    final paint = Paint();
     for (final paragraph in val.paragraphs) {
       final lineIndex = paragraph.index;
-      final marker = markers.firstWhere(
-        (m) => m.line == lineIndex,
-        orElse: () => DiffMarker(line: -1, type: DiffType.added),
-      );
+      DiffMarker? marker;
+      for (var i = 0; i < markers.length; i++) {
+        if (markers[i].line == lineIndex) {
+          marker = markers[i];
+          break;
+        }
+      }
 
-      if (marker.line != -1) {
-        final paint = Paint();
+      if (marker != null) {
         switch (marker.type) {
           case DiffType.added:
             paint.color = const Color(0xFF10B981).withValues(alpha: 0.14);
@@ -601,21 +604,27 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     if (_aiSuggestion != null) {
       setState(() => _aiSuggestion = null);
     }
-    if (!widget.settings.aiAutoCompletion) return;
+    if (!widget.settings.aiAutoCompletion ||
+        widget.settings.useCodeCrafterEditor) {
+      return;
+    }
 
     final controller = widget.file.controller;
-    final text = controller.text;
-    if (text.trim().length < 8 || text == _lastAiText) return;
+    if (controller.codeLines.isEmpty) return;
 
     _aiCompletionTimer = Timer(const Duration(milliseconds: 1100), () async {
       if (!mounted) return;
       final latestText = controller.text;
-      if (latestText != text) return;
+      if (latestText.trim().length < 8 || latestText == _lastAiText) return;
       _lastAiText = latestText;
 
       final sel = controller.selection;
       int offset = 0;
-      for (int i = 0; i < sel.extentIndex && i < controller.codeLines.length; i++) {
+      for (
+        int i = 0;
+        i < sel.extentIndex && i < controller.codeLines.length;
+        i++
+      ) {
         offset += controller.codeLines[i].text.length + 1;
       }
       offset += sel.extentOffset;
@@ -627,7 +636,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         filePath: widget.file.path,
       );
       if (!mounted) return;
-      if (suggestion != null && suggestion.isNotEmpty && controller.text == latestText) {
+      if (suggestion != null &&
+          suggestion.isNotEmpty &&
+          controller.text == latestText) {
         setState(() => _aiSuggestion = suggestion);
       }
     });
@@ -1268,15 +1279,17 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       ),
     );
 
-    editorWidget = NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is ScrollStartNotification ||
-            notification is ScrollUpdateNotification) {
-          QuantumSelectionToolbarController.dismissAll();
-        }
-        return false;
-      },
-      child: editorWidget,
+    editorWidget = RepaintBoundary(
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification is ScrollStartNotification ||
+              notification is ScrollUpdateNotification) {
+            QuantumSelectionToolbarController.dismissAll();
+          }
+          return false;
+        },
+        child: editorWidget,
+      ),
     );
 
     if (settings.minimap) {

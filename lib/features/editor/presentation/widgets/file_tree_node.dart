@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/services.dart' hide ClipboardData;
+import 'package:flutter/services.dart' as services show Clipboard, ClipboardData;
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -18,6 +19,8 @@ import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_e
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 
 class FileTreeFilter {
   static const Set<String> ignoredDirNames = {
@@ -495,15 +498,28 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     );
   }
 
-  Widget _buildFileNameText(String name, String searchQuery, Color gitColor, {bool isMobile = false}) {
-    final fontSize = isMobile ? 11.5 : 12.5;
+  Widget _buildFileNameText(
+    String name,
+    String searchQuery,
+    Color gitColor, {
+    bool isTouchLayout = false,
+    bool isActiveFile = false,
+  }) {
+    final fontSize = isTouchLayout ? 13.5 : 12.5;
+    final fontWeight = isActiveFile
+        ? FontWeight.w600
+        : (widget.isDirectory ? FontWeight.w500 : FontWeight.normal);
+    final textColor = isActiveFile && (gitColor == Colors.white70 || gitColor == Colors.white)
+        ? Colors.white
+        : gitColor;
+
     if (searchQuery.isEmpty) {
       return Text(
         name,
         style: TextStyle(
           fontSize: fontSize,
-          fontWeight: widget.isDirectory ? FontWeight.w500 : FontWeight.normal,
-          color: gitColor,
+          fontWeight: fontWeight,
+          color: textColor,
         ),
         overflow: TextOverflow.ellipsis,
       );
@@ -515,8 +531,8 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         name,
         style: TextStyle(
           fontSize: fontSize,
-          fontWeight: widget.isDirectory ? FontWeight.w500 : FontWeight.normal,
-          color: gitColor,
+          fontWeight: fontWeight,
+          color: textColor,
         ),
         overflow: TextOverflow.ellipsis,
       );
@@ -532,8 +548,8 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       text: TextSpan(
         style: TextStyle(
           fontSize: fontSize,
-          fontWeight: widget.isDirectory ? FontWeight.w500 : FontWeight.normal,
-          color: gitColor,
+          fontWeight: fontWeight,
+          color: textColor,
           fontFamily: GoogleFonts.inter().fontFamily,
         ),
         children: [
@@ -552,52 +568,69 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     );
   }
 
-
-  void _submitRename() async {
-    final newName = _inlineController?.text;
+  Future<void> _submitRename() async {
+    final newName = _inlineController?.text.trim();
     if (newName != null && newName.isNotEmpty && newName != widget.name) {
-      final newPath = p.join(p.dirname(widget.path), newName);
-      await ref.read(projectServiceProvider.notifier).mirrorDelete(widget.path);
-      if (widget.isDirectory) {
-        await Directory(widget.path).rename(newPath);
-      } else {
-        await File(widget.path).rename(newPath);
+      try {
+        final newPath = p.join(p.dirname(widget.path), newName);
+        if (widget.isDirectory) {
+          await Directory(widget.path).rename(newPath);
+        } else {
+          await File(widget.path).rename(newPath);
+        }
+        if (!mounted) return;
+        widget.onRefreshParent();
+      } catch (e) {
+        if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.errorOccurred(e.toString()))),
+          );
+        }
       }
-      await ref.read(projectServiceProvider.notifier).mirrorEntity(newPath);
-      widget.onRefreshParent();
     }
+    if (!mounted) return;
     setState(() {
       _isRenaming = false;
     });
   }
 
-  void _submitCreate(bool isDir) async {
-    final name = _inlineController?.text;
+  Future<void> _submitCreate(bool isDir) async {
+    final name = _inlineController?.text.trim();
     if (name != null && name.isNotEmpty) {
-      final newPath = p.join(widget.path, name);
-      if (isDir) {
-        await Directory(newPath).create();
-      } else {
-        await File(newPath).create();
-      }
-      
-      // Mirror to external storage
-      await ref.read(projectServiceProvider.notifier).mirrorEntity(newPath);
+      try {
+        final newPath = p.join(widget.path, name);
+        if (isDir) {
+          await Directory(newPath).create();
+        } else {
+          await File(newPath).create();
+        }
 
-      final expandedSet = ref.read(expandedFoldersProvider);
-      if (!expandedSet.contains(widget.path)) {
-        _toggleExpanded();
-      } else {
-        _loadChildren();
+        if (!mounted) return;
+
+        final expandedSet = ref.read(expandedFoldersProvider);
+        if (!expandedSet.contains(widget.path)) {
+          _toggleExpanded();
+        } else {
+          _loadChildren();
+        }
+      } catch (e) {
+        if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.errorOccurred(e.toString()))),
+          );
+        }
       }
     }
+    if (!mounted) return;
     setState(() {
       _isCreatingFile = false;
       _isCreatingFolder = false;
     });
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref) async {
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final selectedPaths = ref.read(selectedPathsProvider);
     final hasSelection = selectedPaths.isNotEmpty;
     final pathsToProcess = hasSelection ? selectedPaths.toList() : [widget.path];
@@ -605,7 +638,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xff1e1e24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
@@ -621,11 +654,11 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: Text(l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(l10n.delete, style: const TextStyle(color: Colors.redAccent)),
           ),
         ],
@@ -633,50 +666,77 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     );
 
     if (confirm == true) {
-      for (final path in pathsToProcess) {
-        await ref.read(projectServiceProvider.notifier).mirrorDelete(path);
-        if (FileSystemEntity.isDirectorySync(path)) {
-          await Directory(path).delete(recursive: true);
-        } else {
-          await File(path).delete();
+      try {
+        for (final path in pathsToProcess) {
+          if (FileSystemEntity.isDirectorySync(path)) {
+            await Directory(path).delete(recursive: true);
+          } else {
+            await File(path).delete();
+          }
+        }
+        if (!mounted) return;
+        ref.read(selectedPathsProvider.notifier).state = {};
+        widget.onRefreshParent();
+      } catch (e) {
+        if (mounted && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.deleteError(e.toString()))),
+          );
         }
       }
-      ref.read(selectedPathsProvider.notifier).state = {};
-      widget.onRefreshParent();
     }
   }
 
-  void _handlePaste() async {
+  Future<void> _handlePaste() async {
     final clipboard = ref.read(fileClipboardProvider);
     if (clipboard == null) return;
 
     final targetDir = widget.isDirectory ? widget.path : p.dirname(widget.path);
 
-    for (final sourcePath in clipboard.paths) {
-      final name = p.basename(sourcePath);
-      final destPath = p.join(targetDir, name);
+    try {
+      for (final sourcePath in clipboard.paths) {
+        final name = p.basename(sourcePath);
+        final destPath = p.join(targetDir, name);
 
-      if (clipboard.isCut) {
-        if (FileSystemEntity.isDirectorySync(sourcePath)) {
-          await Directory(sourcePath).rename(destPath);
+        if (clipboard.isCut) {
+          if (FileSystemEntity.isDirectorySync(sourcePath)) {
+            await Directory(sourcePath).rename(destPath);
+          } else {
+            await File(sourcePath).rename(destPath);
+          }
         } else {
-          await File(sourcePath).rename(destPath);
-        }
-        await ref.read(projectServiceProvider.notifier).mirrorDelete(sourcePath);
-      } else {
-        // Copy logic (simplified)
-        if (FileSystemEntity.isDirectorySync(sourcePath)) {
-          // Recursive copy would be needed here
-        } else {
-          await File(sourcePath).copy(destPath);
+          if (FileSystemEntity.isDirectorySync(sourcePath)) {
+            await _copyDirectoryRecursive(Directory(sourcePath), Directory(destPath));
+          } else {
+            await File(sourcePath).copy(destPath);
+          }
         }
       }
-      await ref.read(projectServiceProvider.notifier).mirrorEntity(destPath);
-    }
 
-    if (clipboard.isCut) ref.read(fileClipboardProvider.notifier).state = null;
-    _loadChildren();
-    widget.onRefreshParent();
+      if (!mounted) return;
+      if (clipboard.isCut) ref.read(fileClipboardProvider.notifier).state = null;
+      _loadChildren();
+      widget.onRefreshParent();
+    } catch (e) {
+      if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.pasteError(e.toString()))),
+        );
+      }
+    }
+  }
+
+  Future<void> _copyDirectoryRecursive(Directory source, Directory destination) async {
+    await destination.create(recursive: true);
+    await for (final entity in source.list(recursive: false)) {
+      final newPath = p.join(destination.path, p.basename(entity.path));
+      if (entity is Directory) {
+        await _copyDirectoryRecursive(entity, Directory(newPath));
+      } else if (entity is File) {
+        await entity.copy(newPath);
+      }
+    }
   }
 
   void _extractZip(BuildContext context, WidgetRef ref, String path) async {
@@ -777,7 +837,130 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     }
   }
 
-  void _showDesktopContextMenu(BuildContext context, WidgetRef ref, Offset position) async {
+  Future<void> _showDesktopContextMenu(BuildContext context, WidgetRef ref, Offset position) async {
+    final l10n = AppLocalizations.of(context)!;
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final copyPathLabel = isRu ? 'Копировать путь' : 'Copy Path';
+    final clipboard = ref.read(fileClipboardProvider);
+    final selectedPaths = ref.read(selectedPathsProvider);
+    final hasSelection = selectedPaths.isNotEmpty;
+    final isBookmarked = !widget.isDirectory && ref.read(bookmarksProvider).contains(widget.path);
+
+    final items = <PopupMenuEntry<String>>[
+      if (widget.isDirectory) ...[
+        PopupMenuItem<String>(
+          value: 'new_file',
+          height: 34,
+          child: Row(
+            children: [
+              const Icon(LucideIcons.file_plus, size: 15, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(l10n.newFile, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'new_folder',
+          height: 34,
+          child: Row(
+            children: [
+              const Icon(LucideIcons.folder_plus, size: 15, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(l10n.newFolder, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(height: 8),
+      ],
+      PopupMenuItem<String>(
+        value: 'copy',
+        height: 34,
+        child: Row(
+          children: [
+            const Icon(LucideIcons.copy, size: 15, color: Colors.white70),
+            const SizedBox(width: 8),
+            Text(l10n.copy, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+          ],
+        ),
+      ),
+      PopupMenuItem<String>(
+        value: 'cut',
+        height: 34,
+        child: Row(
+          children: [
+            const Icon(LucideIcons.scissors, size: 15, color: Colors.white70),
+            const SizedBox(width: 8),
+            Text(l10n.cut, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+          ],
+        ),
+      ),
+      if (clipboard != null)
+        PopupMenuItem<String>(
+          value: 'paste',
+          height: 34,
+          child: Row(
+            children: [
+              const Icon(LucideIcons.clipboard_paste, size: 15, color: Colors.greenAccent),
+              const SizedBox(width: 8),
+              Text(l10n.paste, style: const TextStyle(fontSize: 12.5, color: Colors.greenAccent)),
+            ],
+          ),
+        ),
+      PopupMenuItem<String>(
+        value: 'copy_path',
+        height: 34,
+        child: Row(
+          children: [
+            const Icon(LucideIcons.link, size: 15, color: Colors.white70),
+            const SizedBox(width: 8),
+            Text(copyPathLabel, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+          ],
+        ),
+      ),
+      if (!widget.isDirectory)
+        PopupMenuItem<String>(
+          value: 'bookmark',
+          height: 34,
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.star,
+                size: 15,
+                color: isBookmarked ? Colors.redAccent : Colors.amberAccent,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isBookmarked ? l10n.removeFromBookmarks : l10n.addToBookmarks,
+                style: const TextStyle(fontSize: 12.5, color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      const PopupMenuDivider(height: 8),
+      PopupMenuItem<String>(
+        value: 'rename',
+        height: 34,
+        child: Row(
+          children: [
+            const Icon(LucideIcons.pencil, size: 15, color: Colors.white70),
+            const SizedBox(width: 8),
+            Text(l10n.rename, style: const TextStyle(fontSize: 12.5, color: Colors.white)),
+          ],
+        ),
+      ),
+      PopupMenuItem<String>(
+        value: 'delete',
+        height: 34,
+        child: Row(
+          children: [
+            const Icon(LucideIcons.trash_2, size: 15, color: Colors.redAccent),
+            const SizedBox(width: 8),
+            Text(l10n.delete, style: const TextStyle(fontSize: 12.5, color: Colors.redAccent)),
+          ],
+        ),
+      ),
+    ];
+
     final selected = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx + 1, position.dy + 1),
@@ -786,53 +969,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         borderRadius: BorderRadius.circular(10),
         side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
       ),
-      items: [
-        const PopupMenuItem<String>(
-          value: 'new_file',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(LucideIcons.file_plus, size: 15, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('New File', style: TextStyle(fontSize: 13, color: Colors.white)),
-            ],
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'new_folder',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(LucideIcons.folder_plus, size: 15, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('New Folder', style: TextStyle(fontSize: 13, color: Colors.white)),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem<String>(
-          value: 'rename',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(LucideIcons.pencil, size: 15, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('Rename', style: TextStyle(fontSize: 13, color: Colors.white)),
-            ],
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'delete',
-          height: 36,
-          child: Row(
-            children: [
-              Icon(LucideIcons.trash_2, size: 15, color: Colors.redAccent),
-              SizedBox(width: 8),
-              Text('Delete', style: TextStyle(fontSize: 13, color: Colors.redAccent)),
-            ],
-          ),
-        ),
-      ],
+      items: items,
     );
 
     if (selected == null || !mounted || !context.mounted) return;
@@ -843,11 +980,36 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       case 'new_folder':
         _startInlineCreation(isDir: true);
         break;
+      case 'copy':
+        final pathsToCopy = hasSelection ? selectedPaths.toList() : [widget.path];
+        ref.read(fileClipboardProvider.notifier).state = ClipboardData(paths: pathsToCopy, isCut: false);
+        break;
+      case 'cut':
+        final pathsToCut = hasSelection ? selectedPaths.toList() : [widget.path];
+        ref.read(fileClipboardProvider.notifier).state = ClipboardData(paths: pathsToCut, isCut: true);
+        break;
+      case 'paste':
+        await _handlePaste();
+        break;
+      case 'copy_path':
+        await services.Clipboard.setData(services.ClipboardData(text: widget.path));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.copiedToClipboard)),
+          );
+        }
+        break;
+      case 'bookmark':
+        ref.read(bookmarksProvider.notifier).toggleBookmark(widget.path);
+        break;
       case 'rename':
         setState(() {
+          _inlineController?.dispose();
           _inlineController = TextEditingController(text: widget.name);
           _isRenaming = true;
-          _inlineFocusNode.requestFocus();
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _inlineFocusNode.requestFocus();
         });
         break;
       case 'delete':
@@ -861,57 +1023,77 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     final hasSelection = selectedPaths.isNotEmpty;
     final clipboard = ref.read(fileClipboardProvider);
     final l10n = AppLocalizations.of(context)!;
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final copyPathLabel = isRu ? 'Копировать путь' : 'Copy Path';
+    final iconInfo = FileIconHelper.getIconInfo(widget.visualName ?? widget.name, widget.isDirectory, false);
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xff18181b),
+      backgroundColor: const Color(0xFF18181B),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    child: Text(
-                      hasSelection ? l10n.selectedObjectsCount(selectedPaths.length) : widget.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Divider(color: Colors.white10),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(iconInfo.icon, size: 18, color: iconInfo.color),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            hasSelection ? l10n.selectedObjectsCount(selectedPaths.length) : widget.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(color: Colors.white10, height: 14),
                   if (widget.isDirectory && !hasSelection) ...[
                     _buildBottomSheetItem(
                       icon: LucideIcons.file_plus,
                       title: l10n.newFile,
-                      subtitle: l10n.newFileDesc,
                       color: Colors.blueAccent,
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pop(sheetContext);
                         _startInlineCreation(isDir: false);
                       },
                     ),
                     _buildBottomSheetItem(
                       icon: LucideIcons.folder_plus,
                       title: l10n.newFolder,
-                      subtitle: l10n.newFolderDesc,
                       color: Colors.orangeAccent,
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pop(sheetContext);
                         _startInlineCreation(isDir: true);
                       },
                     ),
-                    const Divider(color: Colors.white10),
+                    const Divider(color: Colors.white10, height: 10),
                   ],
                   if (!widget.isDirectory && !hasSelection) ...[
                     (() {
@@ -919,23 +1101,20 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
                       return _buildBottomSheetItem(
                         icon: LucideIcons.star,
                         title: isBookmarked ? l10n.removeFromBookmarks : l10n.addToBookmarks,
-                        subtitle: isBookmarked ? l10n.removeFromBookmarksDesc : l10n.addToBookmarksDesc,
                         color: isBookmarked ? Colors.redAccent : Colors.amberAccent,
                         onTap: () {
-                          Navigator.pop(context);
+                          Navigator.pop(sheetContext);
                           ref.read(bookmarksProvider.notifier).toggleBookmark(widget.path);
                         },
                       );
                     }()),
-                    const Divider(color: Colors.white10),
                   ],
                   _buildBottomSheetItem(
                     icon: LucideIcons.copy,
                     title: l10n.copy,
-                    subtitle: l10n.copyDesc,
                     color: Colors.white70,
                     onTap: () {
-                      Navigator.pop(context);
+                      Navigator.pop(sheetContext);
                       final pathsToProcess = hasSelection ? selectedPaths.toList() : [widget.path];
                       ref.read(fileClipboardProvider.notifier).state = ClipboardData(paths: pathsToProcess, isCut: false);
                     },
@@ -943,10 +1122,9 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
                   _buildBottomSheetItem(
                     icon: LucideIcons.scissors,
                     title: l10n.cut,
-                    subtitle: l10n.cutDesc,
                     color: Colors.white70,
                     onTap: () {
-                      Navigator.pop(context);
+                      Navigator.pop(sheetContext);
                       final pathsToProcess = hasSelection ? selectedPaths.toList() : [widget.path];
                       ref.read(fileClipboardProvider.notifier).state = ClipboardData(paths: pathsToProcess, isCut: true);
                     },
@@ -955,36 +1133,52 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
                     _buildBottomSheetItem(
                       icon: LucideIcons.clipboard_paste,
                       title: l10n.paste,
-                      subtitle: l10n.pasteDesc,
                       color: Colors.greenAccent,
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pop(sheetContext);
                         _handlePaste();
+                      },
+                    ),
+                  if (!hasSelection)
+                    _buildBottomSheetItem(
+                      icon: LucideIcons.link,
+                      title: copyPathLabel,
+                      color: Colors.white70,
+                      onTap: () async {
+                        Navigator.pop(sheetContext);
+                        await services.Clipboard.setData(services.ClipboardData(text: widget.path));
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l10n.copiedToClipboard)),
+                          );
+                        }
                       },
                     ),
                   if (!hasSelection)
                     _buildBottomSheetItem(
                       icon: LucideIcons.pencil,
                       title: l10n.rename,
-                      subtitle: l10n.renameDesc,
                       color: Colors.white70,
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pop(sheetContext);
                         setState(() {
+                          _inlineController?.dispose();
                           _inlineController = TextEditingController(text: widget.name);
                           _isRenaming = true;
-                          _inlineFocusNode.requestFocus();
+                        });
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) _inlineFocusNode.requestFocus();
                         });
                       },
                     ),
                   if (!hasSelection && widget.name.toLowerCase().endsWith('.apk')) ...[
+                    const Divider(color: Colors.white10, height: 10),
                     _buildBottomSheetItem(
                       icon: LucideIcons.smartphone,
                       title: 'Установить APK',
-                      subtitle: 'Запустить установку приложения на Android',
                       color: const Color(0xFF3DDC84),
                       onTap: () async {
-                        Navigator.pop(context);
+                        Navigator.pop(sheetContext);
                         try {
                           await OpenFilex.open(widget.path);
                         } catch (e) {
@@ -999,36 +1193,31 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
                     _buildBottomSheetItem(
                       icon: LucideIcons.share_2,
                       title: 'Поделиться APK',
-                      subtitle: 'Отправить APK файл через Telegram или соцсети',
                       color: Colors.cyanAccent,
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pop(sheetContext);
                         ShareUtils.shareFile(widget.path);
                       },
                     ),
-                    const Divider(color: Colors.white10),
                   ] else if (!widget.isDirectory && !hasSelection) ...[
                     _buildBottomSheetItem(
                       icon: LucideIcons.share_2,
-                      title: 'Поделиться файлом',
-                      subtitle: 'Отправить файл через другие приложения',
+                      title: isRu ? 'Поделиться файлом' : 'Share file',
                       color: Colors.cyanAccent,
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pop(sheetContext);
                         ShareUtils.shareFile(widget.path);
                       },
                     ),
-                    const Divider(color: Colors.white10),
                   ],
                   if (!hasSelection) ...[
                     if (widget.name.toLowerCase().endsWith('.zip'))
                       _buildBottomSheetItem(
                         icon: LucideIcons.file_archive,
                         title: l10n.extractZip,
-                        subtitle: l10n.extractZipDesc,
                         color: Colors.greenAccent,
                         onTap: () {
-                          Navigator.pop(context);
+                          Navigator.pop(sheetContext);
                           _extractZip(context, ref, widget.path);
                         },
                       )
@@ -1036,10 +1225,9 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
                       _buildBottomSheetItem(
                         icon: LucideIcons.file_archive,
                         title: l10n.compressZip,
-                        subtitle: l10n.compressZipDesc,
                         color: Colors.amberAccent,
                         onTap: () {
-                          Navigator.pop(context);
+                          Navigator.pop(sheetContext);
                           _showCompressDialog(context, ref, [widget.path]);
                         },
                       ),
@@ -1048,20 +1236,19 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
                     _buildBottomSheetItem(
                       icon: LucideIcons.file_archive,
                       title: l10n.compressSelectedZip,
-                      subtitle: l10n.compressSelectedZipDesc,
                       color: Colors.amberAccent,
                       onTap: () {
-                        Navigator.pop(context);
+                        Navigator.pop(sheetContext);
                         _showCompressDialog(context, ref, selectedPaths.toList());
                       },
                     ),
+                  const Divider(color: Colors.white10, height: 10),
                   _buildBottomSheetItem(
                     icon: LucideIcons.trash_2,
                     title: hasSelection ? l10n.deleteSelected : l10n.delete,
-                    subtitle: l10n.deleteDesc,
                     color: Colors.redAccent,
                     onTap: () {
-                      Navigator.pop(context);
+                      Navigator.pop(sheetContext);
                       _confirmDelete(context, ref);
                     },
                   ),
@@ -1077,29 +1264,50 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   Widget _buildBottomSheetItem({
     required IconData icon,
     required String title,
-    required String subtitle,
+    String? subtitle,
     required Color color,
     required VoidCallback onTap,
   }) {
     return ListTile(
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       leading: Container(
-        padding: const EdgeInsets.all(8),
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+          color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, size: 20, color: color),
+        child: Icon(icon, size: 17, color: color),
       ),
-      title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: color == Colors.redAccent ? Colors.redAccent : Colors.white,
+          fontSize: 13.5,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      subtitle: subtitle != null
+          ? Text(subtitle, style: const TextStyle(color: Colors.grey, fontSize: 11.5))
+          : null,
       onTap: onTap,
     );
   }
 
-  Widget _buildInlineRenameField() {
-    return Container(
-      height: 24,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
+  Widget _buildInlineRenameField({
+    required bool isTouchLayout,
+    required Color accentColor,
+  }) {
+    final fieldHeight = isTouchLayout ? 36.0 : 26.0;
+    final btnSize = isTouchLayout ? 34.0 : 26.0;
+    final iconSize = isTouchLayout ? 16.0 : 14.0;
+
+    return SizedBox(
+      height: fieldHeight,
       child: Row(
         children: [
           Expanded(
@@ -1107,46 +1315,63 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
               controller: _inlineController,
               focusNode: _inlineFocusNode,
               autofocus: true,
-              style: const TextStyle(fontSize: 13, color: Colors.white),
+              style: TextStyle(fontSize: isTouchLayout ? 13.5 : 12.5, color: Colors.white),
               decoration: InputDecoration(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: isTouchLayout ? 8 : 4,
+                ),
                 isDense: true,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(color: Colors.blueAccent, width: 1),
+                  borderRadius: BorderRadius.circular(5),
+                  borderSide: BorderSide(color: accentColor, width: 1),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(color: Colors.blueAccent, width: 1.5),
+                  borderRadius: BorderRadius.circular(5),
+                  borderSide: BorderSide(color: accentColor, width: 1.5),
                 ),
               ),
-              onSubmitted: (val) => _submitRename(),
+              onSubmitted: (_) => _submitRename(),
             ),
           ),
           const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(LucideIcons.check, size: 14, color: Colors.greenAccent),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: _submitRename,
+          SizedBox(
+            width: btnSize,
+            height: btnSize,
+            child: IconButton(
+              icon: Icon(LucideIcons.check, size: iconSize, color: Colors.greenAccent),
+              padding: EdgeInsets.zero,
+              constraints: BoxConstraints.tightFor(width: btnSize, height: btnSize),
+              onPressed: _submitRename,
+            ),
           ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 14, color: Colors.redAccent),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: () {
-              setState(() {
-                _isRenaming = false;
-              });
-            },
+          SizedBox(
+            width: btnSize,
+            height: btnSize,
+            child: IconButton(
+              icon: Icon(LucideIcons.x, size: iconSize, color: Colors.redAccent),
+              padding: EdgeInsets.zero,
+              constraints: BoxConstraints.tightFor(width: btnSize, height: btnSize),
+              onPressed: () {
+                setState(() {
+                  _isRenaming = false;
+                });
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInlineCreateField({required bool isDir}) {
+  Widget _buildInlineCreateField({
+    required bool isDir,
+    required bool isTouchLayout,
+    required Color accentColor,
+  }) {
+    final fieldHeight = isTouchLayout ? 36.0 : 26.0;
+    final btnSize = isTouchLayout ? 34.0 : 26.0;
+    final iconSize = isTouchLayout ? 16.0 : 14.0;
     final indentGuides = <Widget>[];
     if (widget.depth > -1) {
       for (int i = 0; i <= widget.depth; i++) {
@@ -1154,8 +1379,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         final showLine = isNodeConnector ? true : !widget.ancestorIsLast[i];
         indentGuides.add(
           _GuideSegment(
-            width: 16,
-            height: 24,
+            width: 12,
             lineColor: Colors.white.withValues(alpha: 0.08),
             showVertical: showLine,
             isNodeConnector: isNodeConnector,
@@ -1165,77 +1389,98 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       }
     }
 
-    return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-      child: Row(
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: indentGuides,
-          ),
-          const SizedBox(width: 16),
-          Icon(
-            isDir ? LucideIcons.folder : LucideIcons.file,
-            size: 18,
-            color: isDir ? Colors.blue.shade400 : Colors.grey.shade400,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              height: 24,
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _inlineController,
-                      focusNode: _inlineFocusNode,
-                      autofocus: true,
-                      style: const TextStyle(fontSize: 13, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: isDir
-                            ? AppLocalizations.of(context)!.nameFolderHint
-                            : AppLocalizations.of(context)!.nameFileHint,
-                        hintStyle: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.3)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: const BorderSide(color: Colors.blueAccent, width: 1),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide: const BorderSide(color: Colors.blueAccent, width: 1.5),
-                        ),
-                      ),
-                      onSubmitted: (val) => _submitCreate(isDir),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(LucideIcons.check, size: 14, color: Colors.greenAccent),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _submitCreate(isDir),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    icon: const Icon(LucideIcons.x, size: 14, color: Colors.redAccent),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () {
-                      setState(() {
-                        _isCreatingFile = false;
-                        _isCreatingFolder = false;
-                      });
-                    },
-                  ),
-                ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: indentGuides,
+            ),
+            const SizedBox(width: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4.0),
+              child: Icon(
+                isDir ? LucideIcons.folder : LucideIcons.file,
+                size: isTouchLayout ? 16.5 : 15.0,
+                color: isDir ? Colors.blue.shade400 : Colors.grey.shade400,
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3.0),
+                child: SizedBox(
+                  height: fieldHeight,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _inlineController,
+                          focusNode: _inlineFocusNode,
+                          autofocus: true,
+                          style: TextStyle(fontSize: isTouchLayout ? 13.5 : 12.5, color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: isDir
+                                ? AppLocalizations.of(context)!.nameFolderHint
+                                : AppLocalizations.of(context)!.nameFileHint,
+                            hintStyle: TextStyle(
+                              fontSize: isTouchLayout ? 12 : 11,
+                              color: Colors.white.withValues(alpha: 0.3),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: isTouchLayout ? 8 : 4,
+                            ),
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                              borderSide: BorderSide(color: accentColor, width: 1),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(5),
+                              borderSide: BorderSide(color: accentColor, width: 1.5),
+                            ),
+                          ),
+                          onSubmitted: (_) => _submitCreate(isDir),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      SizedBox(
+                        width: btnSize,
+                        height: btnSize,
+                        child: IconButton(
+                          icon: Icon(LucideIcons.check, size: iconSize, color: Colors.greenAccent),
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints.tightFor(width: btnSize, height: btnSize),
+                          onPressed: () => _submitCreate(isDir),
+                        ),
+                      ),
+                      SizedBox(
+                        width: btnSize,
+                        height: btnSize,
+                        child: IconButton(
+                          icon: Icon(LucideIcons.x, size: iconSize, color: Colors.redAccent),
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints.tightFor(width: btnSize, height: btnSize),
+                          onPressed: () {
+                            setState(() {
+                              _isCreatingFile = false;
+                              _isCreatingFolder = false;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1302,14 +1547,27 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     }
 
     final isSelected = ref.watch(selectedPathsProvider).contains(widget.path);
+    final isActiveFile = !widget.isDirectory &&
+        ref.watch(editorProvider.select((s) => s.activeFilePath == widget.path));
     final gitColor = _getGitStatusColor(ref);
 
-    return _buildNode(gitColor, isSelected, isExpanded);
+    return _buildNode(gitColor, isSelected, isExpanded, isActiveFile);
   }
 
-  Widget _buildNode(Color gitColor, bool isSelected, bool isExpanded) {
+  Widget _buildNode(Color gitColor, bool isSelected, bool isExpanded, bool isActiveFile) {
     final searchQuery = ref.watch(fileSearchQueryProvider);
-    final isMobile = MediaQuery.of(context).size.width < 700;
+    final isTouchLayout = MediaQuery.of(context).size.width < 768;
+    final settings = ref.watch(settingsProvider);
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+    final accentColor = palette?.accent ?? Theme.of(context).colorScheme.primary;
+
+    final verticalPad = isTouchLayout ? 7.5 : 4.0;
+    final iconSize = isTouchLayout ? 16.5 : 15.0;
+    final chevronSize = isTouchLayout ? 14.0 : 13.0;
+    final indentWidth = isTouchLayout ? 11.0 : 12.0;
+
     final indentGuides = <Widget>[];
     if (widget.depth > 0) {
       for (int i = 0; i < widget.depth; i++) {
@@ -1317,8 +1575,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         final showLine = isNodeConnector ? true : !widget.ancestorIsLast[i];
         indentGuides.add(
           _GuideSegment(
-            width: isMobile ? 9 : 12,
-            height: 20,
+            width: indentWidth,
             lineColor: Colors.white.withValues(alpha: 0.08),
             showVertical: showLine,
             isNodeConnector: isNodeConnector,
@@ -1327,6 +1584,14 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         );
       }
     }
+
+    final rowBgColor = isSelected
+        ? accentColor.withValues(alpha: 0.2)
+        : isActiveFile
+            ? accentColor.withValues(alpha: 0.12)
+            : _isHovered
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.transparent;
 
     final nodeContent = MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -1368,100 +1633,133 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         },
         onLongPress: () => _showBottomSheetMenu(context, ref),
         onSecondaryTapUp: (details) => _showDesktopContextMenu(context, ref, details.globalPosition),
-        child: Container(
-            decoration: BoxDecoration(
-              color: isSelected 
-                  ? Colors.blue.withValues(alpha: 0.18) 
-                  : _isHovered
-                      ? Colors.white.withValues(alpha: 0.04)
-                      : Colors.transparent,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: isMobile ? 3.0 : 4.0),
-            child: Row(
-              children: [
-                if (widget.depth > 0)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: indentGuides,
-                  ),
-                if (widget.isDirectory)
-                  Icon(
-                    isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right,
-                    size: isMobile ? 12.0 : 13.0,
-                    color: isExpanded ? Colors.white70 : Colors.white38,
-                  )
-                else
-                  SizedBox(width: isMobile ? 9 : 11),
-                const SizedBox(width: 4),
-                () {
-                  final iconInfo = FileIconHelper.getIconInfo(widget.visualName ?? widget.name, widget.isDirectory, isExpanded);
-                  return Icon(
-                    iconInfo.icon,
-                    size: isMobile ? 13.5 : 14.5,
-                    color: iconInfo.color,
-                  );
-                }(),
-                SizedBox(width: isMobile ? 5 : 6),
-                Expanded(
-                  child: _isRenaming
-                      ? _buildInlineRenameField()
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: _buildFileNameText(
-                                widget.visualName ?? widget.name,
-                                searchQuery,
-                                gitColor,
-                                isMobile: isMobile,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            color: rowBgColor,
+            padding: EdgeInsets.only(right: isTouchLayout ? 2.0 : 4.0),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (isActiveFile)
+                    Container(
+                      width: 2.0,
+                      color: accentColor,
+                    )
+                  else
+                    const SizedBox(width: 2.0),
+                  SizedBox(width: isTouchLayout ? 3.0 : 2.0),
+                  if (widget.depth > 0)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: indentGuides,
+                    ),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: verticalPad),
+                      child: Row(
+                        children: [
+                          if (widget.isDirectory)
+                            Icon(
+                              isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right,
+                              size: chevronSize,
+                              color: isExpanded ? Colors.white70 : Colors.white38,
+                            )
+                          else
+                            SizedBox(width: chevronSize),
+                          const SizedBox(width: 4),
+                          () {
+                            final iconInfo = FileIconHelper.getIconInfo(
+                              widget.visualName ?? widget.name,
+                              widget.isDirectory,
+                              isExpanded,
+                            );
+                            return Icon(
+                              iconInfo.icon,
+                              size: iconSize,
+                              color: iconInfo.color,
+                            );
+                          }(),
+                          SizedBox(width: isTouchLayout ? 7 : 6),
+                          Expanded(
+                            child: _isRenaming
+                                ? _buildInlineRenameField(
+                                    isTouchLayout: isTouchLayout,
+                                    accentColor: accentColor,
+                                  )
+                                : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                        child: _buildFileNameText(
+                                          widget.visualName ?? widget.name,
+                                          searchQuery,
+                                          gitColor,
+                                          isTouchLayout: isTouchLayout,
+                                          isActiveFile: isActiveFile,
+                                        ),
+                                      ),
+                                      if (!widget.isDirectory && ref.watch(bookmarksProvider).contains(widget.path)) ...[
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          LucideIcons.star,
+                                          size: 10.5,
+                                          color: Colors.amberAccent,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                          ),
+                          if (!_isRenaming) ...[
+                            if (gitColor != Colors.white70 && gitColor != Colors.white)
+                              _buildGitBadge(gitColor, ref),
+                            if (!isTouchLayout && (_isHovered || isSelected) && widget.isDirectory) ...[
+                              _buildFolderQuickActionButton(
+                                icon: LucideIcons.file_plus,
+                                tooltip: AppLocalizations.of(context)!.newFile,
+                                onTap: () => _startInlineCreation(isDir: false),
                               ),
-                            ),
-                            if (!widget.isDirectory && ref.watch(bookmarksProvider).contains(widget.path)) ...[
-                              const SizedBox(width: 4),
-                              const Icon(
-                                LucideIcons.star,
-                                size: 10,
-                                color: Colors.amberAccent,
+                              _buildFolderQuickActionButton(
+                                icon: LucideIcons.folder_plus,
+                                tooltip: AppLocalizations.of(context)!.newFolder,
+                                onTap: () => _startInlineCreation(isDir: true),
                               ),
                             ],
                           ],
-                        ),
-                ),
-                if (!_isRenaming) ...[
-                  if (gitColor != Colors.white70 && gitColor != Colors.white)
-                    _buildGitBadge(gitColor, ref),
-                  if ((_isHovered || isSelected) && widget.isDirectory) ...[
-                    _buildFolderQuickActionButton(
-                      icon: LucideIcons.file_plus,
-                      tooltip: 'Создать файл в "${widget.name}"',
-                      onTap: () => _startInlineCreation(isDir: false),
-                    ),
-                    _buildFolderQuickActionButton(
-                      icon: LucideIcons.folder_plus,
-                      tooltip: 'Создать папку в "${widget.name}"',
-                      onTap: () => _startInlineCreation(isDir: true),
-                    ),
-                  ],
-                ],
-                if (!_isRenaming && (_isHovered || isSelected))
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showBottomSheetMenu(context, ref),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-                      child: Icon(
-                        LucideIcons.ellipsis,
-                        size: 13,
-                        color: Colors.white.withValues(alpha: 0.5),
+                        ],
                       ),
                     ),
                   ),
-              ],
+                  if (!_isRenaming && (isTouchLayout || _isHovered || isSelected || isActiveFile))
+                    Center(
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () => _showBottomSheetMenu(context, ref),
+                            child: Center(
+                              child: Icon(
+                                LucideIcons.ellipsis_vertical,
+                                size: isTouchLayout ? 15.5 : 13.5,
+                                color: Colors.white.withValues(alpha: isTouchLayout ? 0.45 : 0.55),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
-      );
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1498,17 +1796,17 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
           },
           builder: (context, candidateData, rejectedData) {
             final isOver = candidateData.isNotEmpty;
-            final isMobile = Platform.isAndroid || Platform.isIOS;
+            final isMobilePlatform = Platform.isAndroid || Platform.isIOS;
 
             final childWidget = Container(
               decoration: BoxDecoration(
-                color: isOver ? Colors.blue.withValues(alpha: 0.15) : Colors.transparent,
+                color: isOver ? accentColor.withValues(alpha: 0.15) : Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: nodeContent,
             );
 
-            if (isMobile) {
+            if (isMobilePlatform) {
               return childWidget;
             }
 
@@ -1550,19 +1848,23 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         ),
         if (widget.isDirectory && isExpanded && _children != null) ...[
           if (_isCreatingFile || _isCreatingFolder)
-            _buildInlineCreateField(isDir: _isCreatingFolder),
+            _buildInlineCreateField(
+              isDir: _isCreatingFolder,
+              isTouchLayout: isTouchLayout,
+              accentColor: accentColor,
+            ),
           if (_children!.isEmpty && !_isCreatingFile && !_isCreatingFolder)
             Padding(
               padding: EdgeInsets.only(
-                left: (widget.depth + 1) * 12.0 + 15.0,
-                top: 3.0,
-                bottom: 3.0,
+                left: (widget.depth + 1) * indentWidth + 20.0,
+                top: 4.0,
+                bottom: 4.0,
               ),
               child: Text(
                 AppLocalizations.of(context)!.empty,
                 style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.white.withValues(alpha: 0.15),
+                  fontSize: 10.5,
+                  color: Colors.white.withValues(alpha: 0.2),
                 ),
               ),
             )
@@ -1591,7 +1893,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
 
 class _GuideSegment extends StatelessWidget {
   final double width;
-  final double height;
+  final double? height;
   final Color lineColor;
   final bool showVertical;
   final bool isNodeConnector;
@@ -1599,7 +1901,7 @@ class _GuideSegment extends StatelessWidget {
 
   const _GuideSegment({
     required this.width,
-    required this.height,
+    this.height,
     required this.lineColor,
     required this.showVertical,
     this.isNodeConnector = false,
@@ -1655,10 +1957,10 @@ class _GuideSegmentPainter extends CustomPainter {
 
     // Draw vertical connector from top to mid
     canvas.drawLine(Offset(x, 0), Offset(x, yMid), paint);
-    
+
     // Draw horizontal branch line to the right
     canvas.drawLine(Offset(x, yMid), Offset(size.width, yMid), paint);
-    
+
     // Draw vertical line from mid to bottom if not the last item in folder
     if (!isLast) {
       canvas.drawLine(Offset(x, yMid), Offset(x, size.height), paint);
@@ -1673,3 +1975,4 @@ class _GuideSegmentPainter extends CustomPainter {
         oldDelegate.isLast != isLast;
   }
 }
+

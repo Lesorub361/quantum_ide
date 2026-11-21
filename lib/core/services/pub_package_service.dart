@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/services/network_inspector_service.dart';
 import '../../models/pub_package.dart';
 
 class PubPackageService extends StateNotifier<AsyncValue<List<PubPackage>>> {
-  final _dio = Dio();
-  
+  final _dio = Dio()..interceptors.add(NetworkInspectorService.dioInterceptor);
+
   PubPackageService() : super(const AsyncValue.data([]));
 
   Future<void> search(String query) async {

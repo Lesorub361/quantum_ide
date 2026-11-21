@@ -10,7 +10,6 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
-import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:re_editor/re_editor.dart';
 
 // Vibrant user colors for Live Share cursor overlays
@@ -871,7 +870,6 @@ class CollaborationService extends StateNotifier<CollaborationState> {
           final localContent = file.readAsStringSync();
           if (localContent != content) {
             file.writeAsStringSync(content);
-            ref.read(projectServiceProvider.notifier).mirrorEntity(absolutePath);
           }
         }
       }
@@ -920,7 +918,6 @@ class CollaborationService extends StateNotifier<CollaborationState> {
         final file = File(absolutePath);
         if (file.existsSync()) {
           file.writeAsStringSync(newText);
-          ref.read(projectServiceProvider.notifier).mirrorEntity(absolutePath);
         }
       }
     } catch (e) {
