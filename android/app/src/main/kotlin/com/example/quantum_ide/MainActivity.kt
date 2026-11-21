@@ -45,6 +45,10 @@ class MainActivity : FlutterActivity() {
         usbAdbBridge = UsbAdbBridge(applicationContext, filesDir, processManager).also {
             it.start()
         }
+        try {
+            ShizukuProvider.enableMultiProcessSupport(false)
+            ShizukuProvider.requestBinderForNonProviderProcess(applicationContext)
+        } catch (_: Throwable) {}
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -184,31 +188,41 @@ class MainActivity : FlutterActivity() {
                     }.start()
                 }
                 "shizukuStatus" -> {
-                    try {
-                        if (!Shizuku.pingBinder()) {
-                            try {
-                                ShizukuProvider.enableMultiProcessSupport(false)
-                                ShizukuProvider.requestBinderForNonProviderProcess(applicationContext)
-                            } catch (_: Throwable) {}
+                    Thread {
+                        try {
+                            if (!Shizuku.pingBinder()) {
+                                try {
+                                    ShizukuProvider.enableMultiProcessSupport(false)
+                                    ShizukuProvider.requestBinderForNonProviderProcess(applicationContext)
+                                } catch (_: Throwable) {}
+                                for (i in 0 until 8) {
+                                    if (Shizuku.pingBinder()) break
+                                    try { Thread.sleep(50) } catch (_: InterruptedException) { break }
+                                }
+                            }
+                            val available = Shizuku.pingBinder()
+                            val granted = available && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+                            val uid = if (available) {
+                                try { Shizuku.getUid() } catch (_: Throwable) { -1 }
+                            } else -1
+                            runOnUiThread {
+                                result.success(mapOf(
+                                    "available" to available,
+                                    "permissionGranted" to granted,
+                                    "uid" to uid
+                                ))
+                            }
+                        } catch (e: Throwable) {
+                            runOnUiThread {
+                                result.success(mapOf(
+                                    "available" to false,
+                                    "permissionGranted" to false,
+                                    "uid" to -1,
+                                    "error" to (e.message ?: e.toString())
+                                ))
+                            }
                         }
-                        val available = Shizuku.pingBinder()
-                        val granted = available && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-                        val uid = if (available) {
-                            try { Shizuku.getUid() } catch (_: Throwable) { -1 }
-                        } else -1
-                        result.success(mapOf(
-                            "available" to available,
-                            "permissionGranted" to granted,
-                            "uid" to uid
-                        ))
-                    } catch (e: Throwable) {
-                        result.success(mapOf(
-                            "available" to false,
-                            "permissionGranted" to false,
-                            "uid" to -1,
-                            "error" to (e.message ?: e.toString())
-                        ))
-                    }
+                    }.start()
                 }
                 "shizukuRequestPermission" -> {
                     try {

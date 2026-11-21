@@ -28,10 +28,8 @@ class GlassContainer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userBlur = ref.watch(settingsProvider.select((s) => s.glassmorphismBlur));
     final userOpacity = ref.watch(settingsProvider.select((s) => s.glassmorphismOpacity));
-    // Avoid expensive GPU offscreen BackdropFilter passes on Android tablets/phones
-    final effectiveBlur = (Platform.isAndroid || userBlur <= 0) ? 0.0 : (blur ?? userBlur);
+    const effectiveBlur = 0.0;
     final effectiveOpacity = opacity ?? userOpacity;
 
     Widget current = Container(
@@ -90,9 +88,8 @@ class GlassAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userBlur = ref.watch(settingsProvider.select((s) => s.glassmorphismBlur));
     final userOpacity = ref.watch(settingsProvider.select((s) => s.glassmorphismOpacity));
-    final effectiveBlur = (Platform.isAndroid || userBlur <= 0) ? 0.0 : (blur ?? userBlur);
+    const effectiveBlur = 0.0;
     final effectiveOpacity = opacity ?? userOpacity;
 
     final Widget appBar = AppBar(

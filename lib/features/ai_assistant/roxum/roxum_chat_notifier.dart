@@ -35,6 +35,79 @@ class RoxumTimelineItem {
     this.toolCall,
     this.fileEdit,
   });
+
+  static Map<String, dynamic> _toolCallToJson(RoxumToolCallRecord tc) => {
+        'id': tc.id,
+        'name': tc.name,
+        'arguments': tc.arguments,
+        'isRunning': false,
+        'success': tc.success,
+        'output': tc.output.length > 4000
+            ? '${tc.output.substring(0, 4000)}\n... [truncated]'
+            : tc.output,
+      };
+
+  static RoxumToolCallRecord _toolCallFromJson(Map<String, dynamic> j) =>
+      RoxumToolCallRecord(
+        id: j['id']?.toString() ?? '',
+        name: j['name']?.toString() ?? '',
+        arguments: (j['arguments'] is Map)
+            ? Map<String, dynamic>.from(j['arguments'] as Map)
+            : const {},
+        isRunning: false,
+        success: j['success'] != false,
+        output: j['output']?.toString() ?? '',
+      );
+
+  static Map<String, dynamic> _pendingEditToJson(RoxumPendingEdit fe) => {
+        'filePath': fe.filePath,
+        'existedBefore': fe.existedBefore,
+        'addedLines': fe.addedLines,
+        'removedLines': fe.removedLines,
+      };
+
+  static RoxumPendingEdit _pendingEditFromJson(Map<String, dynamic> j) =>
+      RoxumPendingEdit(
+        filePath: j['filePath']?.toString() ?? '',
+        originalContent: '',
+        updatedContent: '',
+        existedBefore: j['existedBefore'] != false,
+        addedLines: (j['addedLines'] as num?)?.toInt() ?? 0,
+        removedLines: (j['removedLines'] as num?)?.toInt() ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'kind': kind.name,
+        'text': text,
+        'durationMs': durationMs,
+        if (toolCall != null) 'toolCall': _toolCallToJson(toolCall!),
+        if (fileEdit != null) 'fileEdit': _pendingEditToJson(fileEdit!),
+      };
+
+  factory RoxumTimelineItem.fromJson(Map<String, dynamic> json) {
+    final kindStr = json['kind']?.toString() ?? 'text';
+    final kind = RoxumTimelineKind.values.firstWhere(
+      (k) => k.name == kindStr,
+      orElse: () => RoxumTimelineKind.text,
+    );
+    return RoxumTimelineItem(
+      id: json['id']?.toString() ?? const Uuid().v4(),
+      kind: kind,
+      text: json['text']?.toString() ?? '',
+      durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
+      toolCall: json['toolCall'] is Map
+          ? _toolCallFromJson(
+              Map<String, dynamic>.from(json['toolCall'] as Map),
+            )
+          : null,
+      fileEdit: json['fileEdit'] is Map
+          ? _pendingEditFromJson(
+              Map<String, dynamic>.from(json['fileEdit'] as Map),
+            )
+          : null,
+    );
+  }
 }
 
 class RoxumConversationTurn {
@@ -100,6 +173,12 @@ class RoxumConversationTurn {
         'aiResponse': aiResponse,
         'reasoningText': reasoningText,
         'thinkingDurationMs': thinkingDurationMs,
+        'toolCalls':
+            toolCalls.map(RoxumTimelineItem._toolCallToJson).toList(),
+        'fileEdits':
+            fileEdits.map(RoxumTimelineItem._pendingEditToJson).toList(),
+        'timeline': timeline.map((e) => e.toJson()).toList(),
+        'attachmentNames': attachmentNames,
         'promptTokens': usage.promptTokens,
         'completionTokens': usage.completionTokens,
         'totalTokens': usage.totalTokens,
@@ -113,12 +192,35 @@ class RoxumConversationTurn {
     final cTok = (json['completionTokens'] as num?)?.toInt() ?? 0;
     final tTok = (json['totalTokens'] as num?)?.toInt() ?? (pTok + cTok);
     final cost = (json['costUsd'] as num?)?.toDouble() ?? 0.0;
+    final rawTools = (json['toolCalls'] as List?) ?? const [];
+    final rawEdits = (json['fileEdits'] as List?) ?? const [];
+    final rawTimeline = (json['timeline'] as List?) ?? const [];
+    final rawAtts = (json['attachmentNames'] as List?) ?? const [];
     return RoxumConversationTurn(
       id: json['id']?.toString() ?? const Uuid().v4(),
       userRequest: json['userRequest']?.toString() ?? '',
       aiResponse: json['aiResponse']?.toString() ?? '',
       reasoningText: json['reasoningText']?.toString() ?? '',
       thinkingDurationMs: (json['thinkingDurationMs'] as num?)?.toInt() ?? 0,
+      toolCalls: rawTools
+          .whereType<Map>()
+          .map((e) => RoxumTimelineItem._toolCallFromJson(
+                Map<String, dynamic>.from(e),
+              ))
+          .toList(),
+      fileEdits: rawEdits
+          .whereType<Map>()
+          .map((e) => RoxumTimelineItem._pendingEditFromJson(
+                Map<String, dynamic>.from(e),
+              ))
+          .toList(),
+      timeline: rawTimeline
+          .whereType<Map>()
+          .map((e) => RoxumTimelineItem.fromJson(
+                Map<String, dynamic>.from(e),
+              ))
+          .toList(),
+      attachmentNames: rawAtts.map((e) => e.toString()).toList(),
       usage: RoxumUsageStats(
         promptTokens: pTok,
         completionTokens: cTok,
@@ -248,13 +350,25 @@ final roxumChatProvider =
     NotifierProvider<RoxumChatNotifier, RoxumChatState>(RoxumChatNotifier.new);
 
 class RoxumChatNotifier extends Notifier<RoxumChatState> {
-  static const _prefsKey = 'roxum_chat_sessions_v1';
   final RoxumAiClient _client = RoxumAiClient();
   bool _cancelled = false;
+  String _activePrefsKey = 'roxum_chat_sessions_v2_global';
+
+  static String _prefsKeyForWorkspace(String? workspacePath) {
+    final normalized = (workspacePath ?? '').trim();
+    if (normalized.isEmpty) return 'roxum_chat_sessions_v2_global';
+    final encoded = base64Url.encode(utf8.encode(normalized));
+    return 'roxum_chat_sessions_v2_$encoded';
+  }
 
   @override
   RoxumChatState build() {
     ref.onDispose(_client.cancel);
+    final workspacePath = ref.watch(
+      workspaceProvider.select((w) => w.currentPath),
+    );
+    final prefsKey = _prefsKeyForWorkspace(workspacePath);
+    _activePrefsKey = prefsKey;
     final initialId = const Uuid().v4();
     final initialSession = RoxumChatSession(
       id: initialId,
@@ -262,7 +376,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       turns: const [],
       updatedAt: DateTime.now(),
     );
-    _restoreSessions();
+    _restoreSessions(prefsKey);
     Future.microtask(refreshAllModels);
     return RoxumChatState(
       sessions: [initialSession],
@@ -271,16 +385,18 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     );
   }
 
-  Future<void> _restoreSessions() async {
+  Future<void> _restoreSessions(String prefsKey) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_prefsKey);
+      if (_activePrefsKey != prefsKey) return;
+      final raw = prefs.getString(prefsKey);
       if (raw == null || raw.isEmpty) return;
       final list = jsonDecode(raw) as List;
       final parsed = list
           .whereType<Map>()
           .map((e) => RoxumChatSession.fromJson(e.cast<String, dynamic>()))
           .toList();
+      if (_activePrefsKey != prefsKey) return;
       if (parsed.isNotEmpty) {
         state = state.copyWith(
           sessions: parsed,
@@ -294,11 +410,12 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
 
   Future<void> _persistSessions() async {
     try {
+      final key = _activePrefsKey;
       final prefs = await SharedPreferences.getInstance();
       final encoded = jsonEncode(
         state.sessions.take(25).map((s) => s.toJson()).toList(),
       );
-      await prefs.setString(_prefsKey, encoded);
+      await prefs.setString(key, encoded);
     } catch (_) {}
   }
 

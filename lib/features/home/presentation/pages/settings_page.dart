@@ -424,36 +424,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               sn.setCustomPrimaryColor,
             ),
           ),
-          _tile(
-            context,
-            icon: LucideIcons.layers,
-            title: AppLocalizations.of(context)!.glassOpacity,
-            subtitle: '${(s.glassmorphismOpacity * 100).toInt()}%',
-            onTap: () => _showSliderDialog(
-              context,
-              AppLocalizations.of(context)!.glassOpacity,
-              s.glassmorphismOpacity,
-              0.05,
-              0.60,
-              sn.setGlassmorphismOpacity,
-              isPercentage: true,
-              divisions: 11,
-            ),
-          ),
-          _tile(
-            context,
-            icon: LucideIcons.blend,
-            title: AppLocalizations.of(context)!.backdropBlur,
-            subtitle: '${s.glassmorphismBlur.toInt()} px',
-            onTap: () => _showSliderDialog(
-              context,
-              AppLocalizations.of(context)!.backdropBlur,
-              s.glassmorphismBlur,
-              0.0,
-              30.0,
-              sn.setGlassmorphismBlur,
-            ),
-          ),
           _switchTile(
             context,
             title: AppLocalizations.of(context)!.unifiedThemeTitle,
@@ -553,7 +523,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     // ─── 4.5. DeepSeek Harness (AI Agent) ────────────────────────────────────
     if (showAll || _selectedCategory == 'dsh') {
       widgets.addAll([
-        _sectionHeader(context, 'DeepSeek Harness (AI Agent)'),
+        _sectionHeader(context, isRu ? 'AI-агент и API-ключи' : 'AI Agent & API Keys'),
         _settingsGroup(context, [
           _tile(
             context,
@@ -605,21 +575,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               s.anthropicApiKey,
               sn.setAnthropicApiKey,
               obscure: true,
-            ),
-          ),
-          _tile(
-            context,
-            icon: LucideIcons.server,
-            title: isRu ? 'Порт веб-сервера Harness' : 'Harness Web Port',
-            subtitle: '${s.dshPort}',
-            onTap: () => _showTextInputDialog(
-              context,
-              isRu ? 'Порт сервера DeepSeek Harness' : 'DeepSeek Harness Port',
-              '${s.dshPort}',
-              (v) {
-                final p = int.tryParse(v) ?? 3080;
-                sn.setDshPort(p);
-              },
             ),
           ),
         ]),

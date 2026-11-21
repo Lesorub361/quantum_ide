@@ -7,6 +7,8 @@ import 'package:quantum_ide/core/services/todo_tree_service.dart';
 import 'package:quantum_ide/core/services/test_runner_service.dart';
 import 'package:quantum_ide/core/services/dependency_checker_service.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
+import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/ui_customizer_modal.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
@@ -27,28 +29,33 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final pluginCount = ref.watch(quantumPluginServiceProvider.select((s) => s.plugins.length));
+    final settings = ref.watch(settingsProvider);
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+    final theme = Theme.of(context);
+    final bgColor = palette?.panel ?? theme.colorScheme.surface;
+    final fg = palette?.foreground ?? theme.colorScheme.onSurface;
+    final muted = palette?.mutedForeground ?? theme.colorScheme.onSurfaceVariant;
+    final accent = palette?.accent ?? theme.colorScheme.primary;
+    final border = palette?.border ?? theme.colorScheme.outlineVariant;
 
     return Container(
-      color: const Color(0xFF0D0F14).withValues(alpha: 0.7),
+      color: bgColor,
       child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             child: Row(
               children: [
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Colors.cyanAccent, Colors.purpleAccent],
-                  ).createShader(bounds),
-                  child: const Icon(LucideIcons.puzzle, color: Colors.white, size: 18),
-                ),
+                Icon(LucideIcons.puzzle, color: accent, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   'Плагины & Расширения',
                   style: GoogleFonts.inter(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: fg,
                   ),
                 ),
               ],
@@ -60,14 +67,14 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             child: Row(
               children: [
-                _buildSegmentButton(0, 'Мои плагины ($pluginCount)', LucideIcons.blocks),
+                _buildSegmentButton(0, 'Мои плагины ($pluginCount)', LucideIcons.blocks, accent, fg, muted, border),
                 const SizedBox(width: 6),
-                _buildSegmentButton(1, 'Инструменты IDE', LucideIcons.wrench),
+                _buildSegmentButton(1, 'Инструменты IDE', LucideIcons.wrench, accent, fg, muted, border),
               ],
             ),
           ),
 
-          const Divider(height: 1, color: Colors.white10),
+          Divider(height: 1, color: border),
 
           Expanded(
             child: IndexedStack(
@@ -85,7 +92,15 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
     );
   }
 
-  Widget _buildSegmentButton(int index, String label, IconData icon) {
+  Widget _buildSegmentButton(
+    int index,
+    String label,
+    IconData icon,
+    Color accent,
+    Color fg,
+    Color muted,
+    Color border,
+  ) {
     final isSelected = _selectedTabSection == index;
     return Expanded(
       child: InkWell(
@@ -98,16 +113,16 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
           padding: const EdgeInsets.symmetric(vertical: 6),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF8B5CF6).withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.03),
+            color: isSelected ? accent.withValues(alpha: 0.16) : fg.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isSelected ? const Color(0xFF8B5CF6).withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.05),
+              color: isSelected ? accent.withValues(alpha: 0.5) : border,
             ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 11, color: isSelected ? const Color(0xFFC084FC) : Colors.white54),
+              Icon(icon, size: 11, color: isSelected ? accent : muted),
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
@@ -117,7 +132,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? Colors.white : Colors.white60,
+                    color: isSelected ? fg : muted,
                   ),
                 ),
               ),
@@ -131,6 +146,16 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
   Widget _buildUserPluginsView() {
     final pluginState = ref.watch(quantumPluginServiceProvider);
     final pluginService = ref.read(quantumPluginServiceProvider.notifier);
+    final settings = ref.watch(settingsProvider);
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+    final theme = Theme.of(context);
+    final accent = palette?.accent ?? theme.colorScheme.primary;
+    final fg = palette?.foreground ?? theme.colorScheme.onSurface;
+    final muted = palette?.mutedForeground ?? theme.colorScheme.onSurfaceVariant;
+    final border = palette?.border ?? theme.colorScheme.outlineVariant;
+    final cardBg = palette?.panelElevated ?? theme.colorScheme.surfaceContainerHigh;
 
     return RefreshIndicator(
       onRefresh: () => pluginService.loadPlugins(),
@@ -145,8 +170,10 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                   icon: const Icon(LucideIcons.plus, size: 13),
                   label: const Text('Создать плагин', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                    foregroundColor: Colors.white,
+                    backgroundColor: accent,
+                    foregroundColor: ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
@@ -158,8 +185,8 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                 icon: const Icon(LucideIcons.refresh_cw, size: 12),
                 label: const Text('Обновить', style: TextStyle(fontSize: 11)),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  side: const BorderSide(color: Colors.white12),
+                  foregroundColor: fg,
+                  side: BorderSide(color: border),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -175,24 +202,19 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFF00E5FF).withValues(alpha: 0.15),
-                    const Color(0xFF8B5CF6).withValues(alpha: 0.15),
-                  ],
-                ),
+                color: accent.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.35)),
+                border: Border.all(color: accent.withValues(alpha: 0.35)),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.cyanAccent.withValues(alpha: 0.2),
+                      color: accent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(LucideIcons.sliders_horizontal, size: 20, color: Colors.cyanAccent),
+                    child: Icon(LucideIcons.sliders_horizontal, size: 20, color: accent),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -200,18 +222,18 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '🎨 Настройка интерфейса и кнопок',
-                          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.white),
+                          'Настройка интерфейса и кнопок',
+                          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.bold, color: fg),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Живая настройка клавиш терминала, высоты, шрифта, вкладок и код для ИИ-агента',
-                          style: GoogleFonts.inter(fontSize: 10, color: Colors.white70),
+                          style: GoogleFonts.inter(fontSize: 10, color: muted),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(LucideIcons.chevron_right, size: 16, color: Colors.cyanAccent),
+                  Icon(LucideIcons.chevron_right, size: 16, color: accent),
                 ],
               ),
             ),
@@ -223,7 +245,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
             style: GoogleFonts.inter(
               fontSize: 10,
               fontWeight: FontWeight.bold,
-              color: Colors.white38,
+              color: muted,
               letterSpacing: 0.8,
             ),
           ),
@@ -234,23 +256,23 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
               padding: const EdgeInsets.all(16),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.02),
+                color: cardBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                border: Border.all(color: border),
               ),
               child: Column(
                 children: [
-                  const Icon(LucideIcons.puzzle, size: 26, color: Color(0xFFC084FC)),
+                  Icon(LucideIcons.puzzle, size: 26, color: accent),
                   const SizedBox(height: 8),
                   Text(
                     'Нет установленных плагинов',
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: fg),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Нажмите «Создать плагин» выше, чтобы настроить иконки, команды терминала или чат-бота под себя!',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white38),
+                    style: GoogleFonts.inter(fontSize: 10.5, color: muted),
                   ),
                 ],
               ),
@@ -261,14 +283,10 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: plugin.isEnabled
-                    ? Colors.white.withValues(alpha: 0.035)
-                    : Colors.white.withValues(alpha: 0.015),
+                color: cardBg,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: plugin.isEnabled
-                      ? const Color(0xFF8B5CF6).withValues(alpha: 0.35)
-                      : Colors.white.withValues(alpha: 0.06),
+                  color: plugin.isEnabled ? accent.withValues(alpha: 0.4) : border,
                 ),
               ),
               child: Column(
@@ -279,10 +297,10 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                          color: accent.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Icon(LucideIcons.puzzle, size: 15, color: Color(0xFFC084FC)),
+                        child: Icon(LucideIcons.puzzle, size: 15, color: accent),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -294,27 +312,27 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                                 Flexible(
                                   child: Text(
                                     plugin.name,
-                                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: fg),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
                                   'v${plugin.version}',
-                                  style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.white38),
+                                  style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: muted),
                                 ),
                               ],
                             ),
                             Text(
                               'Автор: ${plugin.author}',
-                              style: GoogleFonts.inter(fontSize: 10, color: Colors.white54),
+                              style: GoogleFonts.inter(fontSize: 10, color: muted),
                             ),
                           ],
                         ),
                       ),
                       Switch(
                         value: plugin.isEnabled,
-                        activeThumbColor: const Color(0xFF8B5CF6),
+                        activeThumbColor: accent,
                         onChanged: (val) => pluginService.togglePlugin(plugin.id, val),
                       ),
                     ],
@@ -323,7 +341,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                     const SizedBox(height: 6),
                     Text(
                       plugin.description,
-                      style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.3),
+                      style: GoogleFonts.inter(fontSize: 11, color: fg.withValues(alpha: 0.8), height: 1.3),
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -332,19 +350,19 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                     runSpacing: 4,
                     children: [
                       if (plugin.folderIcons.isNotEmpty || plugin.fileIcons.isNotEmpty)
-                        _buildFeaturePill(LucideIcons.palette, '${plugin.folderIcons.length + plugin.fileIcons.length} иконок', Colors.cyanAccent),
+                        _buildFeaturePill(LucideIcons.palette, '${plugin.folderIcons.length + plugin.fileIcons.length} иконок', accent),
                       if (plugin.terminalCommands.isNotEmpty)
                         _buildFeaturePill(LucideIcons.terminal, '${plugin.terminalCommands.length} команд', Colors.greenAccent),
                       if (plugin.customBots.isNotEmpty)
                         _buildFeaturePill(LucideIcons.bot, '${plugin.customBots.length} ботов', Colors.amberAccent),
                       if (plugin.customButtons.isNotEmpty)
-                        _buildFeaturePill(LucideIcons.sparkles, '${plugin.customButtons.length} кнопок', Colors.purpleAccent),
+                        _buildFeaturePill(LucideIcons.sparkles, '${plugin.customButtons.length} кнопок', accent),
                       if (plugin.disabledTabs.isNotEmpty)
                         _buildFeaturePill(LucideIcons.eye_off, '${plugin.disabledTabs.length} скрытых вкладок', Colors.orangeAccent),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Divider(color: Colors.white10, height: 1),
+                  Divider(color: border, height: 1),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -357,8 +375,8 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                               SnackBar(content: Text('Файл плагина открыт в редакторе: ${plugin.name}')),
                             );
                           },
-                          icon: const Icon(LucideIcons.file_code, size: 13, color: Colors.cyanAccent),
-                          label: const Text('Редактировать код', style: TextStyle(fontSize: 11, color: Colors.cyanAccent)),
+                          icon: Icon(LucideIcons.file_code, size: 13, color: accent),
+                          label: Text('Редактировать код', style: TextStyle(fontSize: 11, color: accent)),
                         ),
                       IconButton(
                         icon: const Icon(LucideIcons.trash_2, size: 13, color: Colors.redAccent),

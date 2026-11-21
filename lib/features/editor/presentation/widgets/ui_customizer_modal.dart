@@ -5,6 +5,8 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
+import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
 
 /// Modal dialog / bottom sheet for comprehensive, live visual customization
@@ -17,10 +19,10 @@ class UiCustomizerModal extends ConsumerStatefulWidget {
     HapticFeedback.lightImpact();
     return showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF0F1219),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) => UiCustomizerModal(isRu: isRu),
@@ -34,6 +36,31 @@ class UiCustomizerModal extends ConsumerStatefulWidget {
 class _UiCustomizerModalState extends ConsumerState<UiCustomizerModal>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  ConduitPalette? get _activePalette {
+    final s = ref.read(settingsProvider);
+    return s.syncAppWithTerminalPalette
+        ? resolveConduitPalette(s.terminalTheme)
+        : null;
+  }
+
+  Color get _accent =>
+      _activePalette?.accent ?? Theme.of(context).colorScheme.primary;
+  Color get _secondaryAccent => Theme.of(context).colorScheme.secondary;
+  Color get _panelBg =>
+      _activePalette?.panel ?? Theme.of(context).colorScheme.surface;
+  Color get _canvasBg =>
+      _activePalette?.canvas ?? Theme.of(context).scaffoldBackgroundColor;
+  Color get _cardBg =>
+      _activePalette?.panelElevated ??
+      Theme.of(context).colorScheme.surfaceContainerHigh;
+  Color get _border =>
+      _activePalette?.border ?? Theme.of(context).colorScheme.outlineVariant;
+  Color get _fg =>
+      _activePalette?.foreground ?? Theme.of(context).colorScheme.onSurface;
+  Color get _muted =>
+      _activePalette?.mutedForeground ??
+      Theme.of(context).colorScheme.onSurfaceVariant;
 
   // Local editable state for real-time live preview
   late double _keyHeight;
@@ -200,13 +227,13 @@ class _UiCustomizerModalState extends ConsumerState<UiCustomizerModal>
           behavior: SnackBarBehavior.floating,
           content: Row(
             children: [
-              const Icon(LucideIcons.circle_check, color: Colors.white, size: 18),
+              Icon(LucideIcons.circle_check, color: Colors.white, size: 18),
               const SizedBox(width: 8),
               Text(
                 widget.isRu
                     ? 'Раскладка UI сохранена в .quantum/plugins/ui_layout.json!'
                     : 'UI Layout saved to .quantum/plugins/ui_layout.json!',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -277,17 +304,17 @@ $jsonStr
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: const Color(0xFF8B5CF6),
+        backgroundColor: _accent,
         behavior: SnackBarBehavior.floating,
         content: Row(
           children: [
-            const Icon(LucideIcons.clipboard_check, color: Colors.white, size: 18),
+            Icon(LucideIcons.clipboard_check, color: Colors.white, size: 18),
             const SizedBox(width: 8),
             Text(
               widget.isRu
                   ? '📋 Промпт и JSON скопированы! Вставьте агенту в терминал.'
                   : '📋 Prompt and JSON copied! Paste into in-terminal agent.',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -322,7 +349,7 @@ $jsonStr
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          backgroundColor: const Color(0xFF141722),
+          backgroundColor: _cardBg,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text(
             widget.isRu ? 'Добавить клавишу в терминал' : 'Add Terminal Key',
@@ -333,20 +360,20 @@ $jsonStr
             children: [
               TextField(
                 controller: labelCtrl,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: widget.isRu ? 'Название кнопки (например: Git, Run, Cls)' : 'Key Label (e.g. Git, Run)',
-                  labelStyle: const TextStyle(color: Colors.white60),
+                  labelStyle: TextStyle(color: Colors.white60),
                   enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: cmdCtrl,
-                style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent),
+                style: GoogleFonts.jetBrainsMono(color: _accent),
                 decoration: InputDecoration(
                   labelText: widget.isRu ? 'Команда или символ (например: git status)' : 'Command or symbol',
-                  labelStyle: const TextStyle(color: Colors.white60),
+                  labelStyle: TextStyle(color: Colors.white60),
                   enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                 ),
               ),
@@ -355,7 +382,7 @@ $jsonStr
                 children: [
                   Text(
                     widget.isRu ? 'Ряд:' : 'Row:',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                   const SizedBox(width: 12),
                   ChoiceChip(
@@ -379,7 +406,7 @@ $jsonStr
               child: Text(widget.isRu ? 'Отмена' : 'Cancel'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
+              style: ElevatedButton.styleFrom(backgroundColor: _accent),
               onPressed: () {
                 final label = labelCtrl.text.trim();
                 final cmd = cmdCtrl.text.trim();
@@ -401,7 +428,7 @@ $jsonStr
               },
               child: Text(
                 widget.isRu ? 'Добавить' : 'Add',
-                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -412,9 +439,14 @@ $jsonStr
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(settingsProvider);
     return Container(
       height: MediaQuery.of(context).size.height * 0.92,
       padding: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: _panelBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -439,10 +471,10 @@ $jsonStr
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: Colors.cyanAccent.withValues(alpha: 0.15),
+                    color: _accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.palette, size: 18, color: Colors.cyanAccent),
+                  child: Icon(LucideIcons.palette, size: 18, color: _accent),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -467,21 +499,21 @@ $jsonStr
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(LucideIcons.rotate_ccw, size: 18, color: Colors.white60),
+                  icon: Icon(LucideIcons.rotate_ccw, size: 18, color: _muted),
                   tooltip: widget.isRu ? 'Сбросить по умолчанию' : 'Reset defaults',
                   onPressed: _resetToDefaults,
                 ),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isDirty ? Colors.cyanAccent : Colors.cyanAccent.withValues(alpha: 0.8),
+                    backgroundColor: _isDirty ? _accent : _accent.withValues(alpha: 0.8),
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  icon: const Icon(LucideIcons.save, size: 15),
+                  icon: Icon(LucideIcons.save, size: 15),
                   label: Text(
                     widget.isRu ? 'Сохранить' : 'Save',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                   onPressed: _saveChanges,
                 ),
@@ -501,30 +533,30 @@ $jsonStr
               controller: _tabController,
               isScrollable: true,
               tabAlignment: TabAlignment.start,
-              indicatorColor: Colors.cyanAccent,
+              indicatorColor: _accent,
               indicatorSize: TabBarIndicatorSize.tab,
-              labelColor: Colors.cyanAccent,
+              labelColor: _accent,
               unselectedLabelColor: Colors.white60,
               labelStyle: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold),
               tabs: [
                 Tab(
-                  icon: const Icon(LucideIcons.keyboard, size: 14),
+                  icon: Icon(LucideIcons.keyboard, size: 14),
                   text: widget.isRu ? 'Клавиши' : 'Virtual Keys',
                 ),
                 Tab(
-                  icon: const Icon(LucideIcons.layout_grid, size: 14),
+                  icon: Icon(LucideIcons.layout_grid, size: 14),
                   text: widget.isRu ? 'Терминал' : 'Terminal Tabs',
                 ),
                 Tab(
-                  icon: const Icon(LucideIcons.panel_left, size: 14),
+                  icon: Icon(LucideIcons.panel_left, size: 14),
                   text: widget.isRu ? 'Боковая панель' : 'Sidebar',
                 ),
                 Tab(
-                  icon: const Icon(LucideIcons.navigation, size: 14),
+                  icon: Icon(LucideIcons.navigation, size: 14),
                   text: widget.isRu ? 'Навигация' : 'Bottom Nav',
                 ),
                 Tab(
-                  icon: const Icon(LucideIcons.bot, size: 14),
+                  icon: Icon(LucideIcons.bot, size: 14),
                   text: widget.isRu ? 'ИИ & JSON' : 'AI Prompt & JSON',
                 ),
               ],
@@ -560,15 +592,15 @@ $jsonStr
         // Live Preview Box
         Text(
           widget.isRu ? 'ЖИВОЙ ПРЕДПРОСМОТР КЛАВИШ:' : 'LIVE KEYPAD PREVIEW:',
-          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.cyanAccent, letterSpacing: 1),
+          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: _accent, letterSpacing: 1),
         ),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF090B10),
+            color: _canvasBg,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3), width: 1),
+            border: Border.all(color: _accent.withValues(alpha: 0.3), width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -594,7 +626,7 @@ $jsonStr
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (k.icon != null) ...[
-                            Icon(k.icon, size: _keyFontSize + 1, color: Colors.cyanAccent),
+                            Icon(k.icon, size: _keyFontSize + 1, color: _accent),
                             const SizedBox(width: 4),
                           ],
                           Text(
@@ -623,7 +655,7 @@ $jsonStr
                   ),
                   Text(
                     '${enabledKeys.length} ${widget.isRu ? "активных кнопок" : "active keys"}',
-                    style: GoogleFonts.inter(fontSize: 10, color: Colors.cyanAccent),
+                    style: GoogleFonts.inter(fontSize: 10, color: _accent),
                   ),
                 ],
               ),
@@ -645,7 +677,7 @@ $jsonStr
               // Height Slider
               Row(
                 children: [
-                  const Icon(LucideIcons.move_vertical, size: 16, color: Colors.cyanAccent),
+                  Icon(LucideIcons.move_vertical, size: 16, color: _accent),
                   const SizedBox(width: 8),
                   Text(
                     widget.isRu ? 'Высота кнопок' : 'Button Height',
@@ -654,7 +686,7 @@ $jsonStr
                   const Spacer(),
                   Text(
                     '${_keyHeight.round()} px',
-                    style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                    style: GoogleFonts.jetBrainsMono(fontSize: 12, color: _accent, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -663,7 +695,7 @@ $jsonStr
                 min: 22.0,
                 max: 46.0,
                 divisions: 24,
-                activeColor: Colors.cyanAccent,
+                activeColor: _accent,
                 onChanged: (val) => setState(() {
                   _keyHeight = val;
                   _isDirty = true;
@@ -673,7 +705,7 @@ $jsonStr
               // Font Size Slider
               Row(
                 children: [
-                  const Icon(LucideIcons.type, size: 16, color: Colors.purpleAccent),
+                  Icon(LucideIcons.type, size: 16, color: _secondaryAccent),
                   const SizedBox(width: 8),
                   Text(
                     widget.isRu ? 'Размер шрифта' : 'Font Size',
@@ -682,7 +714,7 @@ $jsonStr
                   const Spacer(),
                   Text(
                     '${_keyFontSize.toStringAsFixed(1)} pt',
-                    style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.purpleAccent, fontWeight: FontWeight.bold),
+                    style: GoogleFonts.jetBrainsMono(fontSize: 12, color: _secondaryAccent, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -691,7 +723,7 @@ $jsonStr
                 min: 9.0,
                 max: 16.0,
                 divisions: 14,
-                activeColor: Colors.purpleAccent,
+                activeColor: _secondaryAccent,
                 onChanged: (val) => setState(() {
                   _keyFontSize = val;
                   _isDirty = true;
@@ -708,7 +740,7 @@ $jsonStr
                   style: GoogleFonts.inter(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500),
                 ),
                 value: _isCompact,
-                activeColor: Colors.cyanAccent,
+                activeColor: _accent,
                 onChanged: (val) => setState(() {
                   _isCompact = val;
                   _isDirty = true;
@@ -723,7 +755,7 @@ $jsonStr
                   style: GoogleFonts.inter(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500),
                 ),
                 value: _showMoreButton,
-                activeColor: Colors.cyanAccent,
+                activeColor: _accent,
                 onChanged: (val) => setState(() {
                   _showMoreButton = val;
                   _isDirty = true;
@@ -737,12 +769,12 @@ $jsonStr
         // Action Buttons: Add Custom Key
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.cyanAccent,
-            side: const BorderSide(color: Colors.cyanAccent, width: 0.8),
+            foregroundColor: _accent,
+            side: BorderSide(color: _accent, width: 0.8),
             padding: const EdgeInsets.symmetric(vertical: 10),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          icon: const Icon(LucideIcons.plus, size: 16),
+          icon: Icon(LucideIcons.plus, size: 16),
           label: Text(
             widget.isRu ? 'Добавить свою клавишу / команду' : 'Add Custom Key / Command',
             style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600),
@@ -781,10 +813,10 @@ $jsonStr
               margin: const EdgeInsets.only(bottom: 5),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: key.isEnabled ? const Color(0xFF141824) : Colors.white.withValues(alpha: 0.02),
+                color: key.isEnabled ? _cardBg : Colors.white.withValues(alpha: 0.02),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: key.isEnabled ? const Color(0xFF232D42) : Colors.white.withValues(alpha: 0.05),
+                  color: key.isEnabled ? _border : Colors.white.withValues(alpha: 0.05),
                 ),
               ),
               child: Row(
@@ -792,7 +824,7 @@ $jsonStr
                   Icon(
                     key.icon ?? (key.isToggle ? LucideIcons.toggle_left : LucideIcons.command),
                     size: 15,
-                    color: key.isEnabled ? Colors.cyanAccent : Colors.white24,
+                    color: key.isEnabled ? _accent : Colors.white24,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -818,7 +850,7 @@ $jsonStr
                               ),
                               child: Text(
                                 'Ряд ${key.row}',
-                                style: const TextStyle(fontSize: 9, color: Colors.white54),
+                                style: TextStyle(fontSize: 9, color: Colors.white54),
                               ),
                             ),
                           ],
@@ -835,7 +867,7 @@ $jsonStr
                   ),
                   Switch.adaptive(
                     value: key.isEnabled,
-                    activeColor: Colors.cyanAccent,
+                    activeColor: _accent,
                     onChanged: (val) => setState(() {
                       _keys[index] = key.copyWith(isEnabled: val);
                       _isDirty = true;
@@ -843,7 +875,7 @@ $jsonStr
                   ),
                   if (isCustom)
                     IconButton(
-                      icon: const Icon(LucideIcons.trash_2, size: 15, color: Colors.redAccent),
+                      icon: Icon(LucideIcons.trash_2, size: 15, color: Colors.redAccent),
                       onPressed: () => setState(() {
                         _keys.removeAt(index);
                         _isDirty = true;
@@ -904,7 +936,7 @@ $jsonStr
           widget.isRu
               ? 'ВКЛАДКИ НИЖНЕЙ ПАНЕЛИ ТЕРМИНАЛА (Включить / Выключить / Порядок):'
               : 'TERMINAL PANEL TABS (Toggle visibility & drag to reorder):',
-          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: _accent),
         ),
         const SizedBox(height: 8),
 
@@ -929,15 +961,15 @@ $jsonStr
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: isEnabled ? const Color(0xFF141824) : Colors.white.withValues(alpha: 0.02),
+                color: isEnabled ? _cardBg : Colors.white.withValues(alpha: 0.02),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: isEnabled ? const Color(0xFF232D42) : Colors.white.withValues(alpha: 0.05),
+                  color: isEnabled ? _border : Colors.white.withValues(alpha: 0.05),
                 ),
               ),
               child: Row(
                 children: [
-                  Icon(getTabIcon(tabId), size: 16, color: isEnabled ? Colors.cyanAccent : Colors.white24),
+                  Icon(getTabIcon(tabId), size: 16, color: isEnabled ? _accent : Colors.white24),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -951,7 +983,7 @@ $jsonStr
                   ),
                   Switch.adaptive(
                     value: isEnabled,
-                    activeColor: Colors.cyanAccent,
+                    activeColor: _accent,
                     onChanged: (val) => setState(() {
                       if (val) {
                         _disabledPanelTabs.remove(tabId);
@@ -1024,7 +1056,7 @@ $jsonStr
           widget.isRu
               ? 'РАЗДЕЛЫ БОКОВОЙ ПАНЕЛИ (Включить / Выключить / Порядок):'
               : 'SIDEBAR ACTIVITY BAR (Toggle visibility & drag to reorder):',
-          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purpleAccent),
+          style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: _secondaryAccent),
         ),
         const SizedBox(height: 8),
 
@@ -1049,10 +1081,10 @@ $jsonStr
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: isEnabled ? const Color(0xFF141824) : Colors.white.withValues(alpha: 0.02),
+                color: isEnabled ? _cardBg : Colors.white.withValues(alpha: 0.02),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: isEnabled ? const Color(0xFF232D42) : Colors.white.withValues(alpha: 0.05),
+                  color: isEnabled ? _border : Colors.white.withValues(alpha: 0.05),
                 ),
               ),
               child: Row(
@@ -1071,7 +1103,7 @@ $jsonStr
                   ),
                   Switch.adaptive(
                     value: isEnabled,
-                    activeColor: Colors.purpleAccent,
+                    activeColor: _secondaryAccent,
                     onChanged: (val) => setState(() {
                       if (val) {
                         _disabledSidebarSections.remove(secId);
@@ -1125,7 +1157,7 @@ $jsonStr
                   style: GoogleFonts.inter(fontSize: 11, color: Colors.white54),
                 ),
                 value: _showBottomNav,
-                activeColor: Colors.cyanAccent,
+                activeColor: _accent,
                 onChanged: (val) => setState(() {
                   _showBottomNav = val;
                   _isDirty = true;
@@ -1136,10 +1168,10 @@ $jsonStr
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   widget.isRu ? 'Кнопка «Файлы» (Files)' : 'Button "Files"',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
                 value: !_disabledBottomNavButtons.contains('files'),
-                activeColor: Colors.cyanAccent,
+                activeColor: _accent,
                 onChanged: (val) => setState(() {
                   if (val) {
                     _disabledBottomNavButtons.remove('files');
@@ -1153,10 +1185,10 @@ $jsonStr
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   widget.isRu ? 'Кнопка «Редактор» (Editor)' : 'Button "Editor"',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
                 value: !_disabledBottomNavButtons.contains('editor'),
-                activeColor: Colors.cyanAccent,
+                activeColor: _accent,
                 onChanged: (val) => setState(() {
                   if (val) {
                     _disabledBottomNavButtons.remove('editor');
@@ -1170,10 +1202,10 @@ $jsonStr
                 contentPadding: EdgeInsets.zero,
                 title: Text(
                   widget.isRu ? 'Кнопка «Терминал» (Terminal)' : 'Button "Terminal"',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: TextStyle(color: Colors.white, fontSize: 12),
                 ),
                 value: !_disabledBottomNavButtons.contains('terminal'),
-                activeColor: Colors.cyanAccent,
+                activeColor: _accent,
                 onChanged: (val) => setState(() {
                   if (val) {
                     _disabledBottomNavButtons.remove('terminal');
@@ -1204,15 +1236,15 @@ $jsonStr
               Expanded(
                 child: FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
+                    backgroundColor: _accent,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  icon: const Icon(LucideIcons.clipboard_copy, size: 16),
+                  icon: Icon(LucideIcons.clipboard_copy, size: 16),
                   label: Text(
                     widget.isRu ? 'Скопировать промпт для ИИ-агента' : 'Copy Prompt for AI Agent',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
                   ),
                   onPressed: _copyPromptForAgent,
                 ),
