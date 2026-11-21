@@ -1,6 +1,8 @@
 // Ported & adapted from roxum-ide (MIT License) - https://github.com/heckmon/roxum-ide
 
 import 'dart:convert';
+import 'package:dio/dio.dart';
+import 'package:dio_smart_retry/dio_smart_retry.dart';
 import 'package:http/http.dart' as http;
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
@@ -332,6 +334,29 @@ class _ParsedTurn {
 class RoxumAiClient {
   http.Client? _client;
 
+  static final Dio _retryDio = _createRetryDio();
+
+  static Dio _createRetryDio() {
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 7),
+        receiveTimeout: const Duration(seconds: 10),
+        validateStatus: (status) => status != null && status < 500,
+      ),
+    );
+    dio.interceptors.add(
+      RetryInterceptor(
+        dio: dio,
+        retries: 2,
+        retryDelays: const [
+          Duration(milliseconds: 450),
+          Duration(seconds: 1),
+        ],
+      ),
+    );
+    return dio;
+  }
+
   void cancel() {
     _client?.close();
     _client = null;
@@ -367,14 +392,16 @@ class RoxumAiClient {
     Object? lastError;
     for (final url in candidates) {
       try {
-        final res = await http
-            .get(Uri.parse(url), headers: headers)
-            .timeout(const Duration(seconds: 6));
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          lastError = Exception('HTTP ${res.statusCode} ($url)');
+        final res = await _retryDio.get<dynamic>(
+          url,
+          options: Options(headers: headers),
+        );
+        final status = res.statusCode ?? 0;
+        if (status < 200 || status >= 300) {
+          lastError = Exception('HTTP $status ($url)');
           continue;
         }
-        final decoded = jsonDecode(res.body);
+        final decoded = res.data is String ? jsonDecode(res.data as String) : res.data;
         final ids = <String>[];
         if (decoded is Map && decoded['data'] is List) {
           for (final item in decoded['data'] as List) {
@@ -412,15 +439,18 @@ class RoxumAiClient {
       bool defaultFree = false,
     }) async {
       try {
-        final res = await http.get(
-          Uri.parse(modelsUrl),
-          headers: {
-            'Content-Type': 'application/json',
-            if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
-          },
-        ).timeout(const Duration(seconds: 7));
-        if (res.statusCode < 200 || res.statusCode >= 300) return const [];
-        final decoded = jsonDecode(res.body);
+        final res = await _retryDio.get<dynamic>(
+          modelsUrl,
+          options: Options(
+            headers: {
+              'Content-Type': 'application/json',
+              if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+            },
+          ),
+        );
+        final status = res.statusCode ?? 0;
+        if (status < 200 || status >= 300) return const [];
+        final decoded = res.data is String ? jsonDecode(res.data as String) : res.data;
         if (decoded is! Map || decoded['data'] is! List) return const [];
         final out = <RoxumModelOption>[];
         for (final item in decoded['data'] as List) {

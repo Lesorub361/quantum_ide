@@ -13,6 +13,7 @@ import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dar
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/services/workspace_watcher_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/ui_customizer_modal.dart';
@@ -431,6 +432,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(workspaceWatcherProvider);
     final openFiles = ref.watch(editorProvider.select((s) => s.openFiles));
     final openFilesCount = openFiles.length;
     final rawActiveIndex = ref.watch(

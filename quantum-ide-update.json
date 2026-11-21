@@ -1,16 +1,16 @@
 {
-  "versionCode": 297,
-  "versionName": "1.2.280",
-  "notes": "## 🚀 QuantumIDE v1.2.280\n\n### Что нового и исправлено\n- **Новое окно создания проектов**:\n  - Убраны лишние блоки «Иконка проекта» и «Акцентный цвет» из интерфейса и модели проекта.\n  - Добавлены нормальные параметры проекта: **Домен (Org)** + **Application ID / Package Name** с живым автообновлением от названия (`com.example.<имя_проекта>`), выбор **compileSdk** (API 34/35/36), **minSdk** (API 21/24/26) и целевых платформ.\n  - Параметры `--org`, `namespace`/`applicationId`, `compileSdk` и `minSdk` теперь реально передаются в `flutter create` и Android Gradle шаблоны.\n- **Иконки проектов на карточках**:\n  - Расширен поиск иконок приложений: поддерживаются `.png` и `.webp`, нативные пути `app/src/main/res/`, `flutter_launcher_icons` (`image_path` в `pubspec.yaml`) и `assets/`.\n  - Для проектов без своей иконки отображаются аккуратные иконки по типу проекта (`Flutter`, `Kotlin`, `Java`, `Web`, `Node`, `Python`, `Rust`) вместо одинаковых папок.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
+  "versionCode": 298,
+  "versionName": "1.2.281",
+  "notes": "## 🚀 QuantumIDE v1.2.281\n\n### Что нового и улучшено\n- **Живое слежение за проектом (`watcher: ^1.2.1`)**:\n  - Добавлен [`WorkspaceWatcherService`](lib/core/services/workspace_watcher_service.dart): дерево файлов в Проводнике теперь обновляется автоматически при создании/изменении файлов или сборке APK из терминала.\n- **Точный подсчёт токенов (`langchain_tiktoken: ^1.0.1`)**:\n  - В поле ввода AI-чата отображается живой счётчик BPE-токенов (`cl100k_base`) в реальном времени.\n- **Устойчивые сетевые запросы (`dio_smart_retry`)**:\n  - В `RoxumAiClient` подключён `RetryInterceptor` с автоповтором при кратковременных сбоях сети и ошибках `429/502/503/504`.\n- **Цветные ANSI-логи в Run / Build Logs**:\n  - Добавлен `AnsiTextParser`: вывод Gradle и Flutter с ANSI-цветами корректно подсвечивается в панелях логов сборки и запуска.\n- **UI-панели**:\n  - В `pubspec.yaml` добавлен `multi_split_view: ^3.6.2` для дальнейшего расширения гибких разделителей панелей.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.280/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.281/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.280",
-  "buildNumber": 297,
-  "tag_name": "v1.2.280",
-  "releaseNotes": "Переписано окно создания проектов (убраны цвет и иконка, добавлена автосинхронизация Package Name, compileSdk и minSdk) и исправлено отображение иконок проектов на карточках."
+  "version": "1.2.281",
+  "buildNumber": 298,
+  "tag_name": "v1.2.281",
+  "releaseNotes": "Добавлено живое автообновление проводника (watcher), точный BPE-подсчёт токенов (langchain_tiktoken), автоповтор сетевых запросов (dio_smart_retry) и цветные ANSI-логи в Run/Build."
 }

@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/services/token_counter_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
@@ -1223,6 +1224,21 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                         textColor: textColor,
                         mutedColor: mutedColor,
                         accentColor: accentColor,
+                      ),
+                    ],
+                    if (_hasPromptText && !chatState.isGenerating) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        TokenCounterService.formatCompact(
+                          TokenCounterService.countTokens(
+                            _promptController.text,
+                          ),
+                        ),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: mutedColor.withValues(alpha: 0.78),
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
                     ],
                     const SizedBox(width: 6),

@@ -14,6 +14,7 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/utils/ansi_text_parser.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/build_progress_card.dart';
 import 'package:quantum_ide/core/services/android_app_installer_service.dart';
@@ -1851,12 +1852,14 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
             child: Icon(icon, size: 11, color: iconColor),
           ),
           Expanded(
-            child: SelectableText(
-              item.text,
-              style: GoogleFonts.jetBrainsMono(
-                color: textColor,
-                fontSize: 10.5,
-                height: 1.45,
+            child: SelectableText.rich(
+              AnsiTextParser.parse(
+                item.text,
+                baseStyle: GoogleFonts.jetBrainsMono(
+                  color: textColor,
+                  fontSize: 10.5,
+                  height: 1.45,
+                ),
               ),
             ),
           ),
