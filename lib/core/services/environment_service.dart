@@ -117,7 +117,7 @@ class EnvironmentService extends StateNotifier<EnvironmentState> {
       // 1. Установить необходимые пакеты
       await runtime.runCommand(
         'apt-get update && apt-get install -y '
-        'adb aapt zipalign apksigner clang lld cmake ninja-build '
+        'adb aapt zipalign apksigner clang lld llvm cmake ninja-build '
         'pkg-config libgtk-3-dev openjdk-21-jdk python3 curl wget unzip',
       );
 

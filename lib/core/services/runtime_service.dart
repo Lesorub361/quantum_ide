@@ -1636,7 +1636,26 @@ _quantum_tune_gradle() {
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
         touch /tmp/.quantum_healed_ok 2>/dev/null || true
+    else
+        /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
     fi
+
+    mkdir -p ~/.gradle/init.d /root/.gradle/init.d 2>/dev/null || true
+    for idir in ~/.gradle/init.d /root/.gradle/init.d; do
+        [ -d "$idir" ] || continue
+        cat > "$idir/quantum-no-lint.gradle" 2>/dev/null <<'INIT_EOF' || true
+allprojects {
+    afterEvaluate { project ->
+        project.tasks.configureEach { task ->
+            def n = task.name.toLowerCase()
+            if (n.contains("lintvital") || n.contains("lintmodel") || n.contains("lintjarForPublish".toLowerCase()) || n.contains("locallintaar")) {
+                task.enabled = false
+            }
+        }
+    }
+}
+INIT_EOF
+    done
 
     mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
     for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties; do
@@ -2112,12 +2131,31 @@ flutter() {
             gradle_workers="$GRADLE_WORKERS_OVERRIDE"
         fi
 
+        export BOX64_NOBANNER=1
         export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
         export DART_VM_OPTIONS="--old_gen_heap_size=${dart_heap}"
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${gradle_workers} -Dorg.gradle.parallel=${gradle_parallel} -Dorg.gradle.caching=true -Dkotlin.compiler.execution.strategy=in-process"
+        export CMAKE_BUILD_PARALLEL_LEVEL="${gradle_workers}"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${gradle_workers} -Dorg.gradle.parallel=${gradle_parallel} -Dorg.gradle.caching=true -Dorg.gradle.vfs.watch=false -Dkotlin.compiler.execution.strategy=in-process -Dkotlin.daemon.jvm.options=-Xmx512m"
 
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+
+        mkdir -p ~/.gradle/init.d /root/.gradle/init.d 2>/dev/null || true
+        for idir in ~/.gradle/init.d /root/.gradle/init.d; do
+            [ -d "$idir" ] || continue
+            cat > "$idir/quantum-no-lint.gradle" 2>/dev/null <<'INIT_EOF' || true
+allprojects {
+    afterEvaluate { project ->
+        project.tasks.configureEach { task ->
+            def n = task.name.toLowerCase()
+            if (n.contains("lintvital") || n.contains("lintmodel") || n.contains("lintjarforpublish") || n.contains("locallintaar")) {
+                task.enabled = false
+            }
+        }
+    }
+}
+INIT_EOF
+        done
 
         mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
         for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties; do
@@ -2126,7 +2164,9 @@ flutter() {
 org.gradle.daemon=false
 org.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta} -Dfile.encoding=UTF-8
 kotlin.compiler.execution.strategy=in-process
+kotlin.daemon.jvm.options=-Xmx512m
 org.gradle.caching=true
+org.gradle.vfs.watch=false
 org.gradle.parallel=${gradle_parallel}
 org.gradle.workers.max=${gradle_workers}
 android.aapt2FromMaven=false
@@ -3516,8 +3556,16 @@ WRAP_EOF
 
         for tool in llvm-ar llvm-ranlib llvm-strip llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-readobj llvm-symbolizer llvm-strings llvm-cxxfilt llvm-as llvm-dis llvm-link llvm-cov llvm-profdata llvm-size llvm-rc llvm-ml llvm-lib llvm-dlltool; do
             SYS_TOOL=$(ls /usr/bin/${tool}-[0-9]* 2>/dev/null | sort -V | tail -n 1)
-            [ -z "$SYS_TOOL" ] && SYS_TOOL="/usr/bin/$tool"
-            if [ -x "$SYS_TOOL" ]; then
+            [ -z "$SYS_TOOL" ] && [ -x "/usr/bin/$tool" ] && SYS_TOOL="/usr/bin/$tool"
+            if [ -z "$SYS_TOOL" ] || [ ! -x "$SYS_TOOL" ]; then
+                base_tool="${tool#llvm-}"
+                if [ -x "/usr/bin/aarch64-linux-gnu-$base_tool" ]; then
+                    SYS_TOOL="/usr/bin/aarch64-linux-gnu-$base_tool"
+                elif [ -x "/usr/bin/$base_tool" ]; then
+                    SYS_TOOL="/usr/bin/$base_tool"
+                fi
+            fi
+            if [ -n "$SYS_TOOL" ] && [ -x "$SYS_TOOL" ]; then
                 rm -f "$NDK_BIN/$tool"
                 printf '#!/bin/bash\nexec "%s" "$@"\n' "$SYS_TOOL" > "$NDK_BIN/$tool"
                 chmod +x "$NDK_BIN/$tool"
@@ -3729,17 +3777,7 @@ for arg in "$@"; do
     esac
 done
 
-# 1. Box64 (Fastest, native Dynarec, built-in wrapped libc/libm/libdl)
-if command -v box64 >/dev/null 2>&1 && [ -n "$REAL_BIN" ]; then
-    export BOX64_NOBANNER=1
-    export BOX64_DYNAREC=1
-    export BOX64_MMAP32=1
-    export BOX64_LOG=0
-    chmod +x "$REAL_BIN" 2>/dev/null || true
-    exec box64 "$REAL_BIN" "${ARGS[@]}"
-fi
-
-# 2. QEMU user static fallback
+# Locate QEMU user static fallback
 EMU=""
 if [ -x /usr/bin/qemu-x86_64-static ]; then
     EMU="/usr/bin/qemu-x86_64-static"
@@ -3749,6 +3787,38 @@ elif [ -f /sdcard/qemu-x86_64-static ]; then
     EMU="/sdcard/qemu-x86_64-static"
 fi
 
+# 0. Safe profile: run directly under qemu-x86_64-static to avoid Box64 glibc heap issues
+if [ "$QUANTUM_BUILD_PROFILE" = "safe" ] && [ -n "$EMU" ] && [ -n "$REAL_BIN" ]; then
+    chmod +x "$REAL_BIN" 2>/dev/null || true
+    export QEMU_LD_PREFIX=/
+    exec "$EMU" -L / "$REAL_BIN" "${ARGS[@]}"
+fi
+
+# 1. Box64 (Fastest, native Dynarec) with instant QEMU fallback on crash
+if command -v box64 >/dev/null 2>&1 && [ -n "$REAL_BIN" ]; then
+    export BOX64_NOBANNER=1
+    export BOX64_DYNAREC="${BOX64_DYNAREC:-1}"
+    export BOX64_DYNAREC_STRONGMEM="${BOX64_DYNAREC_STRONGMEM:-1}"
+    export BOX64_DYNAREC_BIGBLOCK="${BOX64_DYNAREC_BIGBLOCK:-0}"
+    export BOX64_DYNAREC_SAFEFLAGS="${BOX64_DYNAREC_SAFEFLAGS:-2}"
+    export BOX64_MMAP32=1
+    export BOX64_LOG=0
+    export GLIBC_TUNABLES="${GLIBC_TUNABLES:-glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1}"
+    chmod +x "$REAL_BIN" 2>/dev/null || true
+    box64 "$REAL_BIN" "${ARGS[@]}"
+    rc=$?
+    if [ $rc -eq 0 ]; then
+        exit 0
+    fi
+    if [ -n "$EMU" ]; then
+        echo "[QuantumIDE] ⚠ Box64 gen_snapshot exited ($rc), retrying via qemu-x86_64-static..." >&2
+        export QEMU_LD_PREFIX=/
+        exec "$EMU" -L / "$REAL_BIN" "${ARGS[@]}"
+    fi
+    exit $rc
+fi
+
+# 2. QEMU user static fallback
 if [ -n "$EMU" ] && [ -n "$REAL_BIN" ]; then
     chmod +x "$REAL_BIN" 2>/dev/null || true
     export QEMU_LD_PREFIX=/
@@ -3777,7 +3847,7 @@ done
 # Auto-heal AAPT2 daemons and force native aapt2 on ARM64 PRoot
 mkdir -p ~/.gradle 2>/dev/null || true
 if ! grep -q "android.aapt2.daemon=false" ~/.gradle/gradle.properties 2>/dev/null; then
-    printf "\nandroid.aapt2.daemon=false\nandroid.aapt2FromMaven=false\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n" >> ~/.gradle/gradle.properties 2>/dev/null || true
+    printf "\nandroid.aapt2.daemon=false\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.useAndroidX=true\nandroid.enableJetifier=false\n" >> ~/.gradle/gradle.properties 2>/dev/null || true
 fi
 
 if [ -x /usr/bin/aapt2 ]; then

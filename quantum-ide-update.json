@@ -1,16 +1,16 @@
 {
-  "versionCode": 289,
-  "versionName": "1.2.272",
-  "notes": "## 🚀 QuantumIDE v1.2.272\n\n### Что нового\n- **Убран спам подробных логов `flutter build -v` в Zsh-терминале**: сборка Flutter больше не заливает экран сотнями килобайт отладочного мусора Gradle, а при сбоях Box64/NDK автоматически запускается `Build Doctor` и безопасный повтор.\n- Терминал на **100% чистом оригинальном `gwitko/conduit_vt`** (`b486b89`) + чистый PTY-слой без `TerminalInputGuard` и задержки `onResize`.\n- Исправлена сборка APK на Android-планшете для **Java**, **Kotlin** и **Flutter**.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
+  "versionCode": 290,
+  "versionName": "1.2.273",
+  "notes": "## 🚀 QuantumIDE v1.2.273\n\n### Что нового\n- **Устранено 60-минутное зависание сборки после `AAPT2 bin Daemon #0: shutdown`**: автоматический Gradle init-скрипт (`~/.gradle/init.d/quantum-no-lint.gradle`) отключает тяжёлые задачи `*LintVital*`, `*LintModel*` и `*LocalLintAar*` во всех собираемых проектах.\n- **Починена обёртка `gen_snapshot` в `setup-arm64.sh`**: реальный fallback на `qemu-x86_64-static` при сбое Box64, защита от `fasttop` (`STRONGMEM=1`, `GLIBC_TUNABLES`) и поддержка `BOX64_DYNAREC=0`.\n- **Починен `stripReleaseDebugSymbols` в NDK**: `quantum-patch-ndk` автоматически подставляет нативный ARM64 `llvm-strip` / `aarch64-linux-gnu-strip` / `strip` и всегда проверяет новые NDK (`--fast`).\n- Терминал на **100% чистом оригинальном `gwitko/conduit_vt`** (`b486b89`) + чистый PTY-слой.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.272/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.273/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.272",
-  "buildNumber": 289,
-  "tag_name": "v1.2.272",
-  "releaseNotes": "Убран спам логов flutter build -v в Zsh + добавлен Build Doctor авто-повтор, чистый gwitko/conduit_vt и PTY."
+  "version": "1.2.273",
+  "buildNumber": 290,
+  "tag_name": "v1.2.273",
+  "releaseNotes": "Устранено зависание сборки после AAPT2 (отключён LintVital через init.d), починены gen_snapshot Box64->QEMU fallback и NDK llvm-strip."
 }
