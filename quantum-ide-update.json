@@ -1,16 +1,16 @@
 {
-  "versionCode": 290,
-  "versionName": "1.2.273",
-  "notes": "## 🚀 QuantumIDE v1.2.273\n\n### Что нового\n- **Устранено 60-минутное зависание сборки после `AAPT2 bin Daemon #0: shutdown`**: автоматический Gradle init-скрипт (`~/.gradle/init.d/quantum-no-lint.gradle`) отключает тяжёлые задачи `*LintVital*`, `*LintModel*` и `*LocalLintAar*` во всех собираемых проектах.\n- **Починена обёртка `gen_snapshot` в `setup-arm64.sh`**: реальный fallback на `qemu-x86_64-static` при сбое Box64, защита от `fasttop` (`STRONGMEM=1`, `GLIBC_TUNABLES`) и поддержка `BOX64_DYNAREC=0`.\n- **Починен `stripReleaseDebugSymbols` в NDK**: `quantum-patch-ndk` автоматически подставляет нативный ARM64 `llvm-strip` / `aarch64-linux-gnu-strip` / `strip` и всегда проверяет новые NDK (`--fast`).\n- Терминал на **100% чистом оригинальном `gwitko/conduit_vt`** (`b486b89`) + чистый PTY-слой.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
+  "versionCode": 291,
+  "versionName": "1.2.274",
+  "notes": "## 🚀 QuantumIDE v1.2.274\n\n### Что нового\n- **Исправлена сборка APK без `AndroidManifest.xml` на AGP 9+**: добавлена обёртка `/usr/bin/aapt2` → `/usr/bin/aapt2.real`, которая автоматически разбивает флаги `--flag=value` (включая `--resource-path-shortening-map=...` в задаче `:app:optimizeReleaseResources`) на два аргумента, и очищает закешированный пустой выход в `build-cache-1`.\n- **Автоматическое подключение нативного ARM64 `gen_snapshot-arm64`**: `setup-arm64.sh` и `quantum-heal-x64` теперь гарантированно подключают `/usr/local/bin/gen_snapshot-arm64` во всех обёртках `linux-arm64/gen_snapshot` и `linux-x64/gen_snapshot` без лишней эмуляции Box64.\n- **Починен инкрементальный кэш `flutter build apk`**: из аргументов `flutter build` убраны флаги `-Dorg.gradle.*` (которые Flutter воспринимал как `--dart-define` и сбрасывал AOT-снапшот при каждом изменении свободной ОЗУ).\n- **Авто-восстановление APK без манифеста в `Build Doctor`**: если из-за старого `optimized_processed_res` собрался APK без `AndroidManifest.xml`, `Build Doctor` автоматически очищает кэш ресурсов и перепаковывает валидный APK.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.273/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.274/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.273",
-  "buildNumber": 290,
-  "tag_name": "v1.2.273",
-  "releaseNotes": "Устранено зависание сборки после AAPT2 (отключён LintVital через init.d), починены gen_snapshot Box64->QEMU fallback и NDK llvm-strip."
+  "version": "1.2.274",
+  "buildNumber": 291,
+  "tag_name": "v1.2.274",
+  "releaseNotes": "Исправлена сборка APK без AndroidManifest.xml на AGP 9+ (обёртка aapt2 --flag=value + очистка build-cache), подключён нативный ARM64 gen_snapshot и починен кэш flutter build."
 }

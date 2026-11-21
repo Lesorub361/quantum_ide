@@ -1632,13 +1632,20 @@ _quantum_tune_gradle() {
     export CMAKE_BUILD_PARALLEL_LEVEL="${_qt_workers}"
     export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${_qt_workers} -Dorg.gradle.parallel=${_qt_parallel} -Dorg.gradle.caching=true -Dorg.gradle.vfs.watch=false -Dkotlin.compiler.execution.strategy=in-process -Dkotlin.daemon.jvm.options=-Xmx512m"
 
-    if [ ! -f /tmp/.quantum_healed_ok ]; then
+    if [ ! -f /tmp/.quantum_healed_ok ] || [ ! -x /usr/bin/aapt2.real ] || [ ! -x /usr/local/bin/gen_snapshot-arm64 ]; then
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
         touch /tmp/.quantum_healed_ok 2>/dev/null || true
     else
         /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
     fi
+
+    # Auto-patch legacy AGP <9 plugins (proguard-android.txt -> proguard-android-optimize.txt)
+    for _pg_file in /root/.pub-cache/hosted/*/*/android/build.gradle /root/.pub-cache/hosted/*/*/android/build.gradle.kts ./local_plugins/*/android/build.gradle ./local_plugins/*/android/build.gradle.kts ./android/app/build.gradle ./android/app/build.gradle.kts; do
+        if [ -f "$_pg_file" ] && grep -q "proguard-android\.txt" "$_pg_file" 2>/dev/null; then
+            sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" "$_pg_file" 2>/dev/null || true
+        fi
+    done
 
     mkdir -p ~/.gradle/init.d /root/.gradle/init.d 2>/dev/null || true
     for idir in ~/.gradle/init.d /root/.gradle/init.d; do
@@ -1736,15 +1743,10 @@ flutter() {
         local has_val=false
         local has_tree=false
         local has_pub=false
-        local has_workers=false
-        local has_parallel=false
-        local has_jvm=false
         local cleaned_args=()
         for a in "$@"; do
             case "$a" in
-                -Dorg.gradle.jvmargs=*) has_jvm=true ;;
-                *org.gradle.workers.max*) has_workers=true ;;
-                *org.gradle.parallel*) has_parallel=true ;;
+                -Dorg.gradle.*|-Pandroid.*|-Porg.gradle.*|-Pkotlin.*) continue ;;
                 *target-platform*|*--split-per-abi*) has_plat=true ;;
                 *android-skip-build-dependency-validation*) has_val=true ;;
                 *no-tree-shake-icons*) has_tree=true ;;
@@ -1765,28 +1767,6 @@ flutter() {
         fi
         if [ "$has_pub" = "false" ] && [ -s ".dart_tool/package_config.json" ]; then
             extra_flags+=("--no-pub")
-        fi
-
-        extra_flags+=(
-            "-Pandroid.aapt2FromMaven=false"
-            "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
-            "-Pandroid.aapt2.daemon=false"
-            "-Pandroid.enableJetifier=false"
-            "-Porg.gradle.caching=true"
-            "-Dorg.gradle.caching=true"
-            "-Dorg.gradle.vfs.watch=false"
-            "-Pkotlin.compiler.execution.strategy=in-process"
-            "-Dkotlin.daemon.jvm.options=-Xmx512m"
-            "-Dorg.gradle.daemon=false"
-        )
-        if [ "$has_workers" = "false" ]; then
-            extra_flags+=("-Porg.gradle.workers.max=${_qt_workers}")
-        fi
-        if [ "$has_parallel" = "false" ]; then
-            extra_flags+=("-Porg.gradle.parallel=${_qt_parallel}")
-        fi
-        if [ "$has_jvm" = "false" ]; then
-            extra_flags+=("-Dorg.gradle.jvmargs=-Xmx${_qt_jvm} -XX:MaxMetaspaceSize=${_qt_meta}")
         fi
 
         local verbose_flag=()
@@ -1813,6 +1793,22 @@ flutter() {
         fi
         rm -f "$build_log" 2>/dev/null || true
 
+        if [ $ret -eq 0 ] && [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            local _has_manifest=1
+            if command -v python3 >/dev/null 2>&1; then
+                python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); sys.exit(0 if 'AndroidManifest.xml' in z.namelist() else 1)" "build/app/outputs/flutter-apk/app-release.apk" 2>/dev/null || _has_manifest=0
+            elif command -v unzip >/dev/null 2>&1; then
+                unzip -l "build/app/outputs/flutter-apk/app-release.apk" 2>/dev/null | grep -q "AndroidManifest.xml" || _has_manifest=0
+            fi
+            if [ "$_has_manifest" = "0" ]; then
+                echo -e "\033[1;33m[Build Doctor]\033[0m В APK отсутствует AndroidManifest.xml (устаревший кэш ресурсов). Очищаю кэш optimizeReleaseResources и перепаковываю..."
+                rm -rf build/app/intermediates/optimized_processed_res build/app/outputs/flutter-apk build/app/outputs/apk /root/.gradle/caches/build-cache-* ~/.gradle/caches/build-cache-* 2>/dev/null || true
+                /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+                command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1
+                ret=${PIPESTATUS[0]}
+            fi
+        fi
+
         if [ $ret -eq 0 ]; then
             if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
                 cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
@@ -1820,7 +1816,13 @@ flutter() {
             fi
             if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
-                if command -v unzip >/dev/null 2>&1 && ! unzip -l ./app-release.apk 2>/dev/null | grep -q "AndroidManifest.xml"; then
+                local _ok_manifest=1
+                if command -v python3 >/dev/null 2>&1; then
+                    python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); sys.exit(0 if 'AndroidManifest.xml' in z.namelist() else 1)" ./app-release.apk 2>/dev/null || _ok_manifest=0
+                elif command -v unzip >/dev/null 2>&1; then
+                    unzip -l ./app-release.apk 2>/dev/null | grep -q "AndroidManifest.xml" || _ok_manifest=0
+                fi
+                if [ "$_ok_manifest" = "0" ]; then
                     echo -e "\033[1;31m✗ ВНИМАНИЕ: ./app-release.apk собран без AndroidManifest.xml (сбросьте кэш: flutter clean && rm -rf build/ android/.gradle/).\033[0m"
                     rm -f ./app-release.apk
                     ret=1
@@ -2077,6 +2079,13 @@ flutter() {
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
+        # Auto-patch legacy AGP <9 plugins (proguard-android.txt -> proguard-android-optimize.txt)
+        for _pg_file in /root/.pub-cache/hosted/*/*/android/build.gradle /root/.pub-cache/hosted/*/*/android/build.gradle.kts ./local_plugins/*/android/build.gradle ./local_plugins/*/android/build.gradle.kts ./android/app/build.gradle ./android/app/build.gradle.kts; do
+            if [ -f "$_pg_file" ] && grep -q "proguard-android\.txt" "$_pg_file" 2>/dev/null; then
+                sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" "$_pg_file" 2>/dev/null || true
+            fi
+        done
+
         # Dynamically auto-tune CPU workers, JVM heap and Dart heap based on real hardware (CPU cores + free RAM)
         local cpu_cores=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 4)
         [ -z "$cpu_cores" ] || [ "$cpu_cores" -lt 1 ] && cpu_cores=4
@@ -2140,6 +2149,13 @@ flutter() {
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
+        # Auto-patch legacy AGP <9 plugins (proguard-android.txt -> proguard-android-optimize.txt)
+        for _pg_file in /root/.pub-cache/hosted/*/*/android/build.gradle /root/.pub-cache/hosted/*/*/android/build.gradle.kts ./local_plugins/*/android/build.gradle ./local_plugins/*/android/build.gradle.kts ./android/app/build.gradle ./android/app/build.gradle.kts; do
+            if [ -f "$_pg_file" ] && grep -q "proguard-android\.txt" "$_pg_file" 2>/dev/null; then
+                sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" "$_pg_file" 2>/dev/null || true
+            fi
+        done
+
         mkdir -p ~/.gradle/init.d /root/.gradle/init.d 2>/dev/null || true
         for idir in ~/.gradle/init.d /root/.gradle/init.d; do
             [ -d "$idir" ] || continue
@@ -2179,15 +2195,10 @@ EOF
         local has_val=false
         local has_tree=false
         local has_pub=false
-        local has_workers=false
-        local has_parallel=false
-        local has_jvm=false
         local cleaned_args=()
         for a in "$@"; do
             case "$a" in
-                -Dorg.gradle.jvmargs=*) has_jvm=true ;;
-                *org.gradle.workers.max*) has_workers=true ;;
-                *org.gradle.parallel*) has_parallel=true ;;
+                -Dorg.gradle.*|-Pandroid.*|-Porg.gradle.*|-Pkotlin.*) continue ;;
                 *target-platform*|*--split-per-abi*) has_plat=true ;;
                 *android-skip-build-dependency-validation*) has_val=true ;;
                 *no-tree-shake-icons*) has_tree=true ;;
@@ -2208,28 +2219,6 @@ EOF
         fi
         if [ "$has_pub" = "false" ] && [ -s ".dart_tool/package_config.json" ]; then
             extra_flags+=("--no-pub")
-        fi
-
-        extra_flags+=(
-            "-Pandroid.aapt2FromMaven=false"
-            "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
-            "-Pandroid.aapt2.daemon=false"
-            "-Pandroid.enableJetifier=false"
-            "-Porg.gradle.caching=true"
-            "-Dorg.gradle.caching=true"
-            "-Dorg.gradle.vfs.watch=false"
-            "-Pkotlin.compiler.execution.strategy=in-process"
-            "-Dkotlin.daemon.jvm.options=-Xmx512m"
-            "-Dorg.gradle.daemon=false"
-        )
-        if [ "$has_workers" = "false" ]; then
-            extra_flags+=("-Porg.gradle.workers.max=${gradle_workers}")
-        fi
-        if [ "$has_parallel" = "false" ]; then
-            extra_flags+=("-Porg.gradle.parallel=${gradle_parallel}")
-        fi
-        if [ "$has_jvm" = "false" ]; then
-            extra_flags+=("-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}")
         fi
 
         local verbose_flag=()
@@ -2256,6 +2245,22 @@ EOF
         fi
         rm -f "$build_log" 2>/dev/null || true
 
+        if [ $ret -eq 0 ] && [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            local _has_manifest=1
+            if command -v python3 >/dev/null 2>&1; then
+                python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); sys.exit(0 if 'AndroidManifest.xml' in z.namelist() else 1)" "build/app/outputs/flutter-apk/app-release.apk" 2>/dev/null || _has_manifest=0
+            elif command -v unzip >/dev/null 2>&1; then
+                unzip -l "build/app/outputs/flutter-apk/app-release.apk" 2>/dev/null | grep -q "AndroidManifest.xml" || _has_manifest=0
+            fi
+            if [ "$_has_manifest" = "0" ]; then
+                echo -e "\033[1;33m[Build Doctor]\033[0m В APK отсутствует AndroidManifest.xml (устаревший кэш ресурсов). Очищаю кэш optimizeReleaseResources и перепаковываю..."
+                rm -rf build/app/intermediates/optimized_processed_res build/app/outputs/flutter-apk build/app/outputs/apk /root/.gradle/caches/build-cache-* ~/.gradle/caches/build-cache-* 2>/dev/null || true
+                /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+                command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1
+                ret=$?
+            fi
+        fi
+
         if [ $ret -eq 0 ]; then
             if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
                 cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
@@ -2263,7 +2268,13 @@ EOF
             fi
             if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
-                if command -v unzip >/dev/null 2>&1 && ! unzip -l ./app-release.apk 2>/dev/null | grep -q "AndroidManifest.xml"; then
+                local _ok_manifest=1
+                if command -v python3 >/dev/null 2>&1; then
+                    python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); sys.exit(0 if 'AndroidManifest.xml' in z.namelist() else 1)" ./app-release.apk 2>/dev/null || _ok_manifest=0
+                elif command -v unzip >/dev/null 2>&1; then
+                    unzip -l ./app-release.apk 2>/dev/null | grep -q "AndroidManifest.xml" || _ok_manifest=0
+                fi
+                if [ "$_ok_manifest" = "0" ]; then
                     echo -e "\033[1;31m✗ ВНИМАНИЕ: ./app-release.apk собран без AndroidManifest.xml (сбросьте кэш: flutter clean && rm -rf build/ android/.gradle/).\033[0m"
                     rm -f ./app-release.apk
                     ret=1
@@ -3754,6 +3765,20 @@ for fl_dir in "${FLUTTER_ROOT:-}" "/root/flutter" "$HOME/flutter" "/data/data/co
             # Write the universal wrapper
             cat << 'WRAP_GS' > "$ENGINE_DIR/gen_snapshot"
 #!/bin/bash
+# QUANTUM_NATIVE_ARM64: use native ARM64 gen_snapshot when it matches the engine (no emulation)
+_NB=/usr/local/bin/gen_snapshot-arm64
+_NV=/usr/local/bin/gen_snapshot-arm64.version
+_EV=/root/flutter/bin/internal/engine.version
+if [ -x "$_NB" ] && [ -f "$_NV" ] && [ -f "$_EV" ] && [ "$(tr -d '[:space:]' < "$_EV" 2>/dev/null)" = "$(tr -d '[:space:]' < "$_NV" 2>/dev/null)" ]; then
+    _A=()
+    for a in "$@"; do
+        case "$a" in
+            --dedup_instructions|--dedup-instructions|--no-dedup_instructions|--no-dedup-instructions) ;;
+            *) _A+=("$a") ;;
+        esac
+    done
+    exec "$_NB" "${_A[@]}"
+fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
 REAL_BIN=""
 if [ -f "$DIR/gen_snapshot.real" ]; then
@@ -3961,7 +3986,7 @@ fi
 NEED_AAPT2_UPGRADE=0
 if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
     NEED_AAPT2_UPGRADE=1
-elif [ "$1" = "--doctor" ] && [ -d /root/android-sdk/platforms/android-36 ] && ! (/usr/bin/aapt2 version 2>&1 | grep -qE '36\.|2\.19-1[2-9]'); then
+elif [ "$1" = "--doctor" ] && [ -d /root/android-sdk/platforms/android-36 ] && ! (/usr/bin/aapt2 version 2>&1 | grep -qE '36\.|2\.19-1[2-9]|2\.19-OS3'); then
     NEED_AAPT2_UPGRADE=1
 fi
 
@@ -3978,8 +4003,8 @@ if [ "$NEED_AAPT2_UPGRADE" = "1" ]; then
            wget --no-check-certificate -qO "$TMP_ZIP" "$tools_url" 2>/dev/null; then
             unzip -qo "$TMP_ZIP" "build-tools/aapt2" -d "$TMP_DIR" 2>/dev/null || unzip -qo "$TMP_ZIP" -d "$TMP_DIR" 2>/dev/null
             if [ -f "$TMP_DIR/build-tools/aapt2" ] && "$TMP_DIR/build-tools/aapt2" compile --help 2>&1 | grep -q -- '--source-path'; then
-                cp -f "$TMP_DIR/build-tools/aapt2" /usr/bin/aapt2
-                chmod +x /usr/bin/aapt2
+                cp -f "$TMP_DIR/build-tools/aapt2" /usr/bin/aapt2.real
+                chmod +x /usr/bin/aapt2.real
                 echo "[quantum-heal-x64] ✓ Modern AAPT2 installed ($tools_url)."
                 AAPT2_DONE=1
                 break
@@ -3988,20 +4013,40 @@ if [ "$NEED_AAPT2_UPGRADE" = "1" ]; then
     done
     rm -rf "$TMP_ZIP" "$TMP_DIR" 2>/dev/null || true
     if [ "$AAPT2_DONE" = "0" ] && [ -x /usr/local/bin/aapt2-arm64 ] && (/usr/local/bin/aapt2-arm64 compile --help 2>&1 | grep -q -- '--source-path'); then
-        cp -f /usr/local/bin/aapt2-arm64 /usr/bin/aapt2
-        chmod +x /usr/bin/aapt2
+        cp -f /usr/local/bin/aapt2-arm64 /usr/bin/aapt2.real
+        chmod +x /usr/bin/aapt2.real
         echo "[quantum-heal-x64] ✓ Modern AAPT2 restored from /usr/local/bin/aapt2-arm64."
     fi
 fi
 
-# Ensure SDK build-tools has working aapt2 (without downgrading existing 36+ aapt2)
+# Ensure /usr/bin/aapt2 wraps /usr/bin/aapt2.real to split --flag=value arguments for AGP 9+ optimizeReleaseResources
+if [ -f /usr/bin/aapt2 ] && head -c 4 /usr/bin/aapt2 2>/dev/null | grep -q $'\x7fELF'; then
+    mv -f /usr/bin/aapt2 /usr/bin/aapt2.real
+    chmod 755 /usr/bin/aapt2.real
+    rm -rf /root/.gradle/caches/build-cache-* ~/.gradle/caches/build-cache-* 2>/dev/null || true
+fi
+if [ -x /usr/bin/aapt2.real ] && ! grep -q 'aapt2.real' /usr/bin/aapt2 2>/dev/null; then
+    cat << 'AAPT_EOF' > /usr/bin/aapt2
+#!/bin/bash
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --*=*) ARGS+=("${arg%%=*}" "${arg#*=}") ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+exec /usr/bin/aapt2.real "${ARGS[@]}"
+AAPT_EOF
+    chmod 755 /usr/bin/aapt2
+    rm -rf /root/.gradle/caches/build-cache-* ~/.gradle/caches/build-cache-* 2>/dev/null || true
+    echo "[quantum-heal-x64] ✓ Installed AGP 9 --flag=value compatibility wrapper for /usr/bin/aapt2."
+fi
+
+# Ensure SDK build-tools has working aapt2 wrapper
 if /usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'; then
     for bt in /root/android-sdk/build-tools/*; do
         if [ -d "$bt" ]; then
-            if [ -x "$bt/aapt2" ] && ("$bt/aapt2" version 2>&1 | grep -qE '36\.|2\.19-1[2-9]'); then
-                continue
-            fi
-            cp -f /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || true
+            ln -sf /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || cp -f /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || true
             chmod +x "$bt/aapt2" 2>/dev/null || true
         fi
     done
@@ -4053,7 +4098,7 @@ if [ -f "$ENGINE_VER_FILE" ]; then
     if [ -n "$CUR_ENGINE_HASH" ] && ( [ ! -x "$ARM64_GS_BIN" ] || [ "$CUR_ENGINE_HASH" != "$INSTALLED_GS_HASH" ] ); then
         GS_URL="https://github.com/Lesorub361/quantum_ide/releases/download/native-tools-latest/gen_snapshot-arm64-${CUR_ENGINE_HASH}"
         TMP_GS="${TMPDIR:-/tmp}/gen_snapshot-arm64-$$"
-        if curl -k -fsSL --connect-timeout 6 --max-time 60 "$GS_URL" -o "$TMP_GS" 2>/dev/null; then
+        if curl -k -fsSL --connect-timeout 8 --max-time 180 "$GS_URL" -o "$TMP_GS" 2>/dev/null; then
             if head -c 4 "$TMP_GS" 2>/dev/null | grep -q $'\x7fELF'; then
                 chmod 755 "$TMP_GS" 2>/dev/null || true
                 mv -f "$TMP_GS" "$ARM64_GS_BIN" 2>/dev/null || true
@@ -4068,50 +4113,108 @@ if [ -f "$ENGINE_VER_FILE" ]; then
     fi
 fi
 
-# 7b. Wrap x86_64 Flutter gen_snapshot so a Box64 heap crash auto-recovers via QEMU in-place (no 7-min Gradle restart)
-for gs in /root/flutter/bin/cache/artifacts/engine/android-*-release/linux-x64/gen_snapshot; do
+# 7b. Ensure all Flutter android-* gen_snapshot wrappers (linux-arm64 & linux-x64) prioritize native ARM64 gen_snapshot
+for gs in /root/flutter/bin/cache/artifacts/engine/android-*-*/linux-*/gen_snapshot; do
     [ -e "$gs" ] || continue
-    # Skip if already wrapped by QuantumIDE
     if head -c 4 "$gs" 2>/dev/null | grep -q $'\x7fELF'; then
-        mv -f "$gs" "${gs}.x64" 2>/dev/null || continue
-        chmod 755 "${gs}.x64" 2>/dev/null || true
-        cat << 'WRAPPER_EOF' > "$gs"
-#!/bin/sh
-SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-X64_BIN="$SELF_DIR/gen_snapshot.x64"
-ARM64_BIN="/usr/local/bin/gen_snapshot-arm64"
-ENGINE_VER_FILE="/root/flutter/bin/internal/engine.version"
-ARM64_VER_FILE="/usr/local/bin/gen_snapshot-arm64.version"
-
-# 1. Native ARM64 gen_snapshot if installed for this exact Flutter engine.version
-if [ -x "$ARM64_BIN" ] && [ -f "$ENGINE_VER_FILE" ] && [ -f "$ARM64_VER_FILE" ]; then
-    if [ "$(cat "$ENGINE_VER_FILE" 2>/dev/null)" = "$(cat "$ARM64_VER_FILE" 2>/dev/null)" ]; then
-        exec "$ARM64_BIN" "$@"
+        if [ ! -f "${gs}.real" ]; then
+            mv -f "$gs" "${gs}.real" 2>/dev/null || continue
+            chmod 755 "${gs}.real" 2>/dev/null || true
+        else
+            rm -f "$gs" 2>/dev/null || true
+        fi
     fi
+    if [ ! -f "$gs" ] || ! grep -q "QUANTUM_NATIVE_ARM64" "$gs" 2>/dev/null; then
+        cat << 'WRAPPER_EOF' > "$gs"
+#!/bin/bash
+# QUANTUM_NATIVE_ARM64: use native ARM64 gen_snapshot when it matches the engine (no emulation)
+_NB=/usr/local/bin/gen_snapshot-arm64
+_NV=/usr/local/bin/gen_snapshot-arm64.version
+_EV=/root/flutter/bin/internal/engine.version
+if [ -x "$_NB" ] && [ -f "$_NV" ] && [ -f "$_EV" ] && [ "$(tr -d '[:space:]' < "$_EV" 2>/dev/null)" = "$(tr -d '[:space:]' < "$_NV" 2>/dev/null)" ]; then
+    _A=()
+    for a in "$@"; do
+        case "$a" in
+            --dedup_instructions|--dedup-instructions|--no-dedup_instructions|--no-dedup-instructions) ;;
+            *) _A+=("$a") ;;
+        esac
+    done
+    exec "$_NB" "${_A[@]}"
+fi
+DIR="$(cd "$(dirname "$0")" && pwd)"
+REAL_BIN=""
+if [ -f "$DIR/gen_snapshot.real" ]; then
+    REAL_BIN="$DIR/gen_snapshot.real"
+elif [ -f "$DIR/gen_snapshot.x64" ]; then
+    REAL_BIN="$DIR/gen_snapshot.x64"
+elif [ -f "$DIR/../linux-x64/gen_snapshot.real" ]; then
+    REAL_BIN="$DIR/../linux-x64/gen_snapshot.real"
+elif [ -f "$DIR/../linux-x64/gen_snapshot.x64" ]; then
+    REAL_BIN="$DIR/../linux-x64/gen_snapshot.x64"
 fi
 
-# 2. Safe mode: run directly under qemu-x86_64-static (avoids Box64 v0.2.6 native glibc wrapping heap corruption)
-if [ "$QUANTUM_BUILD_PROFILE" = "safe" ] && [ -x /usr/bin/qemu-x86_64-static ]; then
-    exec /usr/bin/qemu-x86_64-static "$X64_BIN" "$@"
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --dedup_instructions|--dedup-instructions|--no-dedup_instructions|--no-dedup-instructions) ;;
+        *) ARGS+=("$arg") ;;
+    esac
+done
+
+EMU=""
+if [ -x /usr/bin/qemu-x86_64-static ]; then
+    EMU="/usr/bin/qemu-x86_64-static"
+elif [ -x /usr/local/bin/qemu-x86_64-static ]; then
+    EMU="/usr/local/bin/qemu-x86_64-static"
+elif [ -f /sdcard/qemu-x86_64-static ]; then
+    EMU="/sdcard/qemu-x86_64-static"
 fi
 
-# 3. Auto/Turbo: try Box64 first; if it crashes (fasttop / prev_size), immediately fallback to QEMU in-place
-if command -v box64 >/dev/null 2>&1; then
-    box64 "$X64_BIN" "$@"
+if [ "$QUANTUM_BUILD_PROFILE" = "safe" ] && [ -n "$EMU" ] && [ -n "$REAL_BIN" ]; then
+    chmod +x "$REAL_BIN" 2>/dev/null || true
+    export QEMU_LD_PREFIX=/
+    exec "$EMU" -L / "$REAL_BIN" "${ARGS[@]}"
+fi
+
+if command -v box64 >/dev/null 2>&1 && [ -n "$REAL_BIN" ]; then
+    export BOX64_NOBANNER=1
+    export BOX64_DYNAREC="${BOX64_DYNAREC:-1}"
+    export BOX64_DYNAREC_STRONGMEM="${BOX64_DYNAREC_STRONGMEM:-1}"
+    export BOX64_DYNAREC_BIGBLOCK="${BOX64_DYNAREC_BIGBLOCK:-0}"
+    export BOX64_DYNAREC_SAFEFLAGS="${BOX64_DYNAREC_SAFEFLAGS:-2}"
+    export BOX64_MMAP32=1
+    export BOX64_LOG=0
+    export GLIBC_TUNABLES="${GLIBC_TUNABLES:-glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1}"
+    chmod +x "$REAL_BIN" 2>/dev/null || true
+    box64 "$REAL_BIN" "${ARGS[@]}"
     rc=$?
-    if [ $rc -ne 0 ] && [ -x /usr/bin/qemu-x86_64-static ]; then
+    if [ $rc -eq 0 ]; then
+        exit 0
+    fi
+    if [ -n "$EMU" ]; then
         echo "[QuantumIDE] ⚠ Box64 gen_snapshot exited ($rc), retrying via qemu-x86_64-static..." >&2
-        exec /usr/bin/qemu-x86_64-static "$X64_BIN" "$@"
+        export QEMU_LD_PREFIX=/
+        exec "$EMU" -L / "$REAL_BIN" "${ARGS[@]}"
     fi
     exit $rc
-elif [ -x /usr/bin/qemu-x86_64-static ]; then
-    exec /usr/bin/qemu-x86_64-static "$X64_BIN" "$@"
-else
-    exec "$X64_BIN" "$@"
 fi
+
+if [ -n "$EMU" ] && [ -n "$REAL_BIN" ]; then
+    chmod +x "$REAL_BIN" 2>/dev/null || true
+    export QEMU_LD_PREFIX=/
+    exec "$EMU" -L / "$REAL_BIN" "${ARGS[@]}"
+fi
+
+if [ -n "$REAL_BIN" ]; then
+    chmod +x "$REAL_BIN" 2>/dev/null || true
+    exec "$REAL_BIN" "${ARGS[@]}"
+fi
+
+echo "ERROR: Flutter Release build requires native gen_snapshot-arm64, Box64, or QEMU x86_64!" >&2
+exit 1
 WRAPPER_EOF
         chmod 755 "$gs" 2>/dev/null || true
-        echo "[quantum-heal-x64] ✓ Wrapped gen_snapshot with automatic QEMU crash-recovery."
+        echo "[quantum-heal-x64] ✓ Updated gen_snapshot wrapper ($gs) with native ARM64 + QEMU fallback."
     fi
 done
 
