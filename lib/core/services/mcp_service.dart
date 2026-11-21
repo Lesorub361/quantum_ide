@@ -147,7 +147,7 @@ class McpClientInstance {
           },
           'clientInfo': {
             'name': 'QuantumIDE-RoxumAgent',
-            'version': '1.2.279',
+            'version': '1.2.280',
           },
         },
         timeout: const Duration(seconds: 12),

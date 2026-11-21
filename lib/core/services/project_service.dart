@@ -316,10 +316,6 @@ class ProjectService extends StateNotifier<List<Project>> {
             path: newPath,
             type: proj.type,
             lastOpened: proj.lastOpened,
-            iconCodePoint: proj.iconCodePoint,
-            colorValue: proj.colorValue,
-            iconFontFamily: proj.iconFontFamily,
-            iconFontPackage: proj.iconFontPackage,
             isInternal: proj.isInternal,
             platforms: proj.platforms,
             sdkVersion: proj.sdkVersion,
@@ -410,12 +406,10 @@ class ProjectService extends StateNotifier<List<Project>> {
     required String name,
     required String path,
     required ProjectType type,
-    int? iconCodePoint,
-    int? colorValue,
-    String? iconFontFamily,
-    String? iconFontPackage,
     List<String>? platforms,
     String? sdkVersion,
+    String? packageName,
+    String? minSdk,
   }) async {
     // Validation: prevent naming project 'flutter' or 'dart'
     final normalizedName = name.toLowerCase().trim();
@@ -446,10 +440,6 @@ class ProjectService extends StateNotifier<List<Project>> {
       path: finalPath,
       type: type,
       lastOpened: DateTime.now(),
-      iconCodePoint: iconCodePoint,
-      colorValue: colorValue,
-      iconFontFamily: iconFontFamily,
-      iconFontPackage: iconFontPackage,
       isInternal: isInternalProject,
       platforms: platforms,
       sdkVersion: sdkVersion,
@@ -461,7 +451,16 @@ class ProjectService extends StateNotifier<List<Project>> {
       await projectDir.create(recursive: true);
     }
 
-    await _initializeProjectFiles(finalPath, type, name, _ref, platforms: platforms, sdkVersion: sdkVersion);
+    await _initializeProjectFiles(
+      finalPath,
+      type,
+      name,
+      _ref,
+      platforms: platforms,
+      sdkVersion: sdkVersion,
+      packageName: packageName,
+      minSdk: minSdk,
+    );
     await saveProject(project);
     return project;
   }
@@ -532,7 +531,16 @@ class ProjectService extends StateNotifier<List<Project>> {
     }
   }
 
-  Future<void> _initializeProjectFiles(String path, ProjectType type, String name, Ref ref, {List<String>? platforms, String? sdkVersion}) async {
+  Future<void> _initializeProjectFiles(
+    String path,
+    ProjectType type,
+    String name,
+    Ref ref, {
+    List<String>? platforms,
+    String? sdkVersion,
+    String? packageName,
+    String? minSdk,
+  }) async {
     // Check storage permission first
     if (Platform.isAndroid) {
       final status = await Permission.manageExternalStorage.status;
@@ -544,6 +552,14 @@ class ProjectService extends StateNotifier<List<Project>> {
     final runtime = ref.read(runtimeServiceProvider);
     final dir = Directory(path);
     if (!await dir.exists()) await dir.create(recursive: true);
+
+    String? flutterOrgArg() {
+      final pkg = (packageName ?? '').trim();
+      if (pkg.isEmpty) return null;
+      final dot = pkg.lastIndexOf('.');
+      final org = dot > 0 ? pkg.substring(0, dot) : pkg;
+      return org.isNotEmpty ? ' --org $org' : null;
+    }
 
     // Try to use CLI tools first if possible
     bool usedCli = false;
@@ -566,6 +582,8 @@ class ProjectService extends StateNotifier<List<Project>> {
         if (flutterExists || Platform.isAndroid) {
           // Run flutter create inside the guest container using native runCommand
           String cmd = 'flutter create --project-name ${name.replaceAll("-", "_")}';
+          final orgArg = flutterOrgArg();
+          if (orgArg != null) cmd += orgArg;
           if (platforms != null && platforms.isNotEmpty) {
             cmd += ' --platforms ${platforms.join(",")}';
           }
@@ -589,6 +607,8 @@ class ProjectService extends StateNotifier<List<Project>> {
             effectivePlatforms = [...effectivePlatforms, 'windows'];
           }
           String cmd = 'flutter create --project-name ${name.replaceAll("-", "_")}';
+          final orgArg = flutterOrgArg();
+          if (orgArg != null) cmd += orgArg;
           if (effectivePlatforms.isNotEmpty) {
             cmd += ' --platforms ${effectivePlatforms.join(",")}';
           }
@@ -659,7 +679,14 @@ class ProjectService extends StateNotifier<List<Project>> {
         break;
       case ProjectType.androidJava:
       case ProjectType.androidKotlin:
-        await _writeNativeAndroidFiles(path, name, type, sdkVersion: sdkVersion);
+        await _writeNativeAndroidFiles(
+          path,
+          name,
+          type,
+          sdkVersion: sdkVersion,
+          packageName: packageName,
+          minSdk: minSdk,
+        );
         break;
       case ProjectType.rust:
         await _createRustProject(path, name);
@@ -1072,8 +1099,25 @@ flutter {
     return _writeNativeAndroidFiles(projectPath, name, type, sdkVersion: sdkVersion);
   }
 
-  Future<void> _writeNativeAndroidFiles(String projectPath, String name, ProjectType type, {String? sdkVersion}) async {
-    final pkg = 'com.example.${name.toLowerCase().replaceAll('-', '_')}';
+  Future<void> _writeNativeAndroidFiles(
+    String projectPath,
+    String name,
+    ProjectType type, {
+    String? sdkVersion,
+    String? packageName,
+    String? minSdk,
+  }) async {
+    final sanitizedName = name
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_]'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    final fallbackPkg =
+        'com.example.${sanitizedName.isEmpty ? 'app' : sanitizedName}';
+    final pkg = (packageName != null && packageName.trim().contains('.'))
+        ? packageName.trim().toLowerCase()
+        : fallbackPkg;
+    final compileSdkInt = int.tryParse(sdkVersion ?? '') ?? 35;
+    final minSdkInt = int.tryParse(minSdk ?? '') ?? 24;
     
     final pkgPath = pkg.replaceAll('.', '/');
     final isKotlin = type == ProjectType.androidKotlin;
@@ -1168,12 +1212,12 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 
 android {
     namespace = "$pkg"
-    compileSdk = 35
+    compileSdk = $compileSdkInt
 
     defaultConfig {
         applicationId = "$pkg"
-        minSdk = 24
-        targetSdk = 35
+        minSdk = $minSdkInt
+        targetSdk = $compileSdkInt
         versionCode = 1
         versionName = "1.0"
 

@@ -3234,666 +3234,583 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
 
+  String _sanitizePackageSegment(String raw) {
+    var s = raw
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r"[^a-z0-9_]+"), "_")
+        .replaceAll(RegExp(r"_+"), "_")
+        .replaceAll(RegExp(r"^_+|_+\$"), "");
+    if (s.isEmpty) return "app";
+    if (RegExp(r"^[0-9]").hasMatch(s)) s = "app_\$s";
+    return s;
+  }
+
   void _showProjectDialog(BuildContext context, WidgetRef ref, {Project? project}) async {
     final isEdit = project != null;
-    final nameCtrl = TextEditingController(text: project?.name);
+    final nameCtrl = TextEditingController(text: project?.name ?? "");
+    final orgCtrl = TextEditingController(text: "com.example");
+    final initialPkg = (project != null)
+        ? "\${orgCtrl.text}.\${_sanitizePackageSegment(project.name)}"
+        : "com.example.app";
+    final packageCtrl = TextEditingController(text: initialPkg);
     final locationCtrl = TextEditingController(
       text: project != null ? p.dirname(project.path) : PlatformUtils.defaultDesktopProjectsDir,
     );
     ProjectType selectedType = project?.type ?? ProjectType.flutter;
-    final theme = Theme.of(context);
+    String selectedCompileSdk =
+        (project?.sdkVersion != null && int.tryParse(project!.sdkVersion!) != null)
+            ? project.sdkVersion!
+            : "35";
+    String selectedMinSdk = "24";
+    const availablePlatforms = ["android", "ios", "web", "windows", "macos", "linux"];
+    final List<String> selectedPlatforms = List<String>.from(
+      (project?.platforms != null && project!.platforms!.isNotEmpty)
+          ? project.platforms!
+          : const ["android"],
+    );
+    bool packageEditedManually = false;
+    bool isCreating = false;
+    String? creationError;
 
-    // Flutter-specific configurations
-    final sdkCtrl = TextEditingController(text: (project?.type == ProjectType.androidJava || project?.type == ProjectType.androidKotlin) ? (project?.sdkVersion ?? 'com.example.app') : '34');
-    final List<String> availablePlatforms = ['android', 'ios', 'web', 'windows', 'macos', 'linux'];
-    final List<String> selectedPlatforms = ['android'];
-
-    int? selectedColorValue = project?.colorValue;
-    int? selectedIconCodePoint = project?.iconCodePoint;
-    String? selectedIconFontFamily = project?.iconFontFamily;
-    String? selectedIconFontPackage = project?.iconFontPackage;
-
-    final List<IconData> selectableIcons = [
-      LucideIcons.folder,
-      LucideIcons.folder_open,
-      LucideIcons.folder_search,
-      LucideIcons.folder_heart,
-      LucideIcons.folder_git,
-      LucideIcons.folder_code,
-      LucideIcons.smartphone,
-      LucideIcons.code,
-      LucideIcons.terminal,
-      LucideIcons.globe,
-      LucideIcons.server,
-      LucideIcons.database,
-      LucideIcons.cpu,
-      LucideIcons.palette,
-      LucideIcons.layers,
-      LucideIcons.puzzle,
-      LucideIcons.gamepad_2,
-      LucideIcons.cloud,
-      LucideIcons.flame,
-      LucideIcons.heart,
-      LucideIcons.star,
-    ];
-
-    final List<Color> selectableColors = [
-      const Color(0xFFE57373),
-      const Color(0xFFF06292),
-      const Color(0xFFBA68C8),
-      const Color(0xFF9575CD),
-      const Color(0xFF7986CB),
-      const Color(0xFF64B5F6),
-      const Color(0xFF4FC3F7),
-      const Color(0xFF4DD0E1),
-      const Color(0xFF4DB6AC),
-      const Color(0xFF81C784),
-      const Color(0xFFAED581),
-      const Color(0xFFD4E157),
-      const Color(0xFFFFD54F),
-    ];
-    final isWide = MediaQuery.of(context).size.width >= 720;
+    void syncPackageFromNameAndOrg() {
+      if (packageEditedManually) return;
+      final org = orgCtrl.text
+          .trim()
+          .toLowerCase()
+          .replaceAll(RegExp(r"[^a-z0-9._]"), "")
+          .replaceAll(RegExp(r"^\.+|\.+\$"), "");
+      final baseOrg = org.isEmpty ? "com.example" : org;
+      final seg = _sanitizePackageSegment(nameCtrl.text);
+      packageCtrl.text = "\$baseOrg.\$seg";
+    }
 
     final projectTemplates = [
       (
         type: ProjectType.flutter,
-        title: 'Flutter App',
-        subtitle: 'Cross-platform mobile, desktop & web with Dart',
+        title: "Flutter App",
+        subtitle: "Android, iOS, Web и Desktop на Dart",
         icon: LucideIcons.smartphone,
-        color: const Color(0xFF02569B),
-        badge: 'Flutter',
+        color: const Color(0xFF38BDF8),
+        badge: "Flutter",
       ),
       (
         type: ProjectType.androidKotlin,
-        title: 'Android (Kotlin / KT)',
-        subtitle: 'Native Android app with Kotlin, AndroidX & Gradle',
+        title: "Android (Kotlin)",
+        subtitle: "Нативное Android-приложение (Kotlin + Gradle)",
         icon: LucideIcons.layers,
         color: const Color(0xFF7F52FF),
-        badge: 'Kotlin KT',
+        badge: "Kotlin",
       ),
       (
         type: ProjectType.androidJava,
-        title: 'Android (Java)',
-        subtitle: 'Native Android app with Java, AndroidX & Gradle',
+        title: "Android (Java)",
+        subtitle: "Нативное Android-приложение (Java + Gradle)",
         icon: LucideIcons.coffee,
         color: const Color(0xFFF89820),
-        badge: 'Java',
+        badge: "Java",
       ),
       (
         type: ProjectType.web,
-        title: 'React + Vite / Web',
-        subtitle: 'Modern Web app with HTML5, CSS3 & JavaScript',
+        title: "Web / Frontend",
+        subtitle: "HTML5, CSS3, JavaScript / Vite",
         icon: LucideIcons.globe,
         color: const Color(0xFF00D8FF),
-        badge: 'Web',
+        badge: "Web",
       ),
       (
         type: ProjectType.nodejs,
-        title: 'Node.js Backend',
-        subtitle: 'REST API, Express server & npm packages',
+        title: "Node.js Backend",
+        subtitle: "REST API, Express и npm",
         icon: LucideIcons.server,
         color: const Color(0xFF68A063),
-        badge: 'Node',
+        badge: "Node",
       ),
       (
         type: ProjectType.python,
-        title: 'Python Project',
-        subtitle: 'FastAPI, automation, scripts & AI tools',
+        title: "Python Project",
+        subtitle: "Скрипты, FastAPI, автоматизация и AI",
         icon: LucideIcons.terminal,
         color: const Color(0xFFFFD43B),
-        badge: 'Python',
+        badge: "Python",
       ),
       (
         type: ProjectType.rust,
-        title: 'Rust Binary',
-        subtitle: 'High-performance memory safe systems code',
+        title: "Rust Binary",
+        subtitle: "Системный код на Cargo / Rust",
         icon: LucideIcons.cpu,
         color: const Color(0xFFDEA584),
-        badge: 'Rust',
+        badge: "Rust",
       ),
     ];
 
-    bool isCreating = false;
-    String? creationError;
+    Widget buildForm(BuildContext ctx, StateSetter setState, {required bool isWide}) {
+      final theme = Theme.of(ctx);
+      final l10n = AppLocalizations.of(ctx)!;
+      final isMobileTemplate = selectedType == ProjectType.flutter ||
+          selectedType == ProjectType.androidKotlin ||
+          selectedType == ProjectType.androidJava;
+      final isNativeAndroid = selectedType == ProjectType.androidKotlin ||
+          selectedType == ProjectType.androidJava;
 
+      InputDecoration fieldDeco(String hint, {Widget? prefixIcon}) => InputDecoration(
+            hintText: hint,
+            hintStyle: GoogleFonts.inter(
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+              fontSize: 13.5,
+            ),
+            prefixIcon: prefixIcon,
+            filled: true,
+            fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.045),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            isDense: true,
+          );
+
+      Widget sectionLabel(String text) => Padding(
+            padding: const EdgeInsets.only(bottom: 7),
+            child: Text(
+              text,
+              style: GoogleFonts.inter(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.9,
+              ),
+            ),
+          );
+
+      Future<void> handleSubmit() async {
+        final rawName = nameCtrl.text.trim();
+        if (rawName.isEmpty) {
+          setState(() => creationError = "Введите название проекта");
+          return;
+        }
+        setState(() {
+          isCreating = true;
+          creationError = null;
+        });
+        try {
+          if (isEdit) {
+            await ref.read(projectServiceProvider.notifier).saveProject(
+                  Project(
+                    id: project.id,
+                    name: rawName,
+                    path: project.path,
+                    type: project.type,
+                    lastOpened: project.lastOpened,
+                    isInternal: project.isInternal,
+                    platforms: project.platforms,
+                    sdkVersion: project.sdkVersion,
+                  ),
+                );
+          } else {
+            final newProj = await ref.read(projectServiceProvider.notifier).createProject(
+                  name: rawName,
+                  path: PlatformUtils.isDesktop ? locationCtrl.text.trim() : "",
+                  type: selectedType,
+                  platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
+                  sdkVersion: isMobileTemplate ? selectedCompileSdk : null,
+                  packageName: isMobileTemplate ? packageCtrl.text.trim() : null,
+                  minSdk: isNativeAndroid ? selectedMinSdk : null,
+                );
+            await ref.read(workspaceProvider.notifier).setWorkspace(newProj.path);
+            if (ctx.mounted) Navigator.pop(ctx);
+            if (context.mounted) context.go("/editor");
+            return;
+          }
+          if (ctx.mounted) Navigator.pop(ctx);
+        } catch (e) {
+          setState(() {
+            isCreating = false;
+            creationError = e.toString();
+          });
+        }
+      }
+
+      final templateColumn = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          sectionLabel("ТИП ПРОЕКТА"),
+          ...projectTemplates.map((t) {
+            final isSel = selectedType == t.type;
+            return InkWell(
+              onTap: isEdit ? null : () => setState(() => selectedType = t.type),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 7),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isSel
+                      ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSel
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.outlineVariant.withValues(alpha: 0.25),
+                    width: isSel ? 1.4 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: t.color.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Icon(t.icon, size: 17, color: t.color),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  t.title,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    color: theme.colorScheme.onSurface,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: t.color.withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: Text(
+                                  t.badge,
+                                  style: GoogleFonts.inter(
+                                    color: t.color,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            t.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      isSel ? LucideIcons.circle_check : LucideIcons.circle,
+                      size: 17,
+                      color: isSel
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      );
+
+      final paramsColumn = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          sectionLabel("НАЗВАНИЕ ПРОЕКТА"),
+          TextField(
+            controller: nameCtrl,
+            autofocus: !isEdit,
+            onChanged: (_) {
+              syncPackageFromNameAndOrg();
+              setState(() => creationError = null);
+            },
+            style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14.5),
+            decoration: fieldDeco(
+              l10n.projectName,
+              prefixIcon: Icon(LucideIcons.folder_plus, size: 17, color: theme.colorScheme.primary),
+            ),
+          ),
+          if (!isEdit && PlatformUtils.isDesktop) ...[
+            const SizedBox(height: 14),
+            sectionLabel("ПАПКА РАСПОЛОЖЕНИЯ"),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: locationCtrl,
+                    onChanged: (_) => setState(() {}),
+                    style: GoogleFonts.jetBrainsMono(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 12,
+                    ),
+                    decoration: fieldDeco(PlatformUtils.defaultDesktopProjectsDir),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: "Выбрать папку",
+                  onPressed: () async {
+                    final picked = await FilePicker.getDirectoryPath(
+                      initialDirectory: locationCtrl.text.trim(),
+                    );
+                    if (picked != null) {
+                      setState(() => locationCtrl.text = picked);
+                    }
+                  },
+                  icon: const Icon(LucideIcons.folder_open, size: 17),
+                ),
+              ],
+            ),
+          ],
+          if (!isEdit && isMobileTemplate) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      sectionLabel("ДОМЕН (ORG)"),
+                      TextField(
+                        controller: orgCtrl,
+                        onChanged: (_) {
+                          syncPackageFromNameAndOrg();
+                          setState(() {});
+                        },
+                        style: GoogleFonts.jetBrainsMono(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 12.5,
+                        ),
+                        decoration: fieldDeco("com.example"),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      sectionLabel("APPLICATION ID / PACKAGE"),
+                      TextField(
+                        controller: packageCtrl,
+                        onChanged: (_) {
+                          packageEditedManually = true;
+                          setState(() {});
+                        },
+                        style: GoogleFonts.jetBrainsMono(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 12.5,
+                        ),
+                        decoration: fieldDeco("com.example.app"),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      sectionLabel("COMPILE SDK"),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: ["34", "35", "36"].map((sdk) {
+                          final sel = selectedCompileSdk == sdk;
+                          return ChoiceChip(
+                            label: Text("API \$sdk", style: const TextStyle(fontSize: 11.5)),
+                            selected: sel,
+                            onSelected: (_) => setState(() => selectedCompileSdk = sdk),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isNativeAndroid) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        sectionLabel("MIN SDK"),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: ["21", "24", "26"].map((sdk) {
+                            final sel = selectedMinSdk == sdk;
+                            return ChoiceChip(
+                              label: Text("API \$sdk", style: const TextStyle(fontSize: 11.5)),
+                              selected: sel,
+                              onSelected: (_) => setState(() => selectedMinSdk = sdk),
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          if (!isEdit && selectedType == ProjectType.flutter) ...[
+            const SizedBox(height: 14),
+            sectionLabel("ЦЕЛЕВЫЕ ПЛАТФОРМЫ"),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: availablePlatforms.map((plat) {
+                final isSel = selectedPlatforms.contains(plat);
+                return FilterChip(
+                  label: Text(plat.toUpperCase(), style: const TextStyle(fontSize: 11)),
+                  selected: isSel,
+                  onSelected: (val) {
+                    setState(() {
+                      if (val) {
+                        if (!selectedPlatforms.contains(plat)) selectedPlatforms.add(plat);
+                      } else if (selectedPlatforms.length > 1) {
+                        selectedPlatforms.remove(plat);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+          ],
+          if (creationError != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                creationError!,
+                style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 12),
+              ),
+            ),
+          ],
+        ],
+      );
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  isEdit ? l10n.projectSettings : l10n.createProject,
+                  style: GoogleFonts.inter(
+                    fontSize: isWide ? 20 : 18,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.x),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (isWide)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 5, child: paramsColumn),
+                const SizedBox(width: 24),
+                Expanded(flex: 5, child: templateColumn),
+              ],
+            )
+          else ...[
+            paramsColumn,
+            if (!isEdit) ...[
+              const SizedBox(height: 18),
+              templateColumn,
+            ],
+          ],
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: isCreating ? null : () => Navigator.pop(ctx),
+                child: Text(l10n.cancel),
+              ),
+              const SizedBox(width: 10),
+              FilledButton(
+                onPressed: isCreating ? null : handleSubmit,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isCreating
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(
+                        isEdit ? l10n.saveAction : l10n.createProject,
+                        style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    final isWide = MediaQuery.of(context).size.width >= 720;
+    final theme = Theme.of(context);
     if (isWide) {
       await showDialog(
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setState) => Dialog(
-            backgroundColor: Colors.transparent,
+            backgroundColor: theme.colorScheme.surfaceContainerHigh,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             child: Container(
               constraints: const BoxConstraints(maxWidth: 820),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 32,
-                    spreadRadius: 4,
-                  )
-                ],
-              ),
-              padding: const EdgeInsets.all(28),
+              padding: const EdgeInsets.all(24),
               child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          isEdit ? AppLocalizations.of(context)!.projectSettings : AppLocalizations.of(context)!.createProject,
-                          style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface),
-                        ),
-                        IconButton(
-                          icon: const Icon(LucideIcons.x),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Left column
-                        Expanded(
-                          flex: 5,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              TextField(
-                                controller: nameCtrl,
-                                autofocus: !isEdit,
-                                onChanged: (_) => setState(() {}),
-                                style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 15),
-                                decoration: InputDecoration(
-                                  hintText: AppLocalizations.of(context)!.projectName,
-                                  hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                                  filled: true,
-                                  fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                ),
-                              ),
-                              if (!isEdit && PlatformUtils.isDesktop) ...[
-                                const SizedBox(height: 16),
-                                Text(
-                                  'ПАПКА РАСПОЛОЖЕНИЯ ПРОЕКТА',
-                                  style: GoogleFonts.inter(
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.2,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: locationCtrl,
-                                        onChanged: (_) => setState(() {}),
-                                        style: GoogleFonts.jetBrainsMono(
-                                          color: theme.colorScheme.onSurface,
-                                          fontSize: 12,
-                                        ),
-                                        decoration: InputDecoration(
-                                          hintText: PlatformUtils.defaultDesktopProjectsDir,
-                                          filled: true,
-                                          fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                            borderSide: BorderSide.none,
-                                          ),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      onPressed: () async {
-                                        final picked = await FilePicker.getDirectoryPath();
-                                        if (picked != null && picked.trim().isNotEmpty) {
-                                          setState(() => locationCtrl.text = picked);
-                                        }
-                                      },
-                                      icon: const Icon(LucideIcons.folder_open, size: 15),
-                                      label: Text('Обзор...', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Будет создан в: ${p.join(locationCtrl.text.trim().isEmpty ? PlatformUtils.defaultDesktopProjectsDir : locationCtrl.text.trim(), nameCtrl.text.trim().isEmpty ? '<имя_проекта>' : nameCtrl.text.trim())}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.jetBrainsMono(
-                                    color: theme.colorScheme.primary.withValues(alpha: 0.8),
-                                    fontSize: 10.5,
-                                  ),
-                                ),
-                              ],
-                              if (!isEdit) ...[
-                                const SizedBox(height: 24),
-                                Text(AppLocalizations.of(context)!.projectType, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                                const SizedBox(height: 12),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(maxHeight: 280),
-                                  child: ListView.separated(
-                                    shrinkWrap: true,
-                                    itemCount: projectTemplates.length,
-                                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                                    itemBuilder: (context, idx) {
-                                      final t = projectTemplates[idx];
-                                      final isSelected = selectedType == t.type;
-                                      return InkWell(
-                                        borderRadius: BorderRadius.circular(12),
-                                        onTap: () => setState(() {
-                                          final oldType = selectedType;
-                                          selectedType = t.type;
-                                          if ((t.type == ProjectType.androidJava || t.type == ProjectType.androidKotlin) && 
-                                              (oldType == ProjectType.flutter || sdkCtrl.text == '34')) {
-                                            sdkCtrl.text = 'com.example.${nameCtrl.text.isEmpty ? 'app' : nameCtrl.text.toLowerCase().replaceAll('-', '_')}';
-                                          } else if (t.type == ProjectType.flutter && 
-                                                     (oldType == ProjectType.androidJava || oldType == ProjectType.androidKotlin || sdkCtrl.text.contains('.'))) {
-                                            sdkCtrl.text = '34';
-                                          }
-                                        }),
-                                        child: AnimatedContainer(
-                                          duration: const Duration(milliseconds: 150),
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                          decoration: BoxDecoration(
-                                            color: isSelected ? t.color.withValues(alpha: 0.12) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(
-                                              color: isSelected ? t.color : Colors.white.withValues(alpha: 0.06),
-                                              width: isSelected ? 1.5 : 1,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                width: 36,
-                                                height: 36,
-                                                decoration: BoxDecoration(
-                                                  color: t.color.withValues(alpha: 0.18),
-                                                  borderRadius: BorderRadius.circular(10),
-                                                ),
-                                                child: Icon(t.icon, color: t.color, size: 18),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
-                                                      children: [
-                                                        Text(
-                                                          t.title,
-                                                          style: GoogleFonts.inter(
-                                                            color: isSelected ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withValues(alpha: 0.9),
-                                                            fontSize: 13,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 8),
-                                                        Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                          decoration: BoxDecoration(
-                                                            color: t.color.withValues(alpha: 0.15),
-                                                            borderRadius: BorderRadius.circular(6),
-                                                          ),
-                                                          child: Text(
-                                                            t.badge,
-                                                            style: GoogleFonts.inter(
-                                                              color: t.color,
-                                                              fontSize: 9,
-                                                              fontWeight: FontWeight.w600,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      t.subtitle,
-                                                      style: GoogleFonts.inter(
-                                                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                                                        fontSize: 11,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              Icon(
-                                                isSelected ? LucideIcons.circle_check : LucideIcons.circle,
-                                                color: isSelected ? t.color : Colors.white24,
-                                                size: 18,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                if (selectedType == ProjectType.flutter) ...[
-                                  const SizedBox(height: 24),
-                                  Text(AppLocalizations.of(context)!.androidCompileSdkVersion, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: sdkCtrl,
-                                    keyboardType: TextInputType.number,
-                                    style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
-                                    decoration: InputDecoration(
-                                      hintText: AppLocalizations.of(context)!.defaultSdkVersion,
-                                      hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                                      filled: true,
-                                      fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  Text(AppLocalizations.of(context)!.targetPlatforms, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                                  const SizedBox(height: 12),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: availablePlatforms.map((platform) {
-                                      final isPlatSelected = selectedPlatforms.contains(platform);
-                                      return GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            if (isPlatSelected) {
-                                              if (selectedPlatforms.length > 1) {
-                                                selectedPlatforms.remove(platform);
-                                              }
-                                            } else {
-                                              selectedPlatforms.add(platform);
-                                            }
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                          decoration: BoxDecoration(
-                                            color: isPlatSelected ? theme.colorScheme.primary.withValues(alpha: 0.15) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                                            borderRadius: BorderRadius.circular(10),
-                                            border: Border.all(color: isPlatSelected ? theme.colorScheme.primary : Colors.transparent),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                isPlatSelected ? LucideIcons.circle_check : LucideIcons.circle,
-                                                size: 14,
-                                                color: isPlatSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                platform.toUpperCase(),
-                                                style: GoogleFonts.inter(color: isPlatSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ],
-                                if (selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ...[
-                                  const SizedBox(height: 24),
-                                  Text('PACKAGE NAME (APPLICATION ID)', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                                  const SizedBox(height: 12),
-                                  TextField(
-                                    controller: sdkCtrl,
-                                    keyboardType: TextInputType.text,
-                                    style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
-                                    decoration: InputDecoration(
-                                      hintText: 'e.g. com.example.myapp',
-                                      hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                                      filled: true,
-                                      fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 32),
-                        // Right column
-                        Expanded(
-                          flex: 4,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(AppLocalizations.of(context)!.accentColor, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => setState(() => selectedColorValue = null),
-                                    child: Container(
-                                      width: 38,
-                                      height: 38,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-                                        border: Border.all(
-                                          color: selectedColorValue == null ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                                          width: selectedColorValue == null ? 2 : 1,
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Icon(
-                                          LucideIcons.ban,
-                                          size: 14,
-                                          color: selectedColorValue == null ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  ...selectableColors.map((color) {
-                                    final isSelected = selectedColorValue == color.toARGB32();
-                                    return GestureDetector(
-                                      onTap: () => setState(() => selectedColorValue = color.toARGB32()),
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 150),
-                                        width: 38,
-                                        height: 38,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: color,
-                                          border: Border.all(
-                                            color: isSelected ? Colors.white : Colors.transparent,
-                                            width: isSelected ? 2 : 0,
-                                          ),
-                                        ),
-                                        child: isSelected ? const Center(
-                                          child: Icon(LucideIcons.check, color: Colors.white, size: 14),
-                                        ) : null,
-                                      ),
-                                    );
-                                  }),
-                                ],
-                              ),
-                              const SizedBox(height: 24),
-                              Text(AppLocalizations.of(context)!.projectIcon, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                              const SizedBox(height: 12),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => setState(() {
-                                      selectedIconCodePoint = null;
-                                      selectedIconFontFamily = null;
-                                      selectedIconFontPackage = null;
-                                    }),
-                                    child: Container(
-                                      width: 38,
-                                      height: 38,
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
-                                        color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-                                        border: Border.all(
-                                          color: selectedIconCodePoint == null ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                                          width: selectedIconCodePoint == null ? 2 : 1,
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Icon(
-                                          LucideIcons.ban,
-                                          size: 14,
-                                          color: selectedIconCodePoint == null ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  ...selectableIcons.map((icon) {
-                                    final isSelected = selectedIconCodePoint == icon.codePoint;
-                                    return GestureDetector(
-                                      onTap: () => setState(() {
-                                        selectedIconCodePoint = icon.codePoint;
-                                        selectedIconFontFamily = icon.fontFamily;
-                                        selectedIconFontPackage = icon.fontPackage;
-                                      }),
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 150),
-                                        width: 38,
-                                        height: 38,
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(8),
-                                          color: isSelected ? theme.colorScheme.primary.withValues(alpha: 0.1) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                                          border: Border.all(
-                                            color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                                            width: isSelected ? 2 : 1,
-                                          ),
-                                        ),
-                                        child: Center(
-                                          child: Icon(
-                                            icon,
-                                            size: 16,
-                                            color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                     ),
-                     if (creationError != null) ...[
-                       const SizedBox(height: 12),
-                       Container(
-                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                         decoration: BoxDecoration(
-                           color: Colors.redAccent.withValues(alpha: 0.1),
-                           borderRadius: BorderRadius.circular(10),
-                           border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-                         ),
-                           child: Row(
-                             children: [
-                               const Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
-                             const SizedBox(width: 8),
-                             Expanded(
-                               child: Text(
-                                 creationError!,
-                                 style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 11),
-                               ),
-                             ),
-                           ],
-                         ),
-                       ),
-                     ],
-                     const SizedBox(height: 32),
-                     Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: Text(AppLocalizations.of(context)!.cancel),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: isCreating ? null : () async {
-                            if (nameCtrl.text.isEmpty) return;
-                            setState(() {
-                              isCreating = true;
-                              creationError = null;
-                            });
-                            try {
-                              if (isEdit) {
-                                await ref.read(projectServiceProvider.notifier).saveProject(Project(
-                                  id: project.id,
-                                  name: nameCtrl.text,
-                                  path: project.path,
-                                  type: project.type,
-                                  lastOpened: project.lastOpened,
-                                  isInternal: project.isInternal,
-                                  colorValue: selectedColorValue,
-                                  iconCodePoint: selectedIconCodePoint,
-                                  iconFontFamily: selectedIconFontFamily,
-                                  iconFontPackage: selectedIconFontPackage,
-                                  platforms: project.platforms,
-                                  sdkVersion: project.sdkVersion,
-                                ));
-                              } else {
-                                final newProj = await ref.read(projectServiceProvider.notifier).createProject(
-                                  name: nameCtrl.text,
-                                  path: PlatformUtils.isDesktop ? locationCtrl.text.trim() : '',
-                                  type: selectedType,
-                                  iconCodePoint: selectedIconCodePoint,
-                                  colorValue: selectedColorValue,
-                                  iconFontFamily: selectedIconFontFamily,
-                                  iconFontPackage: selectedIconFontPackage,
-                                  platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
-                                  sdkVersion: (selectedType == ProjectType.flutter || selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ? sdkCtrl.text.trim() : null,
-                                );
-                                await ref.read(workspaceProvider.notifier).setWorkspace(newProj.path);
-                                if (ctx.mounted) Navigator.pop(ctx);
-                                if (context.mounted) context.go('/editor');
-                                return;
-                              }
-                              if (ctx.mounted) Navigator.pop(ctx);
-                            } catch (e) {
-                              setState(() {
-                                isCreating = false;
-                                creationError = e.toString();
-                              });
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary,
-                            foregroundColor: theme.colorScheme.onPrimary,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: isCreating
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : Text(isEdit ? AppLocalizations.of(context)!.saveAction : AppLocalizations.of(context)!.createProject, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                child: buildForm(ctx, setState, isWide: true),
               ),
             ),
           ),
@@ -3903,533 +3820,20 @@ class _HomePageState extends ConsumerState<HomePage> {
       await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
-        backgroundColor: Colors.transparent,
+        backgroundColor: theme.colorScheme.surfaceContainerHigh,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
         builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
-              child: Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHigh,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            ),
-            padding: EdgeInsets.fromLTRB(24, 12, 24, MediaQuery.of(ctx).viewInsets.bottom + 32),
+          builder: (ctx, setState) => Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
             child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 32,
-                      height: 4,
-                      decoration: BoxDecoration(color: theme.colorScheme.onSurface.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(2)),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    isEdit ? AppLocalizations.of(context)!.projectSettings : AppLocalizations.of(context)!.createProject,
-                    style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface),
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: nameCtrl,
-                    autofocus: !isEdit,
-                    onChanged: (_) => setState(() {}),
-                    style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 16),
-                    decoration: InputDecoration(
-                      hintText: AppLocalizations.of(context)!.projectName,
-                      hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                      filled: true,
-                      fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    ),
-                  ),
-                  if (!isEdit && PlatformUtils.isDesktop) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'ПАПКА РАСПОЛОЖЕНИЯ ПРОЕКТА',
-                      style: GoogleFonts.inter(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: locationCtrl,
-                            onChanged: (_) => setState(() {}),
-                            style: GoogleFonts.jetBrainsMono(
-                              color: theme.colorScheme.onSurface,
-                              fontSize: 12,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: PlatformUtils.defaultDesktopProjectsDir,
-                              filled: true,
-                              fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            final picked = await FilePicker.getDirectoryPath();
-                            if (picked != null && picked.trim().isNotEmpty) {
-                              setState(() => locationCtrl.text = picked);
-                            }
-                          },
-                          icon: const Icon(LucideIcons.folder_open, size: 15),
-                          label: Text('Обзор...', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Будет создан в: ${p.join(locationCtrl.text.trim().isEmpty ? PlatformUtils.defaultDesktopProjectsDir : locationCtrl.text.trim(), nameCtrl.text.trim().isEmpty ? '<имя_проекта>' : nameCtrl.text.trim())}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.jetBrainsMono(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.8),
-                        fontSize: 10.5,
-                      ),
-                    ),
-                  ],
-                  if (!isEdit) ...[
-                    const SizedBox(height: 24),
-                    Text(AppLocalizations.of(context)!.projectType, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                    const SizedBox(height: 12),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 260),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: projectTemplates.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (context, idx) {
-                          final t = projectTemplates[idx];
-                          final isSelected = selectedType == t.type;
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () => setState(() {
-                              final oldType = selectedType;
-                              selectedType = t.type;
-                              if ((t.type == ProjectType.androidJava || t.type == ProjectType.androidKotlin) && 
-                                  (oldType == ProjectType.flutter || sdkCtrl.text == '34')) {
-                                sdkCtrl.text = 'com.example.${nameCtrl.text.isEmpty ? 'app' : nameCtrl.text.toLowerCase().replaceAll('-', '_')}';
-                              } else if (t.type == ProjectType.flutter && 
-                                         (oldType == ProjectType.androidJava || oldType == ProjectType.androidKotlin || sdkCtrl.text.contains('.'))) {
-                                sdkCtrl.text = '34';
-                              }
-                            }),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: isSelected ? t.color.withValues(alpha: 0.12) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isSelected ? t.color : Colors.white.withValues(alpha: 0.06),
-                                  width: isSelected ? 1.5 : 1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      color: t.color.withValues(alpha: 0.18),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Icon(t.icon, color: t.color, size: 18),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Text(
-                                              t.title,
-                                              style: GoogleFonts.inter(
-                                                color: isSelected ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withValues(alpha: 0.9),
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: t.color.withValues(alpha: 0.15),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              child: Text(
-                                                t.badge,
-                                                style: GoogleFonts.inter(
-                                                  color: t.color,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          t.subtitle,
-                                          style: GoogleFonts.inter(
-                                            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Icon(
-                                    isSelected ? LucideIcons.circle_check : LucideIcons.circle,
-                                    color: isSelected ? t.color : Colors.white24,
-                                    size: 18,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    if (selectedType == ProjectType.flutter) ...[
-                      const SizedBox(height: 24),
-                      Text(AppLocalizations.of(context)!.androidCompileSdkVersion, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: sdkCtrl,
-                        keyboardType: TextInputType.number,
-                        style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: AppLocalizations.of(context)!.defaultSdkVersion,
-                          hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                          filled: true,
-                          fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(AppLocalizations.of(context)!.targetPlatforms, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: availablePlatforms.map((platform) {
-                          final isPlatSelected = selectedPlatforms.contains(platform);
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (isPlatSelected) {
-                                  if (selectedPlatforms.length > 1) {
-                                    selectedPlatforms.remove(platform);
-                                  }
-                                } else {
-                                  selectedPlatforms.add(platform);
-                                }
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isPlatSelected ? theme.colorScheme.primary.withValues(alpha: 0.15) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: isPlatSelected ? theme.colorScheme.primary : Colors.transparent),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    isPlatSelected ? LucideIcons.circle_check : LucideIcons.circle,
-                                    size: 14,
-                                    color: isPlatSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    platform.toUpperCase(),
-                                    style: GoogleFonts.inter(color: isPlatSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                    if (selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ...[
-                      const SizedBox(height: 24),
-                      Text('PACKAGE NAME (APPLICATION ID)', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: sdkCtrl,
-                        keyboardType: TextInputType.text,
-                        style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'e.g. com.example.myapp',
-                          hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                          filled: true,
-                          fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                      ),
-                    ],
-                  ],
-                  const SizedBox(height: 24),
-                  Text(AppLocalizations.of(context)!.accentColor, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 48,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: selectableColors.length + 1,
-                      separatorBuilder: (context, index) => const SizedBox(width: 10),
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          final isSelected = selectedColorValue == null;
-                          return GestureDetector(
-                            onTap: () => setState(() => selectedColorValue = null),
-                            child: Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-                                border: Border.all(
-                                  color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                                  width: isSelected ? 2 : 1,
-                                ),
-                              ),
-                              child: Center(
-                                child: Icon(
-                                  LucideIcons.ban,
-                                  size: 16,
-                                  color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        final color = selectableColors[index - 1];
-                        final isSelected = selectedColorValue == color.toARGB32();
-                        return GestureDetector(
-                          onTap: () => setState(() => selectedColorValue = color.toARGB32()),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: color,
-                              border: Border.all(
-                                color: isSelected ? Colors.white : Colors.transparent,
-                                width: isSelected ? 3 : 0,
-                              ),
-                              boxShadow: isSelected ? [
-                                BoxShadow(
-                                  color: color.withValues(alpha: 0.4),
-                                  blurRadius: 10,
-                                  spreadRadius: 2,
-                                )
-                              ] : null,
-                            ),
-                            child: isSelected ? const Center(
-                              child: Icon(LucideIcons.check, color: Colors.white, size: 18),
-                            ) : null,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(AppLocalizations.of(context)!.projectIcon, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 48,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: selectableIcons.length + 1,
-                      separatorBuilder: (context, index) => const SizedBox(width: 10),
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          final isSelected = selectedIconCodePoint == null;
-                          return GestureDetector(
-                            onTap: () => setState(() {
-                              selectedIconCodePoint = null;
-                              selectedIconFontFamily = null;
-                              selectedIconFontPackage = null;
-                            }),
-                            child: Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-                                border: Border.all(
-                                  color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                                  width: isSelected ? 2 : 1,
-                                ),
-                              ),
-                              child: Center(
-                                child: Icon(
-                                  LucideIcons.ban,
-                                  size: 16,
-                                  color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        final icon = selectableIcons[index - 1];
-                        final isSelected = selectedIconCodePoint == icon.codePoint;
-                        return GestureDetector(
-                          onTap: () => setState(() {
-                            selectedIconCodePoint = icon.codePoint;
-                            selectedIconFontFamily = icon.fontFamily;
-                            selectedIconFontPackage = icon.fontPackage;
-                          }),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              color: isSelected ? theme.colorScheme.primary.withValues(alpha: 0.1) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                              border: Border.all(
-                                color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.1),
-                                width: isSelected ? 2 : 1,
-                              ),
-                            ),
-                            child: Center(
-                              child: Icon(
-                                icon,
-                                size: 20,
-                                color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  if (creationError != null) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              creationError!,
-                              style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 11),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: isCreating ? null : () async {
-                        if (nameCtrl.text.isEmpty) return;
-                        setState(() {
-                          isCreating = true;
-                          creationError = null;
-                        });
-                        try {
-                          if (isEdit) {
-                            await ref.read(projectServiceProvider.notifier).saveProject(Project(
-                              id: project.id,
-                              name: nameCtrl.text,
-                              path: project.path,
-                              type: project.type,
-                              lastOpened: project.lastOpened,
-                              isInternal: project.isInternal,
-                              colorValue: selectedColorValue,
-                              iconCodePoint: selectedIconCodePoint,
-                              iconFontFamily: selectedIconFontFamily,
-                              iconFontPackage: selectedIconFontPackage,
-                              platforms: project.platforms,
-                              sdkVersion: project.sdkVersion,
-                            ));
-                          } else {
-                            final newProj = await ref.read(projectServiceProvider.notifier).createProject(
-                              name: nameCtrl.text,
-                              path: PlatformUtils.isDesktop ? locationCtrl.text.trim() : '',
-                              type: selectedType,
-                              iconCodePoint: selectedIconCodePoint,
-                              colorValue: selectedColorValue,
-                              iconFontFamily: selectedIconFontFamily,
-                              iconFontPackage: selectedIconFontPackage,
-                              platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
-                              sdkVersion: (selectedType == ProjectType.flutter || selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ? sdkCtrl.text.trim() : null,
-                            );
-                            await ref.read(workspaceProvider.notifier).setWorkspace(newProj.path);
-                            if (ctx.mounted) Navigator.pop(ctx);
-                            if (context.mounted) context.go('/editor');
-                            return;
-                          }
-                          if (ctx.mounted) Navigator.pop(ctx);
-                        } catch (e) {
-                          setState(() {
-                            isCreating = false;
-                            creationError = e.toString();
-                          });
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: theme.colorScheme.onPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 0,
-                      ),
-                      child: isCreating
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(isEdit ? AppLocalizations.of(context)!.saveAction : AppLocalizations.of(context)!.createProject, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+              child: buildForm(ctx, setState, isWide: false),
             ),
           ),
         ),
-      ),
-    ),
-  );
+      );
     }
   }
-
 }
