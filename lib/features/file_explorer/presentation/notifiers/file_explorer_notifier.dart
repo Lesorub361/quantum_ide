@@ -239,6 +239,8 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
   }
 }
 
+final fileTreeRefreshProvider = StateProvider<int>((ref) => 0);
+
 final fileExplorerProvider = StateNotifierProvider<FileExplorerNotifier, FileExplorerState>((ref) {
   final workspace = ref.watch(workspaceProvider);
   final initialPath = workspace.currentPath ?? '';

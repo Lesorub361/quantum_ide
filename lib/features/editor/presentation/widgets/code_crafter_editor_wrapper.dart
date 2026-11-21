@@ -429,7 +429,6 @@ class _CodeCrafterEditorWrapperState
         aiCompletion: _buildAiCompletion(settings),
         gutterStyle: GutterStyle(
           lineNumberStyle: baseStyle.copyWith(
-            fontSize: (settings.fontSize * 0.88).clamp(11.0, 20.0),
             color: mutedColor,
           ),
           dividerColor: borderColor,

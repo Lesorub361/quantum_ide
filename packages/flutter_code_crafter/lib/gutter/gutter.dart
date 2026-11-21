@@ -253,25 +253,27 @@ class GutterItem extends StatelessWidget {
           child: Text(
             linNumber.toString(),
             style: (() {
+              final effectiveHeight =
+                  lineNumberStyle?.height ?? Shared().textStyle?.height ?? 1.5;
               if (lineNumberStyle != null) {
                 return lineNumberStyle!.copyWith(
                   color:
                       lineNumberStyle?.color ?? Shared().theme['root']?.color,
-                  height: 1.5,
+                  height: effectiveHeight,
                 );
               } else if (Shared().textStyle != null) {
                 return Shared().textStyle!.copyWith(
                   color:
                       Shared().textStyle?.color ??
                       Shared().theme['root']?.color,
-                  height: 1.5,
+                  height: effectiveHeight,
                 );
               } else {
                 return TextStyle(
                   color: Shared().theme.isNotEmpty
                       ? Shared().theme['root']?.color
                       : Colors.white,
-                  height: 1.5,
+                  height: effectiveHeight,
                 );
               }
             })(),
@@ -291,8 +293,8 @@ void _getFoldRanges(String code, ValueNotifier<List<LineState>> lineStates) {
             LineState(lineNumber: e.lineNumber, hasBreakpoint: e.hasBreakpoint),
       )
       .toList();
-  Map<String, List<int>> stacks = {"{": [], "[": [], "(": [], "<": []};
-  const matchingBrackets = {"{": "}", "[": "]", "(": ")", "<": ">"};
+  Map<String, List<int>> stacks = {"{": [], "[": [], "(": []};
+  const matchingBrackets = {"{": "}", "[": "]", "(": ")"};
   for (final openBracket in matchingBrackets.keys) {
     final closeBracket = matchingBrackets[openBracket]!;
     for (int i = 0; i < lines.length; i++) {

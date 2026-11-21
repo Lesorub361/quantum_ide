@@ -11,6 +11,7 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
 
 class RoxumPendingEdit {
   final String filePath;
@@ -62,6 +63,25 @@ class RoxumAgenticTools {
   String _resolvePath(String rawPath) {
     final trimmed = rawPath.trim();
     if (trimmed.isEmpty) return workspacePath;
+    if (Platform.isAndroid && trimmed.startsWith('/root/')) {
+      final hostCandidate = File(trimmed);
+      if (!hostCandidate.existsSync() && !Directory(trimmed).existsSync()) {
+        final wsNorm = p.normalize(workspacePath);
+        const marker = '/projects/';
+        final idx = wsNorm.indexOf(marker);
+        if (idx > 0) {
+          final filesDir = wsNorm.substring(0, idx);
+          if (trimmed.startsWith('/root/projects/')) {
+            return p.normalize(
+              p.join(filesDir, 'projects', trimmed.substring('/root/projects/'.length)),
+            );
+          }
+          return p.normalize(
+            p.join(filesDir, 'rootfs', 'ubuntu', trimmed.substring(1)),
+          );
+        }
+      }
+    }
     final resolved = p.isAbsolute(trimmed)
         ? trimmed
         : p.join(workspacePath, trimmed);
@@ -76,7 +96,17 @@ class RoxumAgenticTools {
   String _relativePath(String canonicalPath) {
     final root = p.normalize(Directory(workspacePath).absolute.path);
     if (canonicalPath == root) return '.';
-    return p.relative(canonicalPath, from: root);
+    if (_isInsideWorkspace(canonicalPath)) {
+      return p.relative(canonicalPath, from: root);
+    }
+    return canonicalPath;
+  }
+
+  void _refreshWorkspaceExplorer() {
+    try {
+      _ref.read(fileTreeRefreshProvider.notifier).state++;
+      _ref.read(fileExplorerProvider.notifier).scanDirectory(workspacePath);
+    } catch (_) {}
   }
 
   static List<Map<String, dynamic>> buildOpenAiTools(
@@ -649,12 +679,6 @@ class RoxumAgenticTools {
     int? endLine,
   }) async {
     final path = _resolvePath(rawPath);
-    if (!_isInsideWorkspace(path)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final file = File(path);
     if (!await file.exists()) {
       return RoxumToolExecutionResult(
@@ -724,6 +748,7 @@ class RoxumAgenticTools {
     onPendingEditsChanged?.call(Map<String, RoxumPendingEdit>.from(pendingEdits));
 
     await _ref.read(editorProvider.notifier).reloadFileFromDisk(path);
+    _refreshWorkspaceExplorer();
     try {
       await LiveTelemetryService.instance.onFileUpdated?.call(path);
     } catch (_) {}
@@ -759,12 +784,6 @@ class RoxumAgenticTools {
     String content,
   ) async {
     final path = _resolvePath(rawPath);
-    if (!_isInsideWorkspace(path)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final file = File(path);
     final existed = await file.exists();
     final original = existed ? await file.readAsString() : '';
@@ -787,12 +806,6 @@ class RoxumAgenticTools {
     String newText,
   ) async {
     final path = _resolvePath(rawPath);
-    if (!_isInsideWorkspace(path)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final file = File(path);
     if (!await file.exists()) {
       return RoxumToolExecutionResult(
@@ -827,12 +840,6 @@ class RoxumAgenticTools {
     String position = 'after',
   }) async {
     final path = _resolvePath(rawPath);
-    if (!_isInsideWorkspace(path)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final file = File(path);
     if (!await file.exists()) {
       return RoxumToolExecutionResult(
@@ -865,12 +872,6 @@ class RoxumAgenticTools {
     String replace,
   ) async {
     final path = _resolvePath(rawPath);
-    if (!_isInsideWorkspace(path)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final file = File(path);
     if (!await file.exists()) {
       return RoxumToolExecutionResult(
@@ -900,12 +901,6 @@ class RoxumAgenticTools {
 
   Future<RoxumToolExecutionResult> _deleteFile(String rawPath) async {
     final path = _resolvePath(rawPath);
-    if (!_isInsideWorkspace(path)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final file = File(path);
     if (!await file.exists()) {
       return RoxumToolExecutionResult(
@@ -914,6 +909,7 @@ class RoxumAgenticTools {
       );
     }
     await file.delete();
+    _refreshWorkspaceExplorer();
     return RoxumToolExecutionResult(
       success: true,
       output: 'Deleted ${_relativePath(path)}.',
@@ -926,15 +922,10 @@ class RoxumAgenticTools {
   ) async {
     final oldPath = _resolvePath(oldRaw);
     final newPath = _resolvePath(newRaw);
-    if (!_isInsideWorkspace(oldPath) || !_isInsideWorkspace(newPath)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     if (await File(oldPath).exists()) {
       await File(newPath).parent.create(recursive: true);
       await File(oldPath).rename(newPath);
+      _refreshWorkspaceExplorer();
       return RoxumToolExecutionResult(
         success: true,
         output: 'Renamed ${_relativePath(oldPath)} -> ${_relativePath(newPath)}.',
@@ -942,6 +933,7 @@ class RoxumAgenticTools {
     }
     if (await Directory(oldPath).exists()) {
       await Directory(oldPath).rename(newPath);
+      _refreshWorkspaceExplorer();
       return RoxumToolExecutionResult(
         success: true,
         output: 'Renamed directory ${_relativePath(oldPath)} -> ${_relativePath(newPath)}.',
@@ -958,12 +950,6 @@ class RoxumAgenticTools {
     bool recursive = false,
   }) async {
     final dirPath = _resolvePath(rawDir);
-    if (!_isInsideWorkspace(dirPath)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final dir = Directory(dirPath);
     if (!await dir.exists()) {
       return RoxumToolExecutionResult(
@@ -974,10 +960,11 @@ class RoxumAgenticTools {
     final entries = <String>[];
     await for (final entity in dir.list(recursive: recursive, followLinks: false)) {
       final rel = _relativePath(entity.path);
-      if (rel.startsWith('.git/') ||
-          rel.contains('/.git/') ||
-          rel.contains('/.dart_tool/') ||
-          rel.contains('/build/')) {
+      if (recursive &&
+          (rel.startsWith('.git/') ||
+              rel.contains('/.git/') ||
+              rel.contains('/.dart_tool/') ||
+              rel.contains('/build/'))) {
         continue;
       }
       final suffix = entity is Directory ? '/' : '';
@@ -1034,12 +1021,6 @@ class RoxumAgenticTools {
       );
     }
     final base = _resolvePath(directoryPath ?? '');
-    if (!_isInsideWorkspace(base)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final dir = Directory(base);
     if (!await dir.exists()) {
       return const RoxumToolExecutionResult(
@@ -1078,12 +1059,6 @@ class RoxumAgenticTools {
 
   Future<RoxumToolExecutionResult> _getFileInfo(String rawPath) async {
     final path = _resolvePath(rawPath);
-    if (!_isInsideWorkspace(path)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final stat = await FileStat.stat(path);
     if (stat.type == FileSystemEntityType.notFound) {
       return RoxumToolExecutionResult(
@@ -1122,12 +1097,6 @@ class RoxumAgenticTools {
 
   Future<RoxumToolExecutionResult> _codeOutline(String rawPath) async {
     final targetPath = _resolvePath(rawPath);
-    if (!_isInsideWorkspace(targetPath)) {
-      return const RoxumToolExecutionResult(
-        success: false,
-        output: 'Permission denied: path is outside workspace.',
-      );
-    }
     final symRegex = RegExp(
       r'^\s*(?:abstract\s+|sealed\s+|final\s+)?(?:class|enum|mixin|extension|typedef|def|function|interface|struct)\s+([A-Za-z0-9_]+)|^\s*(?:@override\s+)?(?:Future<[^>]+>|Stream<[^>]+>|Widget|State<[^>]+>|void|String|int|bool|double|dynamic)\s+([A-Za-z0-9_]+)\s*\(',
     );
@@ -1289,6 +1258,7 @@ done
       workingDirectory: workspacePath,
       timeout: const Duration(seconds: 300),
     );
+    _refreshWorkspaceExplorer();
     final out = res.combined.length > 6000
         ? '${res.combined.substring(0, 6000)}\n... [truncated]'
         : res.combined;
@@ -1311,6 +1281,7 @@ done
       workingDirectory: workspacePath,
       timeout: const Duration(seconds: 180),
     );
+    _refreshWorkspaceExplorer();
     var combined = res.combined;
     if (combined.length > 6000) {
       combined =

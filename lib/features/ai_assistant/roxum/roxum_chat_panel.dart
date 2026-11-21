@@ -127,6 +127,85 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     });
   }
 
+  Future<void> _copyFullChatToClipboard(
+    RoxumChatSession session, {
+    String? modelId,
+  }) async {
+    final buf = StringBuffer();
+    buf.writeln('# QuantumIDE Roxum Chat Export');
+    buf.writeln('- Session: ${session.title}');
+    if (modelId != null && modelId.isNotEmpty) {
+      buf.writeln('- Model: $modelId');
+    }
+    buf.writeln('- Turns: ${session.turns.length}');
+    buf.writeln();
+
+    for (var i = 0; i < session.turns.length; i++) {
+      final t = session.turns[i];
+      buf.writeln('---');
+      buf.writeln('## Turn ${i + 1} (${t.timestamp.toIso8601String()})');
+      buf.writeln('### User');
+      buf.writeln(t.userRequest);
+      if (t.attachmentNames.isNotEmpty) {
+        buf.writeln('\nAttachments: ${t.attachmentNames.join(', ')}');
+      }
+      if (t.reasoningText.trim().isNotEmpty) {
+        buf.writeln();
+        buf.writeln('### Thinking (${t.thinkingDurationMs} ms)');
+        buf.writeln(t.reasoningText.trim());
+      }
+      if (t.toolCalls.isNotEmpty) {
+        buf.writeln();
+        buf.writeln('### Tool Calls (${t.toolCalls.length})');
+        for (final tc in t.toolCalls) {
+          final status = tc.isRunning
+              ? 'RUNNING'
+              : (tc.success ? 'OK' : 'ERROR');
+          buf.writeln('- `${tc.name}` [$status]');
+          if (tc.arguments.isNotEmpty) {
+            buf.writeln('  Args: `${jsonEncode(tc.arguments)}`');
+          }
+          if (tc.output.trim().isNotEmpty) {
+            buf.writeln('  Output:');
+            buf.writeln('  ```');
+            buf.writeln(tc.output.trim());
+            buf.writeln('  ```');
+          }
+        }
+      }
+      if (t.fileEdits.isNotEmpty) {
+        buf.writeln();
+        buf.writeln('### File Edits');
+        for (final fe in t.fileEdits) {
+          buf.writeln(
+            '- `${fe.filePath}` (+${fe.addedLines} / -${fe.removedLines})',
+          );
+        }
+      }
+      if (t.aiResponse.trim().isNotEmpty) {
+        buf.writeln();
+        buf.writeln('### Assistant');
+        buf.writeln(t.aiResponse.trim());
+      }
+      if (t.usage.totalTokens > 0) {
+        buf.writeln();
+        buf.writeln(
+          '_Tokens: prompt=${t.usage.promptTokens}, completion=${t.usage.completionTokens}, total=${t.usage.totalTokens}_',
+        );
+      }
+      buf.writeln();
+    }
+
+    await Clipboard.setData(ClipboardData(text: buf.toString()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Весь чат, размышления и логи инструментов скопированы'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _pickAttachment({required bool imagesOnly}) async {
     try {
       final files = await FilePicker.pickFiles(
@@ -599,6 +678,12 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
               ),
               onSelected: (value) {
                 switch (value) {
+                  case 'copy_chat':
+                    _copyFullChatToClipboard(
+                      session,
+                      modelId: chatState.selectedModelId,
+                    );
+                    break;
                   case 'tools':
                     _showToolPermissionsSheet(context, chatState);
                     break;
@@ -614,6 +699,17 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 }
               },
               itemBuilder: (ctx) => [
+                if (session.turns.isNotEmpty)
+                  PopupMenuItem(
+                    value: 'copy_chat',
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.copy, size: 16, color: accentColor),
+                        const SizedBox(width: 10),
+                        const Text('Копировать весь чат и логи'),
+                      ],
+                    ),
+                  ),
                 PopupMenuItem(
                   value: 'tools',
                   child: Row(
@@ -762,7 +858,22 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
               constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
               padding: EdgeInsets.zero,
             ),
-            if (session.turns.isNotEmpty)
+            if (session.turns.isNotEmpty) ...[
+              IconButton(
+                onPressed: () => _copyFullChatToClipboard(
+                  session,
+                  modelId: chatState.selectedModelId,
+                ),
+                icon: Icon(
+                  LucideIcons.copy,
+                  size: 16.5,
+                  color: mutedColor,
+                ),
+                tooltip: 'Копировать весь чат и логи',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                padding: EdgeInsets.zero,
+              ),
               IconButton(
                 onPressed: () => _clearCurrentChat(chatState),
                 icon: Icon(
@@ -775,6 +886,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                 padding: EdgeInsets.zero,
               ),
+            ],
           ],
           if (widget.onToggleExpand != null)
             IconButton(

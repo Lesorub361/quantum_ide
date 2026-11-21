@@ -440,6 +440,16 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     }
   }
 
+  /// Removes pseudo tool-execution lines that weak models copy as plain text
+  /// (e.g. `[Executed tools in this turn: ...]`) instead of making real calls.
+  String _stripFakeToolMarkers(String text) {
+    final cleaned = text.replaceAll(
+      RegExp(r'^\s*\[Executed tools in this turn:[^\]]*\]\s*$', multiLine: true),
+      '',
+    );
+    return cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
+  }
+
   String _loadProjectContextBlocks(String workspace) {
     if (workspace.isEmpty) return '';
     final buf = StringBuffer();
@@ -553,11 +563,12 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final projectBlocks = _loadProjectContextBlocks(workspace);
 
     final systemPrompt = state.chatMode == RoxumChatMode.agent
-        ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace, shell, and MCP servers via tool calls '
+        ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace, the device/system filesystem (/root, /storage/emulated/0, SDK directories, host paths), shell (including ADB / Shizuku `rish` when available), and MCP servers via tool calls '
             '(readFile, codeOutline, writeFile, editFile, listFiles, grepInFiles, runCommand, checkEnvironment, installPackages, getLspDiagnostics, gitStatus, and all `mcp__*` tools). '
             'Workspace root: "$workspace"${guestWorkspace != workspace ? ' (in shell/terminal mapped to "$guestWorkspace")' : ''}. '
             '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}\n'
             'CRITICAL RULES FOR HIGH EFFICIENCY & ACCURACY:\n'
+            '0) ACT, DO NOT DESCRIBE: perform the task with REAL tool calls (writeFile/editFile/runCommand...). NEVER write text like "[Executed tools...]", never claim an edit/build succeeded unless a real tool result confirmed it, and never finish with only a plan or description.\n'
             '1) TOKEN SAVING & CODEGRAPH MCP: For unfamiliar or large files/projects, call `mcp__quantum_codegraph__project_symbols` or `codeOutline` first, use `mcp__quantum_codegraph__read_symbol` to read a specific class/method body with brace balancing, `mcp__quantum_codegraph__find_symbol_usages` to find references across the project, or `readFile` with `startLine` and `endLine`.\n'
             '2) ENVIRONMENT & SDKS: NEVER assume `flutter`, `dart`, `node`, `python`, `java`, or `git` is missing and NEVER try to manually download huge SDK tarballs via curl unless `checkEnvironment` proves it is absent. Always call `checkEnvironment` first to see exact installed SDK paths and versions.\n'
             '3) INSTALLING PACKAGES: If a project or system dependency is missing, install it directly using `installPackages` (supports apt, npm, pip, pub, cargo) or `runCommand`.\n'
@@ -605,14 +616,10 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       {'role': 'system', 'content': systemPrompt},
       for (final t in baseTurns) ...[
         {'role': 'user', 'content': t.userRequest},
-        if (t.aiResponse.isNotEmpty || t.toolCalls.isNotEmpty)
+        if (t.aiResponse.isNotEmpty)
           {
             'role': 'assistant',
-            'content': [
-              if (t.toolCalls.isNotEmpty)
-                '[Executed tools in this turn: ${t.toolCalls.map((c) => c.name).toSet().join(', ')}]',
-              if (t.aiResponse.isNotEmpty) t.aiResponse,
-            ].join('\n'),
+            'content': _stripFakeToolMarkers(t.aiResponse),
           },
       ],
       {'role': 'user', 'content': currentUserContent},
@@ -765,8 +772,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       }
 
       if (!_cancelled) {
-        final effectiveAnswer = finalAnswer.trim().isNotEmpty
-            ? finalAnswer
+        final cleanedAnswer = _stripFakeToolMarkers(finalAnswer);
+        final effectiveAnswer = cleanedAnswer.trim().isNotEmpty
+            ? cleanedAnswer
             : 'Модель вернула пустой ответ. Попробуйте повторить запрос или сменить модель.';
         _updateTurn(
           turnId,

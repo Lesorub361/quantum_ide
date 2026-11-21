@@ -1023,7 +1023,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                             if (ref.watch(bookmarksProvider).isNotEmpty)
                               const Divider(height: 1, color: Colors.white10, indent: 12, endIndent: 12),
                             FileDrawerTree(
-                              key: ValueKey('file_tree_${workspacePath}_$_treeRefreshSeed'),
+                              key: ValueKey(
+                                'file_tree_${workspacePath}_${_treeRefreshSeed}_${ref.watch(fileTreeRefreshProvider)}',
+                              ),
                               workspacePath: workspacePath,
                             ),
                             const SizedBox(height: 16),
