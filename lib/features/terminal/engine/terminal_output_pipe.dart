@@ -43,13 +43,18 @@ class TerminalOutputPipe {
     _sink.add(bytes);
   }
 
+  String _syncTail = '';
+
   void _append(String s) {
     if (s.isEmpty) return;
     _buffer.write(s);
     _length += s.length;
 
-    final lastBegin = s.lastIndexOf(_syncBegin);
-    final lastEnd = s.lastIndexOf(_syncEnd);
+    final probe = _syncTail + s;
+    _syncTail = probe.length > 16 ? probe.substring(probe.length - 16) : probe;
+
+    final lastBegin = probe.lastIndexOf(_syncBegin);
+    final lastEnd = probe.lastIndexOf(_syncEnd);
     if (lastBegin != -1 || lastEnd != -1) {
       if (lastBegin > lastEnd) {
         _inSyncUpdate = true;

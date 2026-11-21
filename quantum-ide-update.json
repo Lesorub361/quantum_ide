@@ -1,16 +1,16 @@
 {
-  "versionCode": 292,
-  "versionName": "1.2.275",
-  "notes": "## 🚀 QuantumIDE v1.2.275\n\n### Что нового\n- **Добавлена быстрая сборка AAB и APK с D8 (без R8) и с R8**: во вкладке сборки и в окне выбора сборки теперь доступны кнопки **`AAB с D8 (без R8)`**, **`AAB с R8 (Google Play)`**, **`APK (D8 · без R8)`** и **`APK (R8)`** (а также алиасы `build-aab-d8` и `build-apk-d8`), ускоряющие сборку в 2 раза.\n- **Исправлен таймер сборки в нижней панели (Status Bar) при отмене**: при нажатии кнопки `Стоп` (или крестика `×` на индикаторе сборки) таймер времени сборки теперь мгновенно останавливается и сбрасывается вместе с фоновыми процессами Gradle/gen_snapshot.\n- **Обёртка `/usr/bin/aapt2` для AGP 9+ и автоочистка `build-cache-1`**: устранена сборка APK без `AndroidManifest.xml` на шаге `:app:optimizeReleaseResources`.\n- **Нативный ARM64 `gen_snapshot-arm64`**: автоматическое подключение без эмуляции Box64.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
+  "versionCode": 293,
+  "versionName": "1.2.276",
+  "notes": "## 🚀 QuantumIDE v1.2.276\n\n### Что нового\n- **Полностью исправлены глюки отрисовки терминала (пропадание букв, повторение строк и разнобой без открытия клавиатуры)**:\n  - Восстановлен и усилен локальный движок `packages/conduit_vt` с правильным `eraseRange` / `eraseLineToCursor`, занулением хвостов `Uint32List` при ресайзе строк, поддержкой wide/zero-width символов и безопасным `Buffer.resize` / `reflow`.\n  - Устранён баг с пропаданием букв: `ParagraphCache` увеличен до `8192`, пропускает пустые пробелы `0x20` без подчёркивания и освобождает вытесненные `ui.Paragraph` только через двухкадровый `postFrameCallback` после растеризации на GPU.\n  - В `RenderTerminal._paint` добавлена авто-синхронизация `_scrollOffset` и учёт горизонтального padding при расчёте ширины сетки символов.\n  - В `TerminalOutputPipe` исправлен поиск маркеров синхронного кадра DEC 2026 (`\\x1b[?2026h/l`) на стыке чанков PTY.\n- **Быстрая сборка AAB и APK с D8 (без R8) и с R8** + **исправлена остановка таймера сборки в Status Bar при отмене**.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.275/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.276/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.275",
-  "buildNumber": 292,
-  "tag_name": "v1.2.275",
-  "releaseNotes": "Добавлена быстрая сборка AAB и APK с D8 (без R8) и с R8 во вкладку сборки, исправлена остановка таймера времени сборки в нижней панели при отмене."
+  "version": "1.2.276",
+  "buildNumber": 293,
+  "tag_name": "v1.2.276",
+  "releaseNotes": "Исправлено пропадание букв, повторение и разнобой строк в терминале (отложенный dispose ParagraphCache, очистка хвостов BufferLine, синхронизация DEC 2026 на границе чанков и viewport scroll)."
 }
