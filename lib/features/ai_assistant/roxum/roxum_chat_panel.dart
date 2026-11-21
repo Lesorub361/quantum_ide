@@ -3068,6 +3068,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                                 }
                               }
                               await runtime.setUseNativeRootMode(val);
+                              if (!context.mounted) return;
                               setSheetState(() {});
                             },
                             secondary: const Icon(

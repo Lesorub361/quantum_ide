@@ -352,6 +352,7 @@ final roxumChatProvider =
 class RoxumChatNotifier extends Notifier<RoxumChatState> {
   final RoxumAiClient _client = RoxumAiClient();
   bool _cancelled = false;
+  int _activeRunToken = 0;
   String _activePrefsKey = 'roxum_chat_sessions_v2_global';
 
   static String _prefsKeyForWorkspace(String? workspacePath) {
@@ -397,7 +398,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           .map((e) => RoxumChatSession.fromJson(e.cast<String, dynamic>()))
           .toList();
       if (_activePrefsKey != prefsKey) return;
-      if (parsed.isNotEmpty) {
+      final isStillUntouchedInitial =
+          state.sessions.length == 1 && state.sessions.first.turns.isEmpty;
+      if (parsed.isNotEmpty && isStillUntouchedInitial) {
         state = state.copyWith(
           sessions: parsed,
           currentSessionId: parsed.first.id,
@@ -649,6 +652,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     );
 
     _cancelled = false;
+    final runToken = ++_activeRunToken;
     state = state.copyWith(isGenerating: true, selectedModelId: model.id);
 
     final workspace = ref.read(workspaceProvider).currentPath ?? '';
@@ -748,6 +752,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final turnEditedPaths = <String>{};
     final stepEditIds = <String, String>{};
     final pendingCopy = Map<String, RoxumPendingEdit>.from(state.pendingEdits);
+    final lastSeenContent = <String, String>{
+      for (final e in pendingCopy.entries) e.key: e.value.updatedContent,
+    };
 
     List<RoxumTimelineItem> upsertTimeline(
       List<RoxumTimelineItem> current,
@@ -770,8 +777,10 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
             onPendingEditsChanged: (updated) {
               state = state.copyWith(pendingEdits: updated);
               for (final k in updated.keys) {
-                if (pendingCopy[k]?.updatedContent != updated[k]?.updatedContent ||
+                final nextContent = updated[k]!.updatedContent;
+                if (lastSeenContent[k] != nextContent ||
                     !turnEditedPaths.contains(k)) {
+                  lastSeenContent[k] = nextContent;
                   turnEditedPaths.add(k);
                   stepEditIds['$currentStep::$k'] ??= 'edit_${currentStep}_$k';
                 }
@@ -919,7 +928,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         );
       }
     } finally {
-      state = state.copyWith(isGenerating: false);
+      if (_activeRunToken == runToken) {
+        state = state.copyWith(isGenerating: false);
+      }
       _persistSessions();
     }
   }

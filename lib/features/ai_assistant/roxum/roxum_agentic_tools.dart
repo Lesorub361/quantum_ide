@@ -71,9 +71,12 @@ class RoxumAgenticTools {
         final idx = wsNorm.indexOf(marker);
         if (idx > 0) {
           final filesDir = wsNorm.substring(0, idx);
-          if (trimmed.startsWith('/root/projects/')) {
+          if (trimmed == '/root/projects' || trimmed.startsWith('/root/projects/')) {
+            final rel = trimmed.length <= '/root/projects'.length
+                ? ''
+                : trimmed.substring('/root/projects/'.length);
             return p.normalize(
-              p.join(filesDir, 'projects', trimmed.substring('/root/projects/'.length)),
+              rel.isEmpty ? p.join(filesDir, 'projects') : p.join(filesDir, 'projects', rel),
             );
           }
           return p.normalize(

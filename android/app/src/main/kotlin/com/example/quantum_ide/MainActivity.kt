@@ -265,8 +265,14 @@ class MainActivity : FlutterActivity() {
                                 )
                                 method.isAccessible = true
                                 val proc = method.invoke(null, cmd, null, null) as java.lang.Process
+                                var stderr = ""
+                                val errThread = Thread {
+                                    stderr = try {
+                                        proc.errorStream.bufferedReader().use { it.readText() }
+                                    } catch (_: Throwable) { "" }
+                                }.apply { start() }
                                 val stdout = proc.inputStream.bufferedReader().use { it.readText() }
-                                val stderr = proc.errorStream.bufferedReader().use { it.readText() }
+                                errThread.join(5000)
                                 val exitCode = proc.waitFor()
                                 runOnUiThread {
                                     result.success(mapOf(
