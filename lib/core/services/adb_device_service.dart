@@ -357,6 +357,14 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     }
   }
 
+  String _stripAdbDaemonLines(String raw) {
+    return raw
+        .split('\n')
+        .where((l) => !l.trim().startsWith('* daemon '))
+        .join('\n')
+        .trim();
+  }
+
   /// Connect to device via Wi-Fi ADB (e.g. `192.168.1.100:5555`)
   Future<String> connectWifi(String ipAndPort) async {
     final clean = ipAndPort.trim();
@@ -364,30 +372,39 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
     final runtime = _ref.read(runtimeServiceProvider);
     try {
+      await runtime.runCommand('timeout 5 adb start-server >/dev/null 2>&1 || true');
       var res = await runtime.runCommand('timeout 10 adb connect $clean 2>&1 || true');
       if (res.contains('command not found') || res.contains('adb: not found')) {
         await fixAdbEnvironment();
         res = await runtime.runCommand('timeout 10 adb connect $clean 2>&1 || true');
       }
-      if (res.contains('connected to') || res.contains('already connected')) {
+      final cleanRes = _stripAdbDaemonLines(res);
+      if (cleanRes.contains('connected to') || cleanRes.contains('already connected')) {
         await refreshDevices();
-        return res.trim();
+        return '✅ $cleanRes';
       }
 
-      // Auto-heal on protocol fault or broken server
-      if (res.contains('protocol fault') || res.contains('cannot connect') || res.contains('failed') || res.trim().isEmpty) {
+      // Auto-heal on protocol fault, broken server, or silent timeout
+      if (cleanRes.contains('protocol fault') ||
+          cleanRes.contains('cannot connect') ||
+          cleanRes.contains('failed') ||
+          cleanRes.isEmpty) {
         await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; timeout 5 adb start-server 2>/dev/null || true');
-        final retry = await runtime.runCommand('timeout 10 adb connect $clean 2>&1 || true');
+        final retry = _stripAdbDaemonLines(
+          await runtime.runCommand('timeout 10 adb connect $clean 2>&1 || true'),
+        );
         await refreshDevices();
         if (retry.contains('connected to') || retry.contains('already connected')) {
-          return retry.trim();
+          return '✅ $retry';
         }
-        final msg = _formatAdbError(retry.trim().isNotEmpty ? retry : res);
-        return msg.isNotEmpty ? msg : 'Не удалось подключиться к $clean (проверьте IP, порт и что оба устройства в одной Wi-Fi сети)';
+        final msg = _formatAdbError(retry.isNotEmpty ? retry : cleanRes);
+        return msg.isNotEmpty
+            ? msg
+            : 'Таймаут подключения к $clean. Проверьте IP, основной порт отладки по Wi-Fi и отсутствие изоляции клиентов (AP Isolation) в Wi-Fi сети.';
       }
       await refreshDevices();
-      final msg = _formatAdbError(res.trim());
-      return msg.isNotEmpty ? msg : 'Ответ ADB: ${res.trim()}';
+      final msg = _formatAdbError(cleanRes);
+      return msg.isNotEmpty ? msg : 'Ответ ADB: $cleanRes';
     } catch (e) {
       try {
         await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; timeout 5 adb start-server 2>/dev/null || true');
@@ -406,42 +423,50 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
     final runtime = _ref.read(runtimeServiceProvider);
     try {
+      await runtime.runCommand('timeout 5 adb start-server >/dev/null 2>&1 || true');
       var res = await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true');
       if (res.contains('command not found') || res.contains('adb: not found')) {
         await fixAdbEnvironment();
         res = await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true');
       }
-      if (res.contains('Successfully paired') || res.contains('paired to')) {
+      final cleanRes = _stripAdbDaemonLines(res);
+      if (cleanRes.contains('Successfully paired') || cleanRes.contains('paired to')) {
         await refreshDevices();
-        return '✅ Устройство успешно сопряжено! Теперь переключите режим на «Подключение» и введите основной порт из «Беспроводной отладки».';
+        return '✅ Устройство успешно сопряжено! Теперь переключите режим на «Прямое подключение» и введите основной порт из «Отладки по Wi-Fi».';
       }
 
       // If adb is too old and lacks 'pair' command (Ubuntu 20.04 default), auto-upgrade adb
-      if (res.contains('unknown command pair') || res.contains('unknown command')) {
+      if (cleanRes.contains('unknown command pair') || cleanRes.contains('unknown command')) {
         try {
           await upgradeAdbBinary();
-          final retry = await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true');
+          final retry = _stripAdbDaemonLines(
+            await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true'),
+          );
           await refreshDevices();
           if (retry.contains('Successfully paired') || retry.contains('paired to')) {
-            return '✅ ADB обновлён и устройство успешно сопряжено! Теперь переключите режим на «Подключение» и введите основной порт из «Беспроводной отладки».';
+            return '✅ ADB обновлён и устройство успешно сопряжено! Теперь переключите режим на «Прямое подключение» и введите основной порт из «Отладки по Wi-Fi».';
           }
-          return _formatAdbError(retry.trim().isNotEmpty ? retry : res);
+          return _formatAdbError(retry.isNotEmpty ? retry : cleanRes);
         } catch (_) {}
       }
 
-      if (res.contains('protocol fault') || res.contains('failed') || res.trim().isEmpty) {
+      if (cleanRes.contains('protocol fault') || cleanRes.contains('failed') || cleanRes.isEmpty) {
         await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; timeout 5 adb start-server 2>/dev/null || true');
-        final retry = await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true');
+        final retry = _stripAdbDaemonLines(
+          await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true'),
+        );
         await refreshDevices();
         if (retry.contains('Successfully paired') || retry.contains('paired to')) {
-          return '✅ Устройство успешно сопряжено! Теперь переключите режим на «Подключение» и введите основной порт из «Беспроводной отладки».';
+          return '✅ Устройство успешно сопряжено! Теперь переключите режим на «Прямое подключение» и введите основной порт из «Отладки по Wi-Fi».';
         }
-        final msg = _formatAdbError(retry.trim().isNotEmpty ? retry : res);
-        return msg.isNotEmpty ? msg : 'Таймаут сопряжения с $cleanIp. Проверьте порт и 6-значный код (окно сопряжения на телефоне должно оставаться открытым).';
+        final msg = _formatAdbError(retry.isNotEmpty ? retry : cleanRes);
+        return msg.isNotEmpty
+            ? msg
+            : 'Нет ответа от $cleanIp при сопряжении. Убедитесь, что окно с 6-значным кодом открыто на экране телефона, а в Wi-Fi сети нет изоляции клиентов (AP Isolation).';
       }
       await refreshDevices();
-      final msg = _formatAdbError(res.trim());
-      return msg.isNotEmpty ? msg : 'Ответ ADB: ${res.trim()}';
+      final msg = _formatAdbError(cleanRes);
+      return msg.isNotEmpty ? msg : 'Ответ ADB: $cleanRes';
     } catch (e) {
       try {
         await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; timeout 5 adb start-server 2>/dev/null || true');

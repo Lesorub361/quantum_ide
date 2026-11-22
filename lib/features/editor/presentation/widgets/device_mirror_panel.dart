@@ -641,8 +641,11 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                       }
 
                       final ok = isPairingMode
-                          ? result.startsWith('Успешно')
-                          : result.startsWith('Подключено');
+                          ? (result.startsWith('✅') || result.contains('успешно сопряжено'))
+                          : (result.startsWith('✅') ||
+                              result.contains('connected to') ||
+                              result.contains('already connected') ||
+                              result.startsWith('Подключено'));
 
                       if (!dlgContext.mounted) return;
                       if (ok && !isPairingMode) {

@@ -1,16 +1,16 @@
 {
-  "versionCode": 309,
-  "versionName": "1.2.293",
-  "notes": "## 🚀 QuantumIDE v1.2.293\n\n### Что исправлено\n- **USB OTG ADB для Samsung / Android (`UsbAdbBridge.kt`, `AdbDeviceService`)**:\n  - Устранена гонка потоков в `DeviceBridgeSession.acceptLoop`: старый читатель USB IN теперь гарантированно завершается до старта нового, чтобы не перехватывать первый `CNXN`/`AUTH` пакет (из-за этого `SM S901B` зависал в `offline`).\n  - Добавлена корректная обработка USB Zero-Length Packets (`r == 0`) и автоматическое переподключение моста, если `adb` застрял в `offline`.\n  - Приоритетный автовыбор USB-подключённого телефона вместо локального устройства.\n- **Зеркало экрана (`DeviceMirrorPanel`)**:\n  - При переключении устройства или переходе в `offline` старый кадр с экрана другого устройства (планшета) теперь немедленно сбрасывается, а фоновые кадры от предыдущего устройства игнорируются.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB",
+  "versionCode": 310,
+  "versionName": "1.2.294",
+  "notes": "## 🚀 QuantumIDE v1.2.294\n\n### Что исправлено\n- **Wi-Fi отладка ADB (`AdbDeviceService`, `DeviceMirrorPanel`)**:\n  - Предварительный запуск `adb start-server` и очистка служебных строк `* daemon ...` из вывода, чтобы таймаут или ошибка сопряжения не скрывались за `* daemon started successfully`.\n  - Исправлена проверка успешного сопряжения/подключения (`✅`) в диалоге, чтобы он автоматически переключался к вводу основного порта.\n  - Добавлены понятные сообщения при таймауте или изоляции клиентов (AP Isolation) в Wi-Fi сети.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.293/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.294/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.293",
-  "buildNumber": 309,
-  "tag_name": "v1.2.293",
-  "releaseNotes": "Исправлен статус offline для USB OTG (SM S901B и др.) за счёт устранения гонки потоков в UsbAdbBridge, и убран показ старого кадра планшета при переключении устройства."
+  "version": "1.2.294",
+  "buildNumber": 310,
+  "tag_name": "v1.2.294",
+  "releaseNotes": "Исправлены сообщения и авто-переключение после сопряжения Wi-Fi ADB (убрано перекрытие вывода строками запуска adb-демона)."
 }
