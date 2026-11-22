@@ -1,16 +1,16 @@
 {
-  "versionCode": 301,
-  "versionName": "1.2.284",
-  "notes": "## 🚀 QuantumIDE v1.2.284\n\n### Что исправлено и улучшено\n- **Устранены тормоза при открытии экранной клавиатуры**:\n  - Добавлены дедупликация и троттлинг (80 мс) IME IPC (`setEditableSizeAndTransform` / `setCaretRect`), защита от лишних `setState()` и `markNeedsLayout()` в `conduit_vt`.\n  - Устранён шторм `SIGWINCH`: дебаунс ресайза в `RenderTerminal` (140 мс) и `pty.resize()` (180 мс), отключён `autoResize` для неактивных вкладок `IndexedStack` (`Run` / `Build` / `AppLogs`).\n  - Изолировано чтение `MediaQuery.viewInsets` через `KeyboardVisibilityBuilder` и `WidgetsBindingObserver` в редакторе, терминале и панелях клавиш (без 60–120 Гц пересборки всего UI при анимации клавиатуры).\n- **Исправления Shizuku и телеметрии**:\n  - Убраны `am kill-all` и `drop_caches` из `ShizukuBridge.boostForBuild()`, чтобы при запуске Run/Build не убивался процесс экранной клавиатуры.\n  - В `MainActivity.kt` добавлены слушатели `OnBinderReceivedListener` / `OnBinderDeadListener`, логирование статуса Shizuku в `.quantum/app.log` и раздел `shizuku` в локальной телеметрии `/status`.\n  - Батч-опрос метрик Shizuku в `SystemStatsNotifier` (1 запрос вместо 3, не чаще раза в 6 с) и корректное завершение статуса сборки для `Built build/web`.\n- **WebView-предпросмотр без устаревшего кэша (`PreviewCacheHelper`)**:\n  - Очистка кэша WebView и Service Worker, `CacheMode.LOAD_NO_CACHE`, cache-busting (`_qreload`) и no-cache заголовки для локальных dev-серверов при загрузке и перезагрузке.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
+  "versionCode": 307,
+  "versionName": "1.2.291",
+  "notes": "## 🚀 QuantumIDE v1.2.291\n\n### Что исправлено\n- **Вылет приложения на планшете (`ShizukuProvider`)**:\n  - В `AndroidManifest.xml` зафиксированы `android:exported=\"true\"`, `android:multiprocess=\"false\"` и `tools:replace=\"android:exported,android:multiprocess\"` — AAR `ShizukuProvider` больше не перезаписывает атрибуты и не вызывает `IllegalStateException: android:exported must be true` при запуске.\n- **Сборка APK в GitHub Actions**:\n  - Восстановлен полный рабочий `.github/workflows/build-apk.yml` (патч плагинов `proguard-android.txt` под AGP 9 для `flutter_inappwebview_android`, сборка `ruri-arm64`, подпись релиза, публикация всех ABI APK и AAB), удалён случайно закоммиченный `local.properties`.\n- **Исправления из предыдущих коммитов**:\n  - Встроены `builtin:filesystem` + `builtin:shell` MCP, убран SELinux-спам sysfs в `SystemStatsService`, добавлен fallback загрузки `aapt2`.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.284/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.291/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.284",
-  "buildNumber": 301,
-  "tag_name": "v1.2.284",
-  "releaseNotes": "Устранены тормоза экранной клавиатуры (IME/SIGWINCH/MediaQuery), исправлены Shizuku boost/телеметрия и добавлен no-cache перезапуск WebView-предпросмотра."
+  "version": "1.2.291",
+  "buildNumber": 307,
+  "tag_name": "v1.2.291",
+  "releaseNotes": "Исправлен вылет ShizukuProvider при запуске на Android 12+, восстановлена сборка APK/AAB под AGP 9 в GitHub Actions и удалён лишний local.properties."
 }
