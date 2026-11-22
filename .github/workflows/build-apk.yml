@@ -1,189 +1,37 @@
 name: Build APK
 
-permissions:
-  contents: write
-
 on:
-  workflow_dispatch:
-    inputs:
-      flutter_version:
-        description: Flutter version (leave default)
-        required: false
-        default: '3.50.0'
-      create_release:
-        description: 'Create a GitHub Release with the APK'
-        required: false
-        default: 'true'
-      version:
-        description: 'Release version, e.g. 1.1.9 (used as the git tag)'
-        required: false
-        default: ''
-      release_notes:
-        description: 'Release notes (markdown). Shown in the GitHub Release body.'
-        required: false
-        default: ''
   push:
-    branches: [main]
     tags:
-      - 'v*.*.*'
+      - 'v*'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE Update
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          df -h
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v5
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: 'zulu'
           java-version: '17'
 
-      - name: Setup Flutter
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
-          flutter-version: ${{ github.event.inputs.flutter_version || '3.50.0' }}
-          cache: true
+          flutter-version: '3.50.1'
+          channel: 'stable'
 
-      - name: Enable Gradle cache
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Restore signing key
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-        run: |
-          set -e
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
-            printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=release.keystore\n' \
-              "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
-          elif [ -f "android/app/release-key.jks" ]; then
-            echo "Using tracked release-key.jks from repository."
-            if [ ! -f "android/key.properties" ]; then
-              printf 'storePassword=quantum123\nkeyPassword=quantum123\nkeyAlias=quantum_ide\nstoreFile=release-key.jks\n' > android/key.properties
-            fi
-          else
-            echo "WARNING: no KEYSTORE_BASE64 secret — APK will be signed with the debug key."
-          fi
-
-      - name: Print tool versions
-        run: |
-          flutter --version
-          java -version 2>&1 | head -1
-
-      - name: Ensure Android NDK and CMake
-        run: |
-          yes | sdkmanager --licenses || true
-          if [ ! -d "$ANDROID_HOME/ndk/28.2.13676358" ]; then
-            echo "Pre-installing NDK 28.2.13676358 with retry..."
-            for attempt in 1 2 3; do
-              echo "Attempt $attempt..."
-              echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" && break || {
-                echo "Attempt $attempt failed, cleaning temp and retrying..."
-                rm -rf "$ANDROID_HOME/.temp"
-                sleep 5
-              }
-            done
-          fi
-          # Ensure NDK source.properties has Pkg.Desc first so CMake legacy toolchain regex never fails
-          for sp in "$ANDROID_HOME"/ndk/*/source.properties; do
-            [ -f "$sp" ] || continue
-            rev=$(grep 'Pkg.Revision' "$sp" | cut -d'=' -f2 | tr -d ' ')
-            printf "Pkg.Desc = Android NDK\nPkg.Revision = %s\nPkg.BaseRevision = %s\n" "$rev" "$rev" > "$sp"
-          done
-          # Also patch android-legacy.toolchain.cmake if present in NDK
-          for tc in "$ANDROID_HOME"/ndk/*/build/cmake/android-legacy.toolchain.cmake; do
-            [ -f "$tc" ] || continue
-            sed -i 's/\^Pkg\\\.Desc = Android NDK/Pkg\\\.Desc = Android NDK/g' "$tc" || true
-          done
-
-      - name: Build static ruri-arm64 binary (RuriOSS/ruri)
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-aarch64-linux-gnu libc6-dev-arm64-cross
-          git clone --depth 1 https://github.com/RuriOSS/ruri.git /tmp/ruri-src
-          mkdir -p assets/bin
-          aarch64-linux-gnu-gcc -static -DRURI_CORE_ONLY -O2 -w \
-            /tmp/ruri-src/src/*.c /tmp/ruri-src/src/easteregg/*.c \
-            -o assets/bin/ruri-arm64 -lpthread
-          aarch64-linux-gnu-strip assets/bin/ruri-arm64
-          ls -lh assets/bin/ruri-arm64
-          rm -rf /tmp/ruri-src
-
-      - name: Get dependencies
+      - name: Install dependencies
         run: flutter pub get
 
-      - name: Patch plugins for AGP 9 (proguard-android.txt is unsupported)
-        run: |
-          grep -rlE "proguard-android\.txt" "$HOME/.pub-cache/hosted" --include=build.gradle --include=build.gradle.kts 2>/dev/null | while read -r f; do
-            echo "Patching $f"
-            sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" "$f"
-          done || true
+      - name: Build APK
+        run: flutter build apk --release
 
-      - name: Build release APK (Universal & Split ABIs)
-        env:
-          GRADLE_OPTS: "-Xmx1024m -Dfile.encoding=UTF-8"
-        run: |
-          sed -i '/org.gradle.jvmargs/d' android/gradle.properties
-          sed -i '/kotlin.compiler.execution.strategy/d' android/gradle.properties
-          sed -i '/android.aapt2FromMavenOverride/d' android/gradle.properties
-          sed -i '/android.aapt2.daemon/d' android/gradle.properties
-          sed -i 's/org.gradle.daemon=.*/org.gradle.daemon=true/g' android/gradle.properties
-          sed -i 's/org.gradle.parallel=.*/org.gradle.parallel=true/g' android/gradle.properties
-          sed -i 's/org.gradle.workers.max=.*/org.gradle.workers.max=2/g' android/gradle.properties
-          sed -i 's/android.aapt2FromMaven=.*/android.aapt2FromMaven=true/g' android/gradle.properties
-          printf 'org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8\nkotlin.compiler.execution.strategy=daemon\n' >> android/gradle.properties
-          flutter build apk --release --no-tree-shake-icons --split-per-abi
-          mkdir -p build/app/outputs/flutter-apk/
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/app/outputs/flutter-apk/app-release.apk
-          flutter build appbundle --release --no-tree-shake-icons
-      - name: Upload APKs
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-android-release
-          path: build/app/outputs/flutter-apk/*.apk
-          retention-days: 14
-
-      - name: Extract release notes and version from manifest
-        run: |
-          PUB_VER=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
-          echo "PUBSPEC_TAG=v${PUB_VER}" >> $GITHUB_ENV
-          if [ -f quantum-ide-update.json ]; then
-            NOTES=$(jq -r '.notes // empty' quantum-ide-update.json)
-            if [ -n "$NOTES" ]; then
-              echo "DEFAULT_NOTES<<EOF" >> $GITHUB_ENV
-              echo "$NOTES" >> $GITHUB_ENV
-              echo "EOF" >> $GITHUB_ENV
-            fi
-          fi
-
-      - name: Create GitHub Release
-        if: (github.ref_type == 'tag' && startsWith(github.ref_name, 'v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+      - name: Upload APK to release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || (startsWith(github.ref_name, 'v') && github.ref_name || env.PUBSPEC_TAG) }}
-          name: QuantumIDE ${{ github.event.inputs.version != '' && github.event.inputs.version || (startsWith(github.ref_name, 'v') && github.ref_name || env.PUBSPEC_TAG) }}
-          body: ${{ github.event.inputs.release_notes != '' && github.event.inputs.release_notes || env.DEFAULT_NOTES }}
-          files: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            build/app/outputs/flutter-apk/app-x86_64-release.apk
-            build/app/outputs/bundle/release/app-release.aab
+          files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
