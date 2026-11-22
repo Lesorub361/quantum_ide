@@ -137,7 +137,12 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
     _isLoadingFrame = true;
     try {
       final frame = await ref.read(adbDeviceServiceProvider.notifier).captureScreenFrame(deviceId: selected.id);
-      if (mounted && frame != null && frame.isNotEmpty) {
+      final currentSelected = ref.read(adbDeviceServiceProvider).selectedDevice;
+      if (mounted &&
+          frame != null &&
+          frame.isNotEmpty &&
+          currentSelected?.id == selected.id &&
+          currentSelected?.isOnline == true) {
         setState(() {
           _currentFrame = frame;
         });
@@ -682,9 +687,21 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AdbDeviceState>(adbDeviceServiceProvider, (prev, next) {
+      final prevId = prev?.selectedDevice?.id;
+      final nextId = next.selectedDevice?.id;
       final prevOnline = prev?.selectedDevice?.isOnline ?? false;
       final nextOnline = next.selectedDevice?.isOnline ?? false;
-      if (!prevOnline && nextOnline && next.selectedDevice != null) {
+      if (prevId != nextId || (prevOnline && !nextOnline)) {
+        if (mounted) {
+          setState(() {
+            _currentFrame = null;
+            if (prevId != nextId) {
+              _logLines = [];
+            }
+          });
+        }
+      }
+      if ((!prevOnline || prevId != nextId) && nextOnline && next.selectedDevice != null) {
         _updateDisplaySize(next.selectedDevice!.id);
         if (_currentSubTab == _DevicePanelSubTab.screen && !_isStreaming) {
           _startStream();
@@ -826,6 +843,10 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                   }).toList(),
                   onChanged: (newDev) {
                     if (newDev != null) {
+                      setState(() {
+                        _currentFrame = null;
+                        _logLines = [];
+                      });
                       ref.read(adbDeviceServiceProvider.notifier).selectDevice(newDev);
                       _updateDisplaySize(newDev.id);
                       _triggerImmediateRefresh();

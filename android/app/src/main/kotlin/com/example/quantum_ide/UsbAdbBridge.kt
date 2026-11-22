@@ -572,6 +572,10 @@ class UsbAdbBridge(
             }
         }
 
+        private var currentSessionActive: AtomicBoolean? = null
+        private var currentTcpToUsb: Thread? = null
+        private var currentUsbToTcp: Thread? = null
+
         private fun acceptLoop() {
             while (active.get()) {
                 val client = try {
@@ -580,9 +584,19 @@ class UsbAdbBridge(
                     break
                 }
 
+                // Stop previous TCP client and wait for its USB IN reader to exit
+                // so it cannot steal CNXN/AUTH packets from the new ADB session.
+                currentSessionActive?.set(false)
                 try {
                     currentClient?.close()
                 } catch (_: Exception) {}
+                try {
+                    currentUsbToTcp?.join(1200)
+                } catch (_: Exception) {}
+                try {
+                    currentTcpToUsb?.join(300)
+                } catch (_: Exception) {}
+
                 currentClient = client
 
                 try {
@@ -591,6 +605,7 @@ class UsbAdbBridge(
                 } catch (_: Exception) {}
 
                 val sessionActive = AtomicBoolean(true)
+                currentSessionActive = sessionActive
 
                 // Thread 1: TCP (ADB Server) -> USB Bulk OUT (Target Phone adbd)
                 val tcpToUsb = Thread({
@@ -616,6 +631,8 @@ class UsbAdbBridge(
                     }
                 }, "UsbToTcp-$port")
 
+                currentTcpToUsb = tcpToUsb
+                currentUsbToTcp = usbToTcp
                 tcpToUsb.start()
                 usbToTcp.start()
             }
@@ -714,8 +731,11 @@ class UsbAdbBridge(
                         val aligned = ((remaining + maxPacket - 1) / maxPacket) * maxPacket
                         val reqLen = aligned.coerceAtMost(MAX_BULK_CHUNK)
                         val r = conn.bulkTransfer(inEndpoint, chunkBuf, reqLen, 5000)
-                        if (r <= 0) {
+                        if (r < 0) {
                             throw EOFException("USB bulk read failed while reading ADB payload (remaining=$remaining)")
+                        }
+                        if (r == 0) {
+                            continue
                         }
                         val toWrite = r.coerceAtMost(remaining)
                         output.write(chunkBuf, 0, toWrite)

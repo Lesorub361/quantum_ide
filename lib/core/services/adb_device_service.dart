@@ -185,13 +185,21 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
       var output = await runtime.runCommand('timeout 4 adb devices -l 2>/dev/null || true').catchError((e) => '');
 
-      // Connect only USB-OTG bridges that are not already present in adb devices
+      // Connect USB-OTG bridges that are missing or stuck in offline state
       bool connectedNewBridge = false;
       for (final usbDev in state.rawUsbDevices) {
         final bridgeActive = usbDev['bridgeActive'] == true;
         final bridgeAddr = (usbDev['bridgeAddress'] ?? '').toString().trim();
-        if (bridgeActive && bridgeAddr.isNotEmpty && !output.contains(bridgeAddr)) {
+        if (!bridgeActive || bridgeAddr.isEmpty) continue;
+        final isMissing = !output.contains(bridgeAddr);
+        final isStuckOffline = RegExp('(^|\\n)${RegExp.escape(bridgeAddr)}\\s+offline').hasMatch(output);
+        if (isMissing) {
           await runtime.runCommand('timeout 3 adb connect $bridgeAddr 2>/dev/null || true');
+          connectedNewBridge = true;
+        } else if (isStuckOffline) {
+          await runtime.runCommand(
+            'adb disconnect $bridgeAddr 2>/dev/null; sleep 0.2; timeout 3 adb connect $bridgeAddr 2>/dev/null || true',
+          );
           connectedNewBridge = true;
         }
       }
@@ -259,12 +267,18 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
       AdbDevice? newSelected = state.selectedDevice;
       if (enriched.isNotEmpty) {
-        // Keep current selected if still present, otherwise choose first online device
+        // Keep current selected if still present, otherwise prefer USB-bridged phone first
         final stillExists = enriched.any((d) => d.id == newSelected?.id);
         if (!stillExists) {
           newSelected = enriched.firstWhere(
-            (d) => d.isOnline,
-            orElse: () => enriched.first,
+            (d) => d.isUsbBridged && d.isOnline,
+            orElse: () => enriched.firstWhere(
+              (d) => d.isUsbBridged,
+              orElse: () => enriched.firstWhere(
+                (d) => d.isOnline,
+                orElse: () => enriched.first,
+              ),
+            ),
           );
         } else {
           newSelected = enriched.firstWhere((d) => d.id == newSelected?.id);

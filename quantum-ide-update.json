@@ -1,16 +1,16 @@
 {
-  "versionCode": 308,
-  "versionName": "1.2.292",
-  "notes": "## 🚀 QuantumIDE v1.2.292\n\n### Что исправлено\n- **USB OTG ADB (`UsbAdbBridge.kt`, `AdbDeviceService`)**:\n  - Устранено мерцание/пропадание подключённого по OTG телефона: `refreshDevices` не переподключает уже активные bridge-порты каждые 15 секунд и сохраняет список устройств при кратковременном таймауте опроса.\n  - При отклонении диалога USB-разрешения оно больше не блокируется навсегда — можно повторно запросить доступ.\n- **Wi-Fi отладка ADB (`DeviceMirrorPanel`, `AdbDeviceService`)**:\n  - Диалог Wi-Fi подключения больше не закрывается молча до завершения команды: показывает индикатор загрузки, текст ошибки прямо в окне и после `adb pair` переводит сразу к вводу основного порта для `adb connect`.\n  - Добавлены таймауты и авто-восстановление `adb` (`fixAdbEnvironment`), если бинарник не найден.\n- **Зеркало экрана, ввод и Logcat**:\n  - Исправлен путь захвата экрана (`Method 1`) через общую папку `filesDir/tmp` и `toProotPath`, добавлены таймауты и корректное экранирование спецсимволов в `sendText`.\n  - В `logcat` добавлены таймаут и отображение ошибок/пустого состояния.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB",
+  "versionCode": 309,
+  "versionName": "1.2.293",
+  "notes": "## 🚀 QuantumIDE v1.2.293\n\n### Что исправлено\n- **USB OTG ADB для Samsung / Android (`UsbAdbBridge.kt`, `AdbDeviceService`)**:\n  - Устранена гонка потоков в `DeviceBridgeSession.acceptLoop`: старый читатель USB IN теперь гарантированно завершается до старта нового, чтобы не перехватывать первый `CNXN`/`AUTH` пакет (из-за этого `SM S901B` зависал в `offline`).\n  - Добавлена корректная обработка USB Zero-Length Packets (`r == 0`) и автоматическое переподключение моста, если `adb` застрял в `offline`.\n  - Приоритетный автовыбор USB-подключённого телефона вместо локального устройства.\n- **Зеркало экрана (`DeviceMirrorPanel`)**:\n  - При переключении устройства или переходе в `offline` старый кадр с экрана другого устройства (планшета) теперь немедленно сбрасывается, а фоновые кадры от предыдущего устройства игнорируются.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.292/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.293/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.292",
-  "buildNumber": 308,
-  "tag_name": "v1.2.292",
-  "releaseNotes": "Стабилизировано USB OTG ADB подключение, исправлен диалог Wi-Fi отладки (pair/connect), захват экрана, ввод текста/тапов и logcat в Device Mirror."
+  "version": "1.2.293",
+  "buildNumber": 309,
+  "tag_name": "v1.2.293",
+  "releaseNotes": "Исправлен статус offline для USB OTG (SM S901B и др.) за счёт устранения гонки потоков в UsbAdbBridge, и убран показ старого кадра планшета при переключении устройства."
 }
