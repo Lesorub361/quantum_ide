@@ -71,7 +71,7 @@
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:exported="false"
-            android:multiprocess="true" />
+            android:multiprocess="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
