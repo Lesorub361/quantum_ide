@@ -226,7 +226,8 @@ class StableEditorWidget extends ConsumerStatefulWidget {
   ConsumerState<StableEditorWidget> createState() => StableEditorWidgetState();
 }
 
-class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
+class StableEditorWidgetState extends ConsumerState<StableEditorWidget>
+    with WidgetsBindingObserver {
   late List<CodeDiagnostic> _diagnostics;
   late List<DiffMarker> _diffMarkers;
   late final CodeFindController _findController;
@@ -342,7 +343,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   }
 
   void _handleControllerChange() {
-    if (mounted && MediaQuery.of(context).viewInsets.bottom > 0) {
+    if (mounted && _lastBottomInset > 0) {
       final cur = widget.file.controller.value.selection;
       final prev = _previousValue?.selection;
       if (cur.extentIndex != prev?.extentIndex) {
@@ -521,9 +522,16 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     }
   }
 
+  double _readLogicalBottomInset() {
+    final view = View.maybeOf(context);
+    if (view == null || view.devicePixelRatio <= 0) return 0.0;
+    return view.viewInsets.bottom / view.devicePixelRatio;
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scrollController = CodeScrollController();
     _diagnostics = widget.file.diagnostics;
     _diffMarkers = widget.file.diffMarkers;
@@ -543,7 +551,12 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    _lastBottomInset = _readLogicalBottomInset();
+  }
+
+  @override
+  void didChangeMetrics() {
+    final bottomInset = _readLogicalBottomInset();
     if (bottomInset > 0 && _lastBottomInset == 0) {
       // Клавиатура только что открылась: центрируем активную строку над клавиатурой
       _ensureCursorVisible(center: true);
@@ -567,6 +580,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _aiCompletionTimer?.cancel();
     QuantumSelectionToolbarController.dismissAll();
     _removeControllerListener();
@@ -1832,8 +1846,10 @@ class _QuantumAutocompleteViewState extends State<QuantumAutocompleteView> {
     if (box == null || !box.hasSize) return;
 
     final pos = box.localToGlobal(Offset.zero);
-    final media = MediaQuery.of(context);
-    final keyboardTop = media.size.height - media.viewInsets.bottom - 6.0;
+    final keyboardTop =
+        MediaQuery.sizeOf(context).height -
+        MediaQuery.viewInsetsOf(context).bottom -
+        6.0;
     final uncorrectedBottom = pos.dy + box.size.height - _dyCorrection;
 
     double shift = 0.0;
@@ -1871,8 +1887,8 @@ class _QuantumAutocompleteViewState extends State<QuantumAutocompleteView> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final screenWidth = MediaQuery.sizeOf(context).width;
     final popupWidth = (screenWidth - 24.0).clamp(240.0, 310.0);
     final maxPopupHeight = bottomInset > 0 ? 165.0 : 210.0;
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 
 /// Сервис непрерывной телеметрии и мониторинга для разработчиков и AI-ассистента.
 /// Сохраняет живые метрики CPU, RAM, статус сборки и вывод терминала в /storage/emulated/0/QuantumIDE/
@@ -195,7 +196,8 @@ class LiveTelemetryService {
         if (currentBuildStatus == 'Running') {
           if (l.contains('BUILD SUCCESSFUL') ||
               l.contains('Built build/app/outputs') ||
-              l.contains('✓  Built build/app/outputs')) {
+              l.contains('✓  Built build/app/outputs') ||
+              l.contains('Built build/web')) {
             onBuildFinished(0);
           } else if (l.contains('BUILD FAILED') ||
               l.contains('assembleRelease failed') ||
@@ -252,7 +254,12 @@ class LiveTelemetryService {
     } catch (_) {}
   }
 
+  Map<String, dynamic> get statusSnapshot => _buildStatusMap();
+
   Map<String, dynamic> _buildStatusMap() {
+    final logsTail = _recentLogs.length > 20
+        ? _recentLogs.sublist(_recentLogs.length - 20)
+        : List<String>.from(_recentLogs);
     return {
       'timestamp': DateTime.now().toIso8601String(),
       'system': {
@@ -263,6 +270,13 @@ class LiveTelemetryService {
         'builderRamMB': builderRamMB,
         'deviceRamFreeGB': deviceRamFreeGB.toStringAsFixed(2),
         'deviceRamTotalGB': deviceRamTotalGB.toStringAsFixed(1),
+      },
+      'shizuku': {
+        'available': ShizukuBridge.instance.isAvailable,
+        'binderAlive': ShizukuBridge.instance.isBinderAlive,
+        'permissionGranted': ShizukuBridge.instance.hasPermission,
+        'uid': ShizukuBridge.instance.uid,
+        'error': ShizukuBridge.instance.lastError,
       },
       'workspace': {
         'path': currentWorkspace ?? 'None',
@@ -275,7 +289,7 @@ class LiveTelemetryService {
             ? DateTime.now().difference(buildStartTime!).inSeconds
             : null,
       },
-      'recentLogsTail': _recentLogs.take(20).toList(),
+      'recentLogsTail': logsTail,
       'buildOutputTail': _buildOutputTail.length > 30
           ? _buildOutputTail.sublist(_buildOutputTail.length - 30)
           : _buildOutputTail,

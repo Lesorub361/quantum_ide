@@ -192,6 +192,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       final xtermVc = xt.TerminalController();
       int lastCols = -1;
       int lastRows = -1;
+      Timer? resizeDebounce;
       bool hadUserCommandRecently = false;
 
       final keyboardCtrl = ConduitKeyboardController(xt.defaultInputHandler);
@@ -216,13 +217,24 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows.clamp(6, 250);
           final safeCols = cols.clamp(20, 400);
-          if (safeRows != lastRows || safeCols != lastCols) {
+          if (lastRows == -1 && lastCols == -1) {
             lastRows = safeRows;
             lastCols = safeCols;
             try {
               pty.resize(safeRows, safeCols);
             } catch (_) {}
+            return;
           }
+          resizeDebounce?.cancel();
+          resizeDebounce = Timer(const Duration(milliseconds: 180), () {
+            if (safeRows != lastRows || safeCols != lastCols) {
+              lastRows = safeRows;
+              lastCols = safeCols;
+              try {
+                pty.resize(safeRows, safeCols);
+              } catch (_) {}
+            }
+          });
         },
       );
 
@@ -264,6 +276,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           }
         },
         onDone: () {
+          resizeDebounce?.cancel();
           gitRefreshDebounceTimer?.cancel();
           _markSessionAsExited(id);
           xtermTerm.write('\r\n\x1b[1;31m[Process exited]\x1b[0m\r\n');
@@ -272,6 +285,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           } catch (_) {}
         },
         onError: (e) {
+          resizeDebounce?.cancel();
           gitRefreshDebounceTimer?.cancel();
           xtermTerm.write('\r\n\x1b[1;31m[Error: $e]\r\n');
         },

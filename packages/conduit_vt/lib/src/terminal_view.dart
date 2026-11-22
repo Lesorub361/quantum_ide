@@ -772,6 +772,7 @@ class TerminalViewState extends State<TerminalView> {
   }
 
   void _onComposing(String? text) {
+    if (_composingText == text) return;
     setState(() => _composingText = text);
   }
 

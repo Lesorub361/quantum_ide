@@ -439,6 +439,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               ref.read(floatingPreviewVisibleProvider.notifier).state = !isOpen;
               if (!isOpen) {
                 ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+                ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
               }
               final scaffold = Scaffold.maybeOf(context);
               if (scaffold != null && scaffold.isDrawerOpen) {

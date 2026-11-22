@@ -10,6 +10,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/features/preview/utils/preview_cache_helper.dart';
 import 'mobile_companion_qr_dialog.dart';
 import 'device_simulator_dialog.dart';
 
@@ -47,9 +48,30 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
     ref.read(serverRunningProvider.notifier).state = val;
   }
 
+  Future<void> _hardReload({bool clearCache = true}) async {
+    final raw = _urlController.text.trim();
+    final clean = PreviewCacheHelper.stripCacheBuster(
+      raw.isNotEmpty
+          ? PreviewCacheHelper.normalizeUrl(raw)
+          : 'http://localhost:8080',
+    );
+    _urlController.text = clean;
+    await PreviewCacheHelper.hardLoad(
+      _webViewController,
+      clean,
+      clearCache: clearCache,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+
+    ref.listen<int>(floatingPreviewReloadTokenProvider, (prev, next) {
+      if (next != prev && _serverIsRunning) {
+        _hardReload(clearCache: true);
+      }
+    });
 
     return Column(
       children: [
@@ -85,9 +107,15 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
                             isDense: true,
                             contentPadding: EdgeInsets.zero,
                           ),
-                          onSubmitted: (_) {
+                          onSubmitted: (raw) {
+                            final clean = PreviewCacheHelper.stripCacheBuster(
+                              PreviewCacheHelper.normalizeUrl(raw),
+                            );
+                            if (clean.isNotEmpty) {
+                              _urlController.text = clean;
+                            }
                             if (_serverIsRunning) {
-                              _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(_urlController.text)));
+                              _hardReload(clearCache: true);
                             }
                           },
                         ),
@@ -135,7 +163,7 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
                   tooltip: l10n.refreshPreview,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
-                  onPressed: () => _webViewController?.reload(),
+                  onPressed: () => _hardReload(clearCache: true),
                 ),
               const SizedBox(width: 8),
               // Toggle Power (Start/Stop) Button
@@ -195,32 +223,31 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
           child: _serverIsRunning
               ? ((Platform.isAndroid || Platform.isIOS || Platform.isMacOS)
                   ? InAppWebView(
-                      initialUrlRequest: URLRequest(url: WebUri(_urlController.text)),
+                      initialUrlRequest: PreviewCacheHelper.buildFreshRequest(
+                        _urlController.text,
+                      ),
                       gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
                         Factory<VerticalDragGestureRecognizer>(() => VerticalDragGestureRecognizer()),
                         Factory<HorizontalDragGestureRecognizer>(() => HorizontalDragGestureRecognizer()),
                         Factory<ScaleGestureRecognizer>(() => ScaleGestureRecognizer()),
                         Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
                       },
-                      initialSettings: InAppWebViewSettings(
-                        transparentBackground: true,
-                        javaScriptEnabled: true,
-                        supportZoom: true,
-                        useWideViewPort: true,
-                        verticalScrollBarEnabled: true,
-                        horizontalScrollBarEnabled: true,
-                        disableVerticalScroll: false,
-                        disableHorizontalScroll: false,
-                        overScrollMode: OverScrollMode.ALWAYS,
-                      ),
+                      initialSettings: PreviewCacheHelper.freshWebViewSettings(),
                       onWebViewCreated: (controller) => _webViewController = controller,
+                      onLoadStart: (controller, url) {
+                        if (!mounted || url == null) return;
+                        _urlController.text =
+                            PreviewCacheHelper.stripCacheBuster(url.toString());
+                      },
                       onReceivedError: (controller, request, error) {
                         final err = '[Сеть] ${error.description} (${error.type}) URL: ${request.url}';
                         if (!_serverErrors.contains(err)) {
                           setState(() => _serverErrors.add(err));
                         }
                         Future.delayed(const Duration(seconds: 3), () {
-                          _webViewController?.reload();
+                          if (mounted && _serverIsRunning) {
+                            _hardReload(clearCache: false);
+                          }
                         });
                       },
                       onReceivedHttpError: (controller, request, errorResponse) {

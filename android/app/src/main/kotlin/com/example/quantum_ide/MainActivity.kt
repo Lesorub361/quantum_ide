@@ -27,11 +27,47 @@ import rikka.shizuku.ShizukuProvider
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.quantum_ide/native"
     private val DOWNLOAD_CHANNEL = "com.example.quantum_ide/download"
+    private var nativeChannel: MethodChannel? = null
     private lateinit var bootstrapManager: BootstrapManager
     private lateinit var processManager: ProcessManager
     private var usbAdbBridge: UsbAdbBridge? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val downloadIds = mutableMapOf<String, Long>()
+    private var shizukuListenersRegistered = false
+
+    private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
+        mainHandler.post {
+            nativeChannel?.invokeMethod("onShizukuStatusChanged", currentShizukuStatusMap())
+        }
+    }
+
+    private val shizukuBinderDeadListener = Shizuku.OnBinderDeadListener {
+        mainHandler.post {
+            nativeChannel?.invokeMethod("onShizukuStatusChanged", currentShizukuStatusMap())
+        }
+    }
+
+    private fun currentShizukuStatusMap(): Map<String, Any?> {
+        return try {
+            val available = Shizuku.pingBinder()
+            val granted = available && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            val uid = if (available) {
+                try { Shizuku.getUid() } catch (_: Throwable) { -1 }
+            } else -1
+            mapOf(
+                "available" to available,
+                "permissionGranted" to granted,
+                "uid" to uid
+            )
+        } catch (e: Throwable) {
+            mapOf(
+                "available" to false,
+                "permissionGranted" to false,
+                "uid" to -1,
+                "error" to (e.message ?: e.toString())
+            )
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -45,12 +81,21 @@ class MainActivity : FlutterActivity() {
         usbAdbBridge = UsbAdbBridge(applicationContext, filesDir, processManager).also {
             it.start()
         }
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        nativeChannel = channel
+        if (!shizukuListenersRegistered) {
+            try {
+                Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
+                Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
+                shizukuListenersRegistered = true
+            } catch (_: Throwable) {}
+        }
         try {
             ShizukuProvider.enableMultiProcessSupport(false)
             ShizukuProvider.requestBinderForNonProviderProcess(applicationContext)
         } catch (_: Throwable) {}
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getArch" -> result.success(ArchUtils.getArch())
                 "getFilesDir" -> result.success(filesDir)
@@ -200,17 +245,9 @@ class MainActivity : FlutterActivity() {
                                     try { Thread.sleep(50) } catch (_: InterruptedException) { break }
                                 }
                             }
-                            val available = Shizuku.pingBinder()
-                            val granted = available && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-                            val uid = if (available) {
-                                try { Shizuku.getUid() } catch (_: Throwable) { -1 }
-                            } else -1
+                            val statusMap = currentShizukuStatusMap()
                             runOnUiThread {
-                                result.success(mapOf(
-                                    "available" to available,
-                                    "permissionGranted" to granted,
-                                    "uid" to uid
-                                ))
+                                result.success(statusMap)
                             }
                         } catch (e: Throwable) {
                             runOnUiThread {
@@ -469,6 +506,14 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        if (shizukuListenersRegistered) {
+            try {
+                Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+                Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
+            } catch (_: Throwable) {}
+            shizukuListenersRegistered = false
+        }
+        nativeChannel = null
         usbAdbBridge?.stop()
         super.onDestroy()
     }

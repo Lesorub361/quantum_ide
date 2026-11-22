@@ -13,6 +13,7 @@ import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/code_find_panel.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
+import 'package:quantum_ide/shared/widgets/keyboard_visibility_builder.dart';
 
 class KeyboardAccessoryBar extends ConsumerWidget {
   final CodeLineEditingController controller;
@@ -396,388 +397,391 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     final iconColor =
         palette?.mutedForegroundFor(brightness) ?? colorScheme.onSurfaceVariant;
 
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final isKeyboardOpen = bottomInset > 0;
     final screenWidth = MediaQuery.sizeOf(context).width;
 
-    // Скрываем только на десктопных ПК (Windows/Linux/macOS) при очень широких экранах мониторов (>= 1200px).
-    // На мобильных устройствах (Android/iOS планшеты и смартфоны) панель с Undo/Redo, стрелками навигации
-    // и символами всегда доступна.
-    if (!isKeyboardOpen && !Platform.isAndroid && !Platform.isIOS && screenWidth >= 1200) {
-      return const SizedBox.shrink();
-    }
+    return KeyboardVisibilityBuilder(
+      threshold: 0,
+      builder: (context, isKeyboardOpen) {
+        // Скрываем только на десктопных ПК (Windows/Linux/macOS) при очень широких экранах мониторов (>= 1200px).
+        // На мобильных устройствах (Android/iOS планшеты и смартфоны) панель с Undo/Redo, стрелками навигации
+        // и символами всегда доступна.
+        if (!isKeyboardOpen && !Platform.isAndroid && !Platform.isIOS && screenWidth >= 1200) {
+          return const SizedBox.shrink();
+        }
 
-    final symbols = <String>[
-      'TAB',
-      '{',
-      '}',
-      '(',
-      ')',
-      '[',
-      ']',
-      ';',
-      ':',
-      '"',
-      "'",
-      '`',
-      '=',
-      '<',
-      '>',
-      '+',
-      '-',
-      '*',
-      '/',
-      '\\',
-      '=>',
-      '!=',
-      '==',
-      '&&',
-      '||',
-      '_',
-      '\$',
-      '?',
-      '!',
-      '@',
-      '#',
-      '%',
-      '^',
-      '&',
-      '|',
-      '~',
-      '.',
-    ];
+        final symbols = <String>[
+          'TAB',
+          '{',
+          '}',
+          '(',
+          ')',
+          '[',
+          ']',
+          ';',
+          ':',
+          '"',
+          "'",
+          '`',
+          '=',
+          '<',
+          '>',
+          '+',
+          '-',
+          '*',
+          '/',
+          '\\',
+          '=>',
+          '!=',
+          '==',
+          '&&',
+          '||',
+          '_',
+          '\$',
+          '?',
+          '!',
+          '@',
+          '#',
+          '%',
+          '^',
+          '&',
+          '|',
+          '~',
+          '.',
+        ];
 
-    Widget buildBtn({
-      required IconData icon,
-      required VoidCallback onPressed,
-      required String tooltip,
-      Color? color,
-    }) {
-      return Tooltip(
-        message: tooltip,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(5),
-            child: Container(
-              width: 28,
-              height: 28,
-              alignment: Alignment.center,
-              child: Icon(
-                icon,
-                size: 14,
-                color: color ?? iconColor,
+        Widget buildBtn({
+          required IconData icon,
+          required VoidCallback onPressed,
+          required String tooltip,
+          Color? color,
+        }) {
+          return Tooltip(
+            message: tooltip,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onPressed,
+                borderRadius: BorderRadius.circular(5),
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  child: Icon(
+                    icon,
+                    size: 14,
+                    color: color ?? iconColor,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      );
-    }
+          );
+        }
 
-    Color getSymbolColor(String sym) {
-      if (sym == 'TAB') return tabColor;
-      return fgColor;
-    }
+        Color getSymbolColor(String sym) {
+          if (sym == 'TAB') return tabColor;
+          return fgColor;
+        }
 
-    if (!isKeyboardOpen) {
-      return Container(
-        height: 30,
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        decoration: BoxDecoration(
-          color: barBg,
-          border: Border(
-            top: BorderSide(
-              color: topBorderColor,
-              width: 0.8,
+        if (!isKeyboardOpen) {
+          return Container(
+            height: 30,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: barBg,
+              border: Border(
+                top: BorderSide(
+                  color: topBorderColor,
+                  width: 0.8,
+                ),
+              ),
             ),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                buildBtn(
-                  icon: LucideIcons.undo_2,
-                  tooltip: l10n.undo,
-                  onPressed: () {
-                    _triggerHaptic(ref);
-                    try {
-                      controller.undo();
-                    } catch (_) {}
-                  },
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    buildBtn(
+                      icon: LucideIcons.undo_2,
+                      tooltip: l10n.undo,
+                      onPressed: () {
+                        _triggerHaptic(ref);
+                        try {
+                          controller.undo();
+                        } catch (_) {}
+                      },
+                    ),
+                    buildBtn(
+                      icon: LucideIcons.redo_2,
+                      tooltip: l10n.redo,
+                      onPressed: () {
+                        _triggerHaptic(ref);
+                        try {
+                          controller.redo();
+                        } catch (_) {}
+                      },
+                    ),
+                    buildBtn(
+                      icon: LucideIcons.chevron_left,
+                      tooltip: 'Курсор влево',
+                      onPressed: () => _moveCursor(-1, ref),
+                    ),
+                    buildBtn(
+                      icon: LucideIcons.chevron_right,
+                      tooltip: 'Курсор вправо',
+                      onPressed: () => _moveCursor(1, ref),
+                    ),
+                    buildBtn(
+                      icon: LucideIcons.copy,
+                      tooltip: l10n.copy,
+                      onPressed: () => _copy(ref),
+                    ),
+                    buildBtn(
+                      icon: LucideIcons.clipboard,
+                      tooltip: l10n.paste,
+                      onPressed: () => _paste(ref),
+                    ),
+                    buildBtn(
+                      icon: LucideIcons.search,
+                      tooltip: 'Поиск в файле (Ctrl+F)',
+                      onPressed: () {
+                        _triggerHaptic(ref);
+                        final finder = ref.read(activeFindControllerProvider);
+                        if (finder != null) {
+                          finder.findMode();
+                          finder.focusOnFindInput();
+                        }
+                      },
+                    ),
+                  ],
                 ),
-                buildBtn(
-                  icon: LucideIcons.redo_2,
-                  tooltip: l10n.redo,
-                  onPressed: () {
-                    _triggerHaptic(ref);
-                    try {
-                      controller.redo();
-                    } catch (_) {}
-                  },
-                ),
-                buildBtn(
-                  icon: LucideIcons.chevron_left,
-                  tooltip: 'Курсор влево',
-                  onPressed: () => _moveCursor(-1, ref),
-                ),
-                buildBtn(
-                  icon: LucideIcons.chevron_right,
-                  tooltip: 'Курсор вправо',
-                  onPressed: () => _moveCursor(1, ref),
-                ),
-                buildBtn(
-                  icon: LucideIcons.copy,
-                  tooltip: l10n.copy,
-                  onPressed: () => _copy(ref),
-                ),
-                buildBtn(
-                  icon: LucideIcons.clipboard,
-                  tooltip: l10n.paste,
-                  onPressed: () => _paste(ref),
-                ),
-                buildBtn(
-                  icon: LucideIcons.search,
-                  tooltip: 'Поиск в файле (Ctrl+F)',
-                  onPressed: () {
-                    _triggerHaptic(ref);
-                    final finder = ref.read(activeFindControllerProvider);
-                    if (finder != null) {
-                      finder.findMode();
-                      finder.focusOnFindInput();
-                    }
-                  },
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ValueListenableBuilder<CodeLineEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, val, _) {
+                        final line = val.selection.extentIndex + 1;
+                        final col = val.selection.extentOffset + 1;
+                        return InkWell(
+                          onTap: () => _showGoToLineDialog(context, palette),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: elevatedBg,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: accentColor.withValues(alpha: 0.35)),
+                            ),
+                            child: Text(
+                              'Стр $line:$col • ${settings.fontSize.toInt()} px',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                color: accentColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    buildBtn(
+                      icon: LucideIcons.keyboard,
+                      tooltip: l10n.edit,
+                      onPressed: () {
+                        _triggerHaptic(ref);
+                        FocusManager.instance.primaryFocus?.requestFocus();
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ValueListenableBuilder<CodeLineEditingValue>(
-                  valueListenable: controller,
-                  builder: (context, val, _) {
-                    final line = val.selection.extentIndex + 1;
-                    final col = val.selection.extentOffset + 1;
-                    return InkWell(
-                      onTap: () => _showGoToLineDialog(context, palette),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: elevatedBg,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: accentColor.withValues(alpha: 0.35)),
+          );
+        }
+
+        return Container(
+          height: 32,
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: barBg,
+            border: Border(
+              top: BorderSide(
+                color: topBorderColor,
+                width: 0.6,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              buildBtn(
+                icon: LucideIcons.undo_2,
+                tooltip: l10n.undo,
+                onPressed: () {
+                  _triggerHaptic(ref);
+                  try {
+                    controller.undo();
+                  } catch (_) {}
+                },
+              ),
+              buildBtn(
+                icon: LucideIcons.redo_2,
+                tooltip: l10n.redo,
+                onPressed: () {
+                  _triggerHaptic(ref);
+                  try {
+                    controller.redo();
+                  } catch (_) {}
+                },
+              ),
+              buildBtn(
+                icon: LucideIcons.chevron_left,
+                tooltip: 'Курсор влево',
+                onPressed: () => _moveCursor(-1, ref),
+              ),
+              buildBtn(
+                icon: LucideIcons.chevron_right,
+                tooltip: 'Курсор вправо',
+                onPressed: () => _moveCursor(1, ref),
+              ),
+              buildBtn(
+                icon: LucideIcons.copy,
+                tooltip: l10n.copy,
+                onPressed: () => _copy(ref),
+              ),
+              buildBtn(
+                icon: LucideIcons.clipboard,
+                tooltip: l10n.paste,
+                onPressed: () => _paste(ref),
+              ),
+              buildBtn(
+                icon: LucideIcons.search,
+                tooltip: 'Поиск в файле (Ctrl+F)',
+                onPressed: () {
+                  _triggerHaptic(ref);
+                  final finder = ref.read(activeFindControllerProvider);
+                  if (finder != null) {
+                    finder.findMode();
+                    finder.focusOnFindInput();
+                  }
+                },
+              ),
+              buildBtn(
+                icon: LucideIcons.palette,
+                tooltip: 'Выбрать цвет (Color Picker)',
+                onPressed: () {
+                  _triggerHaptic(ref);
+                  ColorPickerDialog.show(
+                    context,
+                    onColorSelected: (hexCode, flutterCode) {
+                      controller.replaceSelection(hexCode);
+                    },
+                  );
+                },
+              ),
+              buildBtn(
+                icon: LucideIcons.code_xml,
+                tooltip: 'Быстрые сниппеты кода',
+                onPressed: () {
+                  _triggerHaptic(ref);
+                  _showSnippetPicker(context, palette);
+                },
+              ),
+              buildBtn(
+                icon: LucideIcons.volume_2,
+                tooltip: 'Звук клавиатуры (ASMR)',
+                onPressed: () {
+                  KeyboardSoundService.showSwitchSelectorDialog(context);
+                },
+              ),
+              ValueListenableBuilder<CodeLineEditingValue>(
+                valueListenable: controller,
+                builder: (context, val, _) {
+                  final line = val.selection.extentIndex + 1;
+                  final col = val.selection.extentOffset + 1;
+                  return InkWell(
+                    onTap: () => _showGoToLineDialog(context, palette),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: elevatedBg,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: accentColor.withValues(alpha: 0.35)),
+                      ),
+                      child: Text(
+                        '$line:$col',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: accentColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              Container(
+                width: 1,
+                height: 14,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                color: hairlineColor,
+              ),
+              Expanded(
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: symbols.length,
+                  itemBuilder: (context, index) {
+                    final symbol = symbols[index];
+                    final isTab = symbol == 'TAB';
+                    final symColor = getSymbolColor(symbol);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 1.5,
+                        vertical: 2,
+                      ),
+                      child: TextButton(
+                        onPressed: () {
+                          _triggerHaptic(ref);
+                          _insertText(symbol, ref);
+                        },
+                        style: TextButton.styleFrom(
+                          minimumSize: Size(isTab ? 38 : 26, 26),
+                          padding: EdgeInsets.zero,
+                          backgroundColor: elevatedBg,
+                          foregroundColor: symColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(5),
+                            side: BorderSide(
+                              color: isTab
+                                  ? tabColor.withValues(alpha: 0.4)
+                                  : hairlineColor,
+                              width: 0.6,
+                            ),
+                          ),
                         ),
                         child: Text(
-                          'Стр $line:$col • ${settings.fontSize.toInt()} px',
+                          symbol,
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            color: accentColor,
+                            fontSize: isTab ? 9.5 : 12.0,
                             fontWeight: FontWeight.w600,
+                            color: symColor,
                           ),
                         ),
                       ),
                     );
                   },
                 ),
-                const SizedBox(width: 6),
-                buildBtn(
-                  icon: LucideIcons.keyboard,
-                  tooltip: l10n.edit,
-                  onPressed: () {
-                    _triggerHaptic(ref);
-                    FocusManager.instance.primaryFocus?.requestFocus();
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      height: 32,
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: barBg,
-        border: Border(
-          top: BorderSide(
-            color: topBorderColor,
-            width: 0.6,
+              ),
+            ],
           ),
-        ),
-      ),
-      child: Row(
-        children: [
-          buildBtn(
-            icon: LucideIcons.undo_2,
-            tooltip: l10n.undo,
-            onPressed: () {
-              _triggerHaptic(ref);
-              try {
-                controller.undo();
-              } catch (_) {}
-            },
-          ),
-          buildBtn(
-            icon: LucideIcons.redo_2,
-            tooltip: l10n.redo,
-            onPressed: () {
-              _triggerHaptic(ref);
-              try {
-                controller.redo();
-              } catch (_) {}
-            },
-          ),
-          buildBtn(
-            icon: LucideIcons.chevron_left,
-            tooltip: 'Курсор влево',
-            onPressed: () => _moveCursor(-1, ref),
-          ),
-          buildBtn(
-            icon: LucideIcons.chevron_right,
-            tooltip: 'Курсор вправо',
-            onPressed: () => _moveCursor(1, ref),
-          ),
-          buildBtn(
-            icon: LucideIcons.copy,
-            tooltip: l10n.copy,
-            onPressed: () => _copy(ref),
-          ),
-          buildBtn(
-            icon: LucideIcons.clipboard,
-            tooltip: l10n.paste,
-            onPressed: () => _paste(ref),
-          ),
-          buildBtn(
-            icon: LucideIcons.search,
-            tooltip: 'Поиск в файле (Ctrl+F)',
-            onPressed: () {
-              _triggerHaptic(ref);
-              final finder = ref.read(activeFindControllerProvider);
-              if (finder != null) {
-                finder.findMode();
-                finder.focusOnFindInput();
-              }
-            },
-          ),
-          buildBtn(
-            icon: LucideIcons.palette,
-            tooltip: 'Выбрать цвет (Color Picker)',
-            onPressed: () {
-              _triggerHaptic(ref);
-              ColorPickerDialog.show(
-                context,
-                onColorSelected: (hexCode, flutterCode) {
-                  controller.replaceSelection(hexCode);
-                },
-              );
-            },
-          ),
-          buildBtn(
-            icon: LucideIcons.code_xml,
-            tooltip: 'Быстрые сниппеты кода',
-            onPressed: () {
-              _triggerHaptic(ref);
-              _showSnippetPicker(context, palette);
-            },
-          ),
-          buildBtn(
-            icon: LucideIcons.volume_2,
-            tooltip: 'Звук клавиатуры (ASMR)',
-            onPressed: () {
-              KeyboardSoundService.showSwitchSelectorDialog(context);
-            },
-          ),
-          ValueListenableBuilder<CodeLineEditingValue>(
-            valueListenable: controller,
-            builder: (context, val, _) {
-              final line = val.selection.extentIndex + 1;
-              final col = val.selection.extentOffset + 1;
-              return InkWell(
-                onTap: () => _showGoToLineDialog(context, palette),
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(
-                    color: elevatedBg,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: accentColor.withValues(alpha: 0.35)),
-                  ),
-                  child: Text(
-                    '$line:$col',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      color: accentColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          Container(
-            width: 1,
-            height: 14,
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            color: hairlineColor,
-          ),
-          Expanded(
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: symbols.length,
-              itemBuilder: (context, index) {
-                final symbol = symbols[index];
-                final isTab = symbol == 'TAB';
-                final symColor = getSymbolColor(symbol);
-                return Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 1.5,
-                    vertical: 2,
-                  ),
-                  child: TextButton(
-                    onPressed: () {
-                      _triggerHaptic(ref);
-                      _insertText(symbol, ref);
-                    },
-                    style: TextButton.styleFrom(
-                      minimumSize: Size(isTab ? 38 : 26, 26),
-                      padding: EdgeInsets.zero,
-                      backgroundColor: elevatedBg,
-                      foregroundColor: symColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
-                        side: BorderSide(
-                          color: isTab
-                              ? tabColor.withValues(alpha: 0.4)
-                              : hairlineColor,
-                          width: 0.6,
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      symbol,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: isTab ? 9.5 : 12.0,
-                        fontWeight: FontWeight.w600,
-                        color: symColor,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

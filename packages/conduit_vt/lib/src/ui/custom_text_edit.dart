@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -53,6 +55,14 @@ class CustomTextEdit extends StatefulWidget {
 
 class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   TextInputConnection? _connection;
+  bool _hasComposing = false;
+  Size? _lastEditableSize;
+  Rect? _lastCaretRect;
+  Timer? _editableRectThrottleTimer;
+  Rect? _pendingEditableRect;
+  Rect? _pendingCaretRect;
+  DateTime _lastEditableRectSentAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static const Duration _editableRectMinInterval = Duration(milliseconds: 80);
 
   @override
   void initState() {
@@ -106,6 +116,7 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   }
 
   void closeKeyboard() {
+    _resetEditableCache();
     if (hasInputConnection) {
       _connection?.close();
     }
@@ -121,12 +132,74 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
       return;
     }
 
-    _connection?.setEditableSizeAndTransform(
-      rect.size,
-      Matrix4.translationValues(0, 0, 0),
-    );
+    if (_lastEditableSize == rect.size && _lastCaretRect == caretRect) {
+      _pendingEditableRect = null;
+      _pendingCaretRect = null;
+      _editableRectThrottleTimer?.cancel();
+      _editableRectThrottleTimer = null;
+      return;
+    }
 
-    _connection?.setCaretRect(caretRect);
+    final elapsed = DateTime.now().difference(_lastEditableRectSentAt);
+    if (elapsed >= _editableRectMinInterval) {
+      _pendingEditableRect = null;
+      _pendingCaretRect = null;
+      _editableRectThrottleTimer?.cancel();
+      _editableRectThrottleTimer = null;
+      _sendEditableRectNow(rect, caretRect);
+      return;
+    }
+
+    _pendingEditableRect = rect;
+    _pendingCaretRect = caretRect;
+    if (_editableRectThrottleTimer == null ||
+        !_editableRectThrottleTimer!.isActive) {
+      final remaining = _editableRectMinInterval - elapsed;
+      _editableRectThrottleTimer = Timer(remaining, () {
+        _editableRectThrottleTimer = null;
+        final pendingRect = _pendingEditableRect;
+        final pendingCaret = _pendingCaretRect;
+        _pendingEditableRect = null;
+        _pendingCaretRect = null;
+        if (mounted &&
+            hasInputConnection &&
+            pendingRect != null &&
+            pendingCaret != null) {
+          _sendEditableRectNow(pendingRect, pendingCaret);
+        }
+      });
+    }
+  }
+
+  void _sendEditableRectNow(Rect rect, Rect caretRect) {
+    if (!hasInputConnection) {
+      return;
+    }
+
+    if (_lastEditableSize != rect.size) {
+      _connection?.setEditableSizeAndTransform(
+        rect.size,
+        Matrix4.translationValues(0, 0, 0),
+      );
+      _lastEditableSize = rect.size;
+    }
+
+    if (_lastCaretRect != caretRect) {
+      _connection?.setCaretRect(caretRect);
+      _lastCaretRect = caretRect;
+    }
+
+    _lastEditableRectSentAt = DateTime.now();
+  }
+
+  void _resetEditableCache() {
+    _editableRectThrottleTimer?.cancel();
+    _editableRectThrottleTimer = null;
+    _pendingEditableRect = null;
+    _pendingCaretRect = null;
+    _lastEditableSize = null;
+    _lastCaretRect = null;
+    _hasComposing = false;
   }
 
   void _onFocusChange() {
@@ -183,6 +256,7 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
   }
 
   void _closeInputConnectionIfNeeded() {
+    _resetEditableCache();
     if (_connection != null && _connection!.attached) {
       _connection!.close();
       _connection = null;
@@ -219,11 +293,15 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
     if (!_currentEditingState.composing.isCollapsed) {
       final text = _currentEditingState.text;
       final composingText = _currentEditingState.composing.textInside(text);
+      _hasComposing = true;
       widget.onComposing(composingText);
       return;
     }
 
-    widget.onComposing(null);
+    if (_hasComposing) {
+      _hasComposing = false;
+      widget.onComposing(null);
+    }
 
     if (_currentEditingState.text.length < _initEditingState.text.length) {
       widget.onDelete();
@@ -236,9 +314,10 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
     }
 
     // Reset editing state if composing is done
-    if (_currentEditingState.composing.isCollapsed &&
+    if (hasInputConnection &&
+        _currentEditingState.composing.isCollapsed &&
         _currentEditingState.text != _initEditingState.text) {
-      _connection!.setEditingState(_initEditingState);
+      _connection?.setEditingState(_initEditingState);
     }
   }
 
@@ -260,7 +339,7 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
 
   @override
   void connectionClosed() {
-    // print('connectionClosed');
+    _resetEditableCache();
   }
 
   @override

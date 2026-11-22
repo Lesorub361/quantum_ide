@@ -216,6 +216,10 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   bool _busy = false;
   double _lastTotalCores = 0;
   double _lastAppCpuFraction = 0.03;
+  DateTime _lastShizukuBatchAt = DateTime.fromMillisecondsSinceEpoch(0);
+  List<int>? _cachedShizukuCpuStats;
+  int _cachedShizukuCpuFreqKHz = 0;
+  int _cachedShizukuGpuFreqMhz = 0;
 
   /// Загрузка процесса в ядрах (1.0 = одно ядро полностью). null — /proc недоступен.
   double? _coresFor(int procPid) {
@@ -1270,6 +1274,45 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     return 0.02;
   }
 
+  Future<void> _fetchShizukuTelemetryBatch() async {
+    if (!ShizukuBridge.instance.isAvailable) return;
+    final now = DateTime.now();
+    if (now.difference(_lastShizukuBatchAt) < const Duration(seconds: 6)) {
+      return;
+    }
+    _lastShizukuBatchAt = now;
+    try {
+      final res = await ShizukuBridge.instance.execute('sh', [
+        '-c',
+        'head -n 1 /proc/stat 2>/dev/null; echo "---"; '
+        'cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null; echo "---"; '
+        'cat /sys/class/kgsl/kgsl-3d0/gpuclk 2>/dev/null',
+      ]);
+      if (res.exitCode != 0) return;
+      final sections = res.stdout.toString().split('---');
+      if (sections.isNotEmpty) {
+        final statLine = sections[0].trim();
+        if (statLine.startsWith('cpu')) {
+          final parts = statLine.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).skip(1);
+          _cachedShizukuCpuStats = parts.map((p) => int.tryParse(p) ?? 0).toList();
+        }
+      }
+      if (sections.length > 1) {
+        final cpuVal = int.tryParse(sections[1].trim());
+        if (cpuVal != null) {
+          _cachedShizukuCpuFreqKHz = cpuVal;
+        }
+      }
+      if (sections.length > 2) {
+        final gpuClk = int.tryParse(sections[2].trim());
+        if (gpuClk != null) {
+          _cachedShizukuGpuFreqMhz =
+              gpuClk > 1000000 ? (gpuClk / 1000000).round() : (gpuClk / 1000).round();
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<List<int>?> _parseCpuStats() async {
     if (!_procStatBlocked) {
       try {
@@ -1287,16 +1330,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     }
 
     if (ShizukuBridge.instance.isAvailable) {
-      try {
-        final res = await ShizukuBridge.instance.execute('cat', ['/proc/stat']);
-        if (res.exitCode == 0 && res.stdout.toString().isNotEmpty) {
-          final lines = res.stdout.toString().split('\n');
-          if (lines.isNotEmpty && lines.first.startsWith('cpu')) {
-            final parts = lines.first.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).skip(1);
-            return parts.map((p) => int.tryParse(p) ?? 0).toList();
-          }
-        }
-      } catch (_) {}
+      await _fetchShizukuTelemetryBatch();
+      return _cachedShizukuCpuStats;
     }
     return null;
   }
@@ -1316,13 +1351,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       }
     } catch (_) {}
     if (maxFreqKHz == 0 && ShizukuBridge.instance.isAvailable) {
-      try {
-        final res = await ShizukuBridge.instance.execute('cat', ['/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq']);
-        if (res.exitCode == 0) {
-          final val = int.tryParse(res.stdout.toString().trim());
-          if (val != null) maxFreqKHz = val;
-        }
-      } catch (_) {}
+      await _fetchShizukuTelemetryBatch();
+      maxFreqKHz = _cachedShizukuCpuFreqKHz;
     }
     return (maxFreqKHz / 1000.0).round();
   }
@@ -1339,15 +1369,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     } catch (_) {}
 
     if (ShizukuBridge.instance.isAvailable && ShizukuBridge.instance.uid == 0) {
-      try {
-        final res = await ShizukuBridge.instance.execute('cat', ['/sys/class/kgsl/kgsl-3d0/gpuclk']);
-        if (res.exitCode == 0) {
-          final clk = int.tryParse(res.stdout.toString().trim());
-          if (clk != null) {
-            return clk > 1000000 ? (clk / 1000000).round() : (clk / 1000).round();
-          }
-        }
-      } catch (_) {}
+      await _fetchShizukuTelemetryBatch();
+      return _cachedShizukuGpuFreqMhz;
     }
     return 0;
   }

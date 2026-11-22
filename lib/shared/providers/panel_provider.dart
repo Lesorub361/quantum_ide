@@ -98,5 +98,6 @@ final rightAiPanelWidthProvider = StateProvider<double>((ref) => 380.0);
 final floatingPreviewVisibleProvider = StateProvider<bool>((ref) => false);
 final floatingPreviewMinimizedProvider = StateProvider<bool>((ref) => false);
 final floatingPreviewUrlProvider = StateProvider<String>((ref) => 'http://127.0.0.1:8080');
+final floatingPreviewReloadTokenProvider = StateProvider<int>((ref) => 0);
 final flutterAutoHotReloadProvider = StateProvider<bool>((ref) => true);
 

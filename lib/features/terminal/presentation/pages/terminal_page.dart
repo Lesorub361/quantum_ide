@@ -22,7 +22,6 @@ class TerminalPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final workspacePath = ref.watch(workspaceProvider).currentPath;
 
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
@@ -32,6 +31,7 @@ class TerminalPage extends ConsumerWidget {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
+        final isKeyboardOpen = (View.maybeOf(context)?.viewInsets.bottom ?? 0) > 0;
         if (isKeyboardOpen) {
           FocusManager.instance.primaryFocus?.unfocus();
         } else {

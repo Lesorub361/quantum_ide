@@ -36,12 +36,10 @@ class KeyboardVisibiltyState extends State<KeyboardVisibilty>
   void didChangeMetrics() {
     final bottomInset = View.of(context).viewInsets.bottom;
 
-    if (bottomInset != _lastBottomInset) {
-      if (bottomInset > 0) {
-        widget.onKeyboardShow?.call();
-      } else {
-        widget.onKeyboardHide?.call();
-      }
+    if (_lastBottomInset == 0 && bottomInset > 0) {
+      widget.onKeyboardShow?.call();
+    } else if (_lastBottomInset > 0 && bottomInset == 0) {
+      widget.onKeyboardHide?.call();
     }
 
     _lastBottomInset = bottomInset;

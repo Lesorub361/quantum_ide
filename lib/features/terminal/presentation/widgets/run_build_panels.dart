@@ -116,7 +116,8 @@ final _cachedProjectTypeProvider =
     });
 
 class SidebarRunPanel extends ConsumerStatefulWidget {
-  const SidebarRunPanel({super.key});
+  final bool isActive;
+  const SidebarRunPanel({super.key, this.isActive = true});
 
   @override
   ConsumerState<SidebarRunPanel> createState() => _SidebarRunPanelState();
@@ -267,6 +268,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
               ref.read(floatingPreviewVisibleProvider.notifier).state = true;
               ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+              ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
               _runDedicatedCommand(
                 workspaceState.currentPath,
                 'flutter run -d web-server --web-port 8080 --web-hostname 127.0.0.1',
@@ -281,6 +283,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                 ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
                 ref.read(floatingPreviewVisibleProvider.notifier).state = true;
                 ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+                ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
                 _runDedicatedCommand(
                   workspaceState.currentPath,
                   'flutter build web --no-tree-shake-icons && python3 -m http.server 8080 -d build/web',
@@ -292,8 +295,14 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                 () => _installBuiltApk(workspaceState.currentPath)),
             _buildActionButton('Reload (r)', LucideIcons.zap, Colors.yellow,
                 () => _sendRawKeyToDedicatedTerminal('r')),
-            _buildActionButton('Restart (R)', LucideIcons.rotate_cw, Colors.orangeAccent,
-                () => _sendRawKeyToDedicatedTerminal('R')),
+            _buildActionButton('Restart (R)', LucideIcons.rotate_cw, Colors.orangeAccent, () {
+              _sendRawKeyToDedicatedTerminal('R');
+              Future.delayed(const Duration(milliseconds: 1800), () {
+                if (mounted) {
+                  ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
+                }
+              });
+            }),
             _buildActionButton(
               isRu ? 'Авто-Reload' : 'Auto-Reload',
               autoHotReload ? LucideIcons.sparkles : LucideIcons.circle_pause,
@@ -307,6 +316,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               () {
                 ref.read(floatingPreviewVisibleProvider.notifier).state = true;
                 ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+                ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
               },
             ),
             _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, () {
@@ -325,6 +335,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
               ref.read(floatingPreviewVisibleProvider.notifier).state = true;
               ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+              ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
               _runDedicatedCommand(
                 workspaceState.currentPath,
                 'flutter run -d web-server --web-port 8080 --web-hostname 127.0.0.1',
@@ -332,8 +343,14 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
             }),
             _buildActionButton('Reload (r)', LucideIcons.zap, Colors.yellow,
                 () => _sendRawKeyToDedicatedTerminal('r')),
-            _buildActionButton('Restart (R)', LucideIcons.rotate_cw, Colors.orangeAccent,
-                () => _sendRawKeyToDedicatedTerminal('R')),
+            _buildActionButton('Restart (R)', LucideIcons.rotate_cw, Colors.orangeAccent, () {
+              _sendRawKeyToDedicatedTerminal('R');
+              Future.delayed(const Duration(milliseconds: 1800), () {
+                if (mounted) {
+                  ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
+                }
+              });
+            }),
             _buildActionButton(
               isRu ? 'Авто-Reload' : 'Auto-Reload',
               autoHotReload ? LucideIcons.sparkles : LucideIcons.circle_pause,
@@ -347,6 +364,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               () {
                 ref.read(floatingPreviewVisibleProvider.notifier).state = true;
                 ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+                ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
               },
             ),
             _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, () {
@@ -367,6 +385,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
             ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
             ref.read(floatingPreviewVisibleProvider.notifier).state = true;
             ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+            ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
             _runDedicatedCommand(workspaceState.currentPath,
                 'python3 -m flask run --host=0.0.0.0 2>/dev/null || python3 -m uvicorn main:app --host 0.0.0.0 --port 8080 2>/dev/null || python3 -m http.server 8080');
           }),
@@ -404,12 +423,14 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
             ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
             ref.read(floatingPreviewVisibleProvider.notifier).state = true;
             ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+            ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
             _runDedicatedCommand(workspaceState.currentPath,
                 'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080');
           }),
           _buildActionButton('Браузер', LucideIcons.monitor, Colors.lightBlueAccent, () {
             ref.read(floatingPreviewVisibleProvider.notifier).state = true;
             ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+            ref.read(floatingPreviewReloadTokenProvider.notifier).state++;
           }),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, () {
             _stopCommand();
@@ -578,6 +599,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                         terminal: session.xtermTerminal,
                         controller: session.xtermViewController,
                         autofocus: !(Platform.isAndroid || Platform.isIOS),
+                        autoResize: widget.isActive,
                         palette: resolveConduitPalette(
                           ref.watch(settingsProvider).terminalTheme,
                         ),
@@ -727,7 +749,8 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
 
 // Standalone Sidebar Build Panel
 class SidebarBuildPanel extends ConsumerStatefulWidget {
-  const SidebarBuildPanel({super.key});
+  final bool isActive;
+  const SidebarBuildPanel({super.key, this.isActive = true});
 
   @override
   ConsumerState<SidebarBuildPanel> createState() => _SidebarBuildPanelState();
@@ -1238,6 +1261,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                 terminal: session.xtermTerminal,
                                 controller: session.xtermViewController,
                                 autofocus: !(Platform.isAndroid || Platform.isIOS),
+                                autoResize: widget.isActive,
                                 palette: resolveConduitPalette(
                                   ref.watch(settingsProvider).terminalTheme,
                                 ),

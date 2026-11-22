@@ -205,6 +205,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       final xtermVc = xt.TerminalController();
       int lastCols = -1;
       int lastRows = -1;
+      Timer? resizeDebounce;
       final xtermTerm = xt.Terminal(
         maxLines: 10000,
         platform: Platform.isAndroid
@@ -222,13 +223,24 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows < 6 ? 6 : rows;
           final safeCols = cols < 20 ? 20 : cols;
-          if (safeRows != lastRows || safeCols != lastCols) {
+          if (lastRows == -1 && lastCols == -1) {
             lastRows = safeRows;
             lastCols = safeCols;
             try {
               pty.resize(safeRows, safeCols);
             } catch (_) {}
+            return;
           }
+          resizeDebounce?.cancel();
+          resizeDebounce = Timer(const Duration(milliseconds: 180), () {
+            if (safeRows != lastRows || safeCols != lastCols) {
+              lastRows = safeRows;
+              lastCols = safeCols;
+              try {
+                pty.resize(safeRows, safeCols);
+              } catch (_) {}
+            }
+          });
         },
       );
       // ptyOutSub is stored in TerminalSession
@@ -249,6 +261,8 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           if (type == DedicatedTerminalType.build || LiveTelemetryService.instance.isBuilding) {
             LiveTelemetryService.instance.appendBuildOutput(text);
             if (text.contains('✓ Built build/app/outputs/') ||
+                text.contains('✓ Built build/web') ||
+                text.contains('Built build/web') ||
                 text.contains('✓ APK готов:') ||
                 text.contains('✓ Debug APK готов:') ||
                 text.contains('✓ AppBundle готов:') ||
@@ -265,6 +279,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           }
         },
         onDone: () {
+          resizeDebounce?.cancel();
           _markAsExited(type);
           if (type == DedicatedTerminalType.build || LiveTelemetryService.instance.isBuilding) {
             if (LiveTelemetryService.instance.isBuilding) {

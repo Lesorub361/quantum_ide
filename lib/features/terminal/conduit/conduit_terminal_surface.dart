@@ -21,6 +21,7 @@ class ConduitTerminalSurface extends StatefulWidget {
     this.onSecondaryTapDown,
     this.customTheme,
     this.hardwareKeyboardOnly = false,
+    this.autoResize = true,
     super.key,
   });
 
@@ -38,6 +39,7 @@ class ConduitTerminalSurface extends StatefulWidget {
   final void Function(TapDownDetails, CellOffset)? onSecondaryTapDown;
   final TerminalTheme? customTheme;
   final bool hardwareKeyboardOnly;
+  final bool autoResize;
 
   @override
   State<ConduitTerminalSurface> createState() => _ConduitTerminalSurfaceState();
@@ -134,6 +136,7 @@ class _ConduitTerminalSurfaceState extends State<ConduitTerminalSurface> {
             controller: widget.controller,
             focusNode: widget.focusNode,
             autofocus: widget.autofocus,
+            autoResize: widget.autoResize,
             deleteDetection: true,
             hardwareKeyboardOnly: widget.hardwareKeyboardOnly,
             keyboardType: widget.hardwareKeyboardOnly

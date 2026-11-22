@@ -91,12 +91,14 @@ class TerminalPanelContent extends ConsumerStatefulWidget {
       _TerminalPanelContentState();
 }
 
-class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
+class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent>
+    with WidgetsBindingObserver {
   final Set<String> _activeModifiers = {};
   bool _isSidebarOpen = false;
   bool _isTerminalSplit = false;
   bool _isMobileKeyboardActive = false;
   bool _keyboardWasVisibleOnScreen = false;
+  bool _isKeyboardVisible = false;
   bool _inlineSelectionMode = false;
   String _inlineSelectedText = '';
   int _problemsSeverityFilter =
@@ -114,7 +116,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final isMobile =
         Platform.isAndroid ||
         Platform.isIOS ||
-        (mounted && MediaQuery.of(context).size.width < 650);
+        (mounted && MediaQuery.sizeOf(context).width < 650);
     return _terminalFocusNodes.putIfAbsent(
       id,
       () => TerminalFocusNode(allowAutoKeyboard: !isMobile),
@@ -183,7 +185,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         _inlineSelectedText = '';
       });
     }
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     if (bottomInset > 20) {
       _closeTerminalKeyboard(session, isSecondary: isSecondary);
     } else {
@@ -205,9 +207,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   final Set<TerminalSession> _initializedSessions =
       {}; // Для контроля слушателей выделения
 
+  bool _readKeyboardOpenFromView() {
+    final view = View.maybeOf(context);
+    if (view == null || view.devicePixelRatio <= 0) return false;
+    return (view.viewInsets.bottom / view.devicePixelRatio) > 20;
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadPathBinaries();
     WakelockPlus.enabled
         .then((val) {
@@ -225,6 +234,29 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             );
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _isKeyboardVisible = _readKeyboardOpenFromView();
+  }
+
+  @override
+  void didChangeMetrics() {
+    final nextOpen = _readKeyboardOpenFromView();
+    if (nextOpen) {
+      _keyboardWasVisibleOnScreen = true;
+    } else if (_keyboardWasVisibleOnScreen) {
+      _keyboardWasVisibleOnScreen = false;
+      _isMobileKeyboardActive = false;
+      for (final fn in _terminalFocusNodes.values) {
+        fn.allowAutoKeyboard = false;
+      }
+    }
+    if (nextOpen != _isKeyboardVisible && mounted) {
+      setState(() => _isKeyboardVisible = nextOpen);
+    }
   }
 
   Future<void> _toggleWakelock() async {
@@ -266,6 +298,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     for (final node in _terminalFocusNodes.values) {
       node.dispose();
     }
@@ -896,22 +929,38 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final panelState = ref.watch(panelProvider);
     final sessions = ref.watch(terminalTabsProvider);
     final notifier = ref.read(terminalTabsProvider.notifier);
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
-    if (bottomInset > 20) {
-      _keyboardWasVisibleOnScreen = true;
-    } else if (bottomInset <= 20 && _keyboardWasVisibleOnScreen) {
-      _keyboardWasVisibleOnScreen = false;
-      _isMobileKeyboardActive = false;
-      for (final fn in _terminalFocusNodes.values) {
-        fn.allowAutoKeyboard = false;
-      }
-    }
 
     final termSettings = ref.watch(settingsProvider);
     final termPalette = termSettings.syncAppWithTerminalPalette
         ? resolveConduitPalette(termSettings.terminalTheme)
         : null;
+
+    final contentColumn = Column(
+      children: [
+        Expanded(
+          child: widget.onlyTerminal
+              ? _buildTerminalView(
+                  sessions,
+                  notifier,
+                  key: const ValueKey('terminal'),
+                  isActive: true,
+                )
+              : _buildBody(panelState, sessions, notifier),
+        ),
+        if ((widget.onlyTerminal ||
+                panelState.selectedTab == PanelTab.terminal) &&
+            sessions.isNotEmpty &&
+            notifier.currentIndex < sessions.length &&
+            (!_isKeyboardVisible && !_isMobileKeyboardActive))
+          _buildPluginCommandsBar(sessions[notifier.currentIndex]),
+        if ((widget.onlyTerminal ||
+                panelState.selectedTab == PanelTab.terminal) &&
+            (Platform.isAndroid ||
+                Platform.isIOS ||
+                MediaQuery.sizeOf(context).width < 650))
+          _buildVirtualKeys(sessions, notifier),
+      ],
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -919,36 +968,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       ),
       child: SafeArea(
         bottom: true,
-        child: Padding(
-          padding: EdgeInsets.only(
-            bottom: widget.onlyTerminal ? bottomInset : 0,
-          ),
-          child: Column(
-            children: [
-              Expanded(
-                child: widget.onlyTerminal
-                    ? _buildTerminalView(
-                        sessions,
-                        notifier,
-                        key: const ValueKey('terminal'),
-                      )
-                    : _buildBody(panelState, sessions, notifier),
-              ),
-              if ((widget.onlyTerminal ||
-                      panelState.selectedTab == PanelTab.terminal) &&
-                  sessions.isNotEmpty &&
-                  notifier.currentIndex < sessions.length &&
-                  ((bottomInset <= 20) && !_isMobileKeyboardActive))
-                _buildPluginCommandsBar(sessions[notifier.currentIndex]),
-              if ((widget.onlyTerminal ||
-                      panelState.selectedTab == PanelTab.terminal) &&
-                  (Platform.isAndroid ||
-                      Platform.isIOS ||
-                      MediaQuery.of(context).size.width < 650))
-                _buildVirtualKeys(sessions, notifier),
-            ],
-          ),
-        ),
+        child: widget.onlyTerminal
+            ? Builder(
+                builder: (insetCtx) => Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(insetCtx).bottom,
+                  ),
+                  child: contentColumn,
+                ),
+              )
+            : contentColumn,
       ),
     );
   }
@@ -992,13 +1021,23 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           sessions,
           notifier,
           key: const ValueKey('terminal'),
+          isActive: isCurrent,
         );
       case PanelTab.run:
-        return const SidebarRunPanel(key: ValueKey('bottom_run'));
+        return SidebarRunPanel(
+          key: const ValueKey('bottom_run'),
+          isActive: isCurrent,
+        );
       case PanelTab.buildLogs:
-        return const SidebarBuildPanel(key: ValueKey('bottom_build'));
+        return SidebarBuildPanel(
+          key: const ValueKey('bottom_build'),
+          isActive: isCurrent,
+        );
       case PanelTab.appLogs:
-        return _buildAppLogsView(key: const ValueKey('appLogs'));
+        return _buildAppLogsView(
+          key: const ValueKey('appLogs'),
+          isActive: isCurrent,
+        );
       case PanelTab.problems:
         return Consumer(
           key: const ValueKey('problems'),
@@ -1023,7 +1062,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     return const SidebarGitPanel(isBottomPanel: true);
   }
 
-  Widget _buildAppLogsView({Key? key}) {
+  Widget _buildAppLogsView({Key? key, bool isActive = true}) {
     return Consumer(
       key: key,
       builder: (context, ref, _) {
@@ -1070,7 +1109,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             ]),
             Expanded(
               child: session != null
-                  ? _buildTerminalWidget(session)
+                  ? _buildTerminalWidget(session, autoResize: isActive)
                   : Center(
                       child: Text(
                         l10n.appLogs,
@@ -1589,6 +1628,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     List<TerminalSession> sessions,
     TerminalTabsNotifier notifier, {
     Key? key,
+    bool isActive = true,
   }) {
     if (sessions.isEmpty)
       return const Center(child: CircularProgressIndicator());
@@ -1829,6 +1869,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                               Expanded(
                                 child: _buildTerminalWidget(
                                   sessions[notifier.currentIndex],
+                                  autoResize: isActive,
                                 ),
                               ),
                             ],
@@ -1879,6 +1920,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   sessions[(notifier.currentIndex + 1) %
                                       sessions.length],
                                   isSecondary: true,
+                                  autoResize: isActive,
                                 ),
                               ),
                             ],
@@ -1886,7 +1928,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         ),
                       ],
                     )
-                  : _buildTerminalWidget(currentSession),
+                  : _buildTerminalWidget(currentSession, autoResize: isActive),
             ),
           ],
         );
@@ -2122,6 +2164,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   Widget _buildTerminalWidget(
     TerminalSession session, {
     bool isSecondary = false,
+    bool autoResize = true,
   }) {
     final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
@@ -2129,7 +2172,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final isMobile =
         Platform.isAndroid ||
         Platform.isIOS ||
-        MediaQuery.of(context).size.width < 650;
+        MediaQuery.sizeOf(context).width < 650;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
 
     if (!isSecondary) {
@@ -2209,6 +2252,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       controller: session.xtermViewController,
                       focusNode: _getFocusNode(keyId),
                       autofocus: !isMobile,
+                      autoResize: autoResize,
                       hardwareKeyboardOnly:
                           ref.watch(settingsProvider).hardwareKeyboardMode,
                       palette: resolveConduitPalette(
@@ -2698,7 +2742,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     bool fromToolbar = false,
   }) async {
     HapticFeedback.mediumImpact();
-    final isMobile = MediaQuery.of(context).size.width < 700;
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
 
     if (isMobile || fromToolbar) {
       _showMobileTerminalBottomSheet(context, session);
@@ -3405,7 +3449,7 @@ class _SuggestionBoxState extends State<_SuggestionBox> {
   @override
   Widget build(BuildContext context) {
     const itemHeight = 36.0;
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final isKeyboardOpen = bottomInset > 20;
     final maxHeight = (widget.suggestions.length * itemHeight).clamp(
       0.0,

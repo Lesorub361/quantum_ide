@@ -459,7 +459,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final panelState = ref.watch(panelProvider);
     final panelNotifier = ref.read(panelProvider.notifier);
 
-    final screenWidth = MediaQuery.of(context).size.width;
+    final screenWidth = MediaQuery.sizeOf(context).width;
     final isDesktop = screenWidth >= 768;
     final l10n = AppLocalizations.of(context)!;
 
@@ -489,495 +489,507 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         ? allProjects[currentProjectIndex]
         : null;
 
-    final double keyboardInset = MediaQuery.of(context).viewInsets.bottom;
-    final isKeyboardOpen = keyboardInset > 0;
+    final Widget editorChild = activeFile == null
+        ? _buildDashboard(context, ref, isDesktop, workspacePath)
+        : Column(
+            children: [
+              if (!_isZenMode)
+                Container(
+                  height: 30,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: _palette?.panel ?? const Color(0xFF0D0F14),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: _palette?.border ??
+                            Colors.white.withValues(alpha: 0.06),
+                        width: 0.8,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Breadcrumbs(
+                          path: activeFile.path,
+                          workspacePath: workspacePath,
+                          backgroundColor: _palette?.panel ??
+                              const Color(0xFF0D0F14),
+                          borderColor: Colors.transparent,
+                          accentColor: _palette?.accent,
+                          textColor: _palette?.foreground,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          LucideIcons.command,
+                          size: 13.5,
+                          color: Color(0xFF94A3B8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                        ),
+                        constraints: const BoxConstraints(),
+                        onPressed: () => QuickSwitcherDialog.show(
+                          context,
+                          initialMode: SwitcherMode.commands,
+                        ),
+                        tooltip: 'Палитра команд (Command Palette)',
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          LucideIcons.wand_sparkles,
+                          size: 13.5,
+                          color: Color(0xFF94A3B8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                        ),
+                        constraints: const BoxConstraints(),
+                        onPressed: () => ref
+                            .read(editorProvider.notifier)
+                            .formatActiveFile(),
+                        tooltip: 'Форматировать код',
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          LucideIcons.search,
+                          size: 13.5,
+                          color: Color(0xFF94A3B8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                        ),
+                        constraints: const BoxConstraints(),
+                        onPressed: () => QuickSwitcherDialog.show(
+                          context,
+                          initialMode: SwitcherMode.files,
+                        ),
+                        tooltip: AppLocalizations.of(
+                          context,
+                        )!.quickSearch,
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          LucideIcons.maximize_2,
+                          size: 13.5,
+                          color: Color(0xFF94A3B8),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                        ),
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _toggleZenMode(ref),
+                        tooltip: 'Режим фокуса (Zen Mode)',
+                      ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: DropTarget(
+                  onDragDone: (detail) async {
+                    for (final file in detail.files) {
+                      if (workspacePath != null) {
+                        final targetPath = p.join(
+                          workspacePath,
+                          p.basename(file.path),
+                        );
+                        final fileEntity = File(file.path);
+                        if (await fileEntity.exists()) {
+                          await fileEntity.copy(targetPath);
+                          ref
+                              .read(editorProvider.notifier)
+                              .openFile(targetPath);
+                        }
+                      } else {
+                        ref
+                            .read(editorProvider.notifier)
+                            .openFile(file.path);
+                      }
+                    }
+                  },
+                  child: CallbackShortcuts(
+                    bindings: {
+                      // Save file (Ctrl+S / Cmd+S)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyS,
+                        control: true,
+                      ): () => ref
+                          .read(editorProvider.notifier)
+                          .saveFile(safeActiveIndex),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyS,
+                        meta: true,
+                      ): () => ref
+                          .read(editorProvider.notifier)
+                          .saveFile(safeActiveIndex),
+                      // Quick open files (Ctrl+P / Cmd+P)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyP,
+                        control: true,
+                      ): () => QuickSwitcherDialog.show(
+                        context,
+                        initialMode: SwitcherMode.files,
+                      ),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyP,
+                        meta: true,
+                      ): () => QuickSwitcherDialog.show(
+                        context,
+                        initialMode: SwitcherMode.files,
+                      ),
+                      // Command palette (Ctrl+Shift+P / Cmd+Shift+P)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyP,
+                        control: true,
+                        shift: true,
+                      ): () => QuickSwitcherDialog.show(
+                        context,
+                        initialMode: SwitcherMode.commands,
+                      ),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyP,
+                        meta: true,
+                        shift: true,
+                      ): () => QuickSwitcherDialog.show(
+                        context,
+                        initialMode: SwitcherMode.commands,
+                      ),
+                      // Search files (Ctrl+Shift+F / Cmd+Shift+F)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyF,
+                        control: true,
+                        shift: true,
+                      ): () => QuickSwitcherDialog.show(
+                        context,
+                        initialMode: SwitcherMode.files,
+                      ),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyF,
+                        meta: true,
+                        shift: true,
+                      ): () => QuickSwitcherDialog.show(
+                        context,
+                        initialMode: SwitcherMode.files,
+                      ),
+                      // Toggle Sidebar (Ctrl+B / Cmd+B)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyB,
+                        control: true,
+                      ): () {
+                        if (isDesktop) {
+                          ref
+                              .read(leftPanelOpenProvider.notifier)
+                              .update((v) => !v);
+                        } else {
+                          if (_scaffoldKey
+                                  .currentState
+                                  ?.isDrawerOpen ??
+                              false) {
+                            _scaffoldKey.currentState?.closeDrawer();
+                          } else {
+                            _scaffoldKey.currentState?.openDrawer();
+                          }
+                        }
+                      },
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyB,
+                        meta: true,
+                      ): () {
+                        if (isDesktop) {
+                          ref
+                              .read(leftPanelOpenProvider.notifier)
+                              .update((v) => !v);
+                        } else {
+                          if (_scaffoldKey
+                                  .currentState
+                                  ?.isDrawerOpen ??
+                              false) {
+                            _scaffoldKey.currentState?.closeDrawer();
+                          } else {
+                            _scaffoldKey.currentState?.openDrawer();
+                          }
+                        }
+                      },
+                      // Toggle Terminal Panel (Ctrl+` / Cmd+`)
+                      const SingleActivator(
+                        LogicalKeyboardKey.backquote,
+                        control: true,
+                      ): () =>
+                          panelNotifier.toggle(),
+                      const SingleActivator(
+                        LogicalKeyboardKey.backquote,
+                        meta: true,
+                      ): () =>
+                          panelNotifier.toggle(),
+                      // Quick symbols (Ctrl+T / Cmd+T)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyT,
+                        control: true,
+                      ): () => QuickSwitcherDialog.show(
+                        context,
+                        initialMode: SwitcherMode.symbols,
+                      ),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyT,
+                        meta: true,
+                      ): () => QuickSwitcherDialog.show(
+                        context,
+                        initialMode: SwitcherMode.symbols,
+                      ),
+                      // Close active tab (Ctrl+W / Cmd+W)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyW,
+                        control: true,
+                      ): () => ref
+                          .read(editorProvider.notifier)
+                          .closeTab(safeActiveIndex),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyW,
+                        meta: true,
+                      ): () => ref
+                          .read(editorProvider.notifier)
+                          .closeTab(safeActiveIndex),
+                      // Find in file (Ctrl+F / Cmd+F)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyF,
+                        control: true,
+                      ): () =>
+                          _showFindPanel(context, ref),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyF,
+                        meta: true,
+                      ): () =>
+                          _showFindPanel(context, ref),
+                      // Replace in file (Ctrl+H / Cmd+H)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyH,
+                        control: true,
+                      ): () =>
+                          _showFindPanel(context, ref, replace: true),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyH,
+                        meta: true,
+                      ): () =>
+                          _showFindPanel(context, ref, replace: true),
+                      // Duplicate line (Ctrl+D / Cmd+D)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyD,
+                        control: true,
+                      ): () =>
+                          _duplicateLine(ref),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyD,
+                        meta: true,
+                      ): () =>
+                          _duplicateLine(ref),
+                      // Zen mode (Ctrl+K / Cmd+K)
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyK,
+                        control: true,
+                      ): () =>
+                          _toggleZenMode(ref),
+                      const SingleActivator(
+                        LogicalKeyboardKey.keyK,
+                        meta: true,
+                      ): () =>
+                          _toggleZenMode(ref),
+                      // Split editor (Ctrl+\ / Cmd+\)
+                      const SingleActivator(
+                        LogicalKeyboardKey.backslash,
+                        control: true,
+                      ): () =>
+                          _toggleSplitMode(ref),
+                      const SingleActivator(
+                        LogicalKeyboardKey.backslash,
+                        meta: true,
+                      ): () =>
+                          _toggleSplitMode(ref),
+                      // Problems tab
+                      const SingleActivator(
+                        LogicalKeyboardKey.bracketLeft,
+                        control: true,
+                        shift: true,
+                      ): () =>
+                          panelNotifier.selectTab(PanelTab.problems),
+                      const SingleActivator(
+                        LogicalKeyboardKey.bracketLeft,
+                        meta: true,
+                        shift: true,
+                      ): () =>
+                          panelNotifier.selectTab(PanelTab.problems),
+                      // Run project (F5)
+                      const SingleActivator(
+                        LogicalKeyboardKey.f5,
+                      ): () {
+                        if (currentProject != null) {
+                          ref
+                              .read(projectServiceProvider.notifier)
+                              .runProject(currentProject);
+                          panelNotifier.selectTab(PanelTab.terminal);
+                          panelNotifier.openPanel();
+                        }
+                      },
+                    },
+                    child: _isSplitMode
+                        ? _buildSplitEditor(ref, settings, activeFile)
+                        : _buildSingleEditor(
+                            ref,
+                            settings,
+                            activeFile,
+                          ),
+                  ),
+                ),
+              ),
+              if (Platform.isAndroid || Platform.isIOS || !isDesktop)
+                KeyboardAccessoryBar(
+                  controller: activeFile.controller,
+                ),
+            ],
+          );
+
+    final Widget? zenExitBadge = _isZenMode
+        ? Positioned(
+            top: MediaQuery.paddingOf(context).top + 8,
+            right: 12,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _toggleZenMode(ref),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF141824).withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.cyanAccent.withValues(alpha: 0.45),
+                      width: 0.8,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        LucideIcons.minimize_2,
+                        size: 13,
+                        color: Colors.cyanAccent,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Выйти из Zen',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.cyanAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          )
+        : null;
 
     final mainBody = LayoutBuilder(
       builder: (context, constraints) {
         final double maxH = constraints.maxHeight;
-        final double availableHeight = (maxH - keyboardInset)
-            .safeClamp(120.0, maxH);
-        final isMobileTerminalWithKeyboard =
-            (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
-            isKeyboardOpen &&
-            panelState.selectedTab == PanelTab.terminal;
+        return Builder(
+          builder: (insetContext) {
+            final double keyboardInset =
+                MediaQuery.viewInsetsOf(insetContext).bottom;
+            final isKeyboardOpen = keyboardInset > 0;
+            final double availableHeight =
+                (maxH - keyboardInset).safeClamp(120.0, maxH);
+            final isMobileTerminalWithKeyboard =
+                (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
+                isKeyboardOpen &&
+                panelState.selectedTab == PanelTab.terminal;
 
-        // Panel height: drag range 90..availableHeight (above software keyboard)
-        double activePanelHeight = 0.0;
-        if (panelState.isOpened) {
-          if (panelState.isMaximized || isMobileTerminalWithKeyboard) {
-            activePanelHeight = availableHeight;
-          } else {
-            activePanelHeight = panelState.panelHeight.safeClamp(
-              90.0,
-              availableHeight,
-            );
-          }
-        }
+            // Panel height: drag range 90..availableHeight (above software keyboard)
+            double activePanelHeight = 0.0;
+            if (panelState.isOpened) {
+              if (panelState.isMaximized || isMobileTerminalWithKeyboard) {
+                activePanelHeight = availableHeight;
+              } else {
+                activePanelHeight = panelState.panelHeight.safeClamp(
+                  90.0,
+                  availableHeight,
+                );
+              }
+            }
 
-        return Stack(
-          children: [
-            // ── Редактор (динамически уменьшает высоту при открытии панели) ────
-            AnimatedPositioned(
-              duration: (_isDragging || isKeyboardOpen)
-                  ? Duration.zero
-                  : const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: activePanelHeight + keyboardInset,
-              child: activeFile == null
-                  ? _buildDashboard(context, ref, isDesktop, workspacePath)
-                  : Column(
-                      children: [
-                        if (!_isZenMode)
-                          Container(
-                            height: 30,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            decoration: BoxDecoration(
-                              color: _palette?.panel ?? const Color(0xFF0D0F14),
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: _palette?.border ??
-                                      Colors.white.withValues(alpha: 0.06),
-                                  width: 0.8,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Breadcrumbs(
-                                    path: activeFile.path,
-                                    workspacePath: workspacePath,
-                                    backgroundColor: _palette?.panel ??
-                                        const Color(0xFF0D0F14),
-                                    borderColor: Colors.transparent,
-                                    accentColor: _palette?.accent,
-                                    textColor: _palette?.foreground,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    LucideIcons.command,
-                                    size: 13.5,
-                                    color: Color(0xFF94A3B8),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                  ),
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () => QuickSwitcherDialog.show(
-                                    context,
-                                    initialMode: SwitcherMode.commands,
-                                  ),
-                                  tooltip: 'Палитра команд (Command Palette)',
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    LucideIcons.wand_sparkles,
-                                    size: 13.5,
-                                    color: Color(0xFF94A3B8),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                  ),
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () => ref
-                                      .read(editorProvider.notifier)
-                                      .formatActiveFile(),
-                                  tooltip: 'Форматировать код',
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    LucideIcons.search,
-                                    size: 13.5,
-                                    color: Color(0xFF94A3B8),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                  ),
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () => QuickSwitcherDialog.show(
-                                    context,
-                                    initialMode: SwitcherMode.files,
-                                  ),
-                                  tooltip: AppLocalizations.of(
-                                    context,
-                                  )!.quickSearch,
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    LucideIcons.maximize_2,
-                                    size: 13.5,
-                                    color: Color(0xFF94A3B8),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                  ),
-                                  constraints: const BoxConstraints(),
-                                  onPressed: () => _toggleZenMode(ref),
-                                  tooltip: 'Режим фокуса (Zen Mode)',
-                                ),
-                              ],
-                            ),
-                          ),
-                        Expanded(
-                          child: DropTarget(
-                            onDragDone: (detail) async {
-                              for (final file in detail.files) {
-                                if (workspacePath != null) {
-                                  final targetPath = p.join(
-                                    workspacePath,
-                                    p.basename(file.path),
-                                  );
-                                  final fileEntity = File(file.path);
-                                  if (await fileEntity.exists()) {
-                                    await fileEntity.copy(targetPath);
-                                    ref
-                                        .read(editorProvider.notifier)
-                                        .openFile(targetPath);
-                                  }
-                                } else {
-                                  ref
-                                      .read(editorProvider.notifier)
-                                      .openFile(file.path);
-                                }
-                              }
-                            },
-                            child: CallbackShortcuts(
-                              bindings: {
-                                // Save file (Ctrl+S / Cmd+S)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyS,
-                                  control: true,
-                                ): () => ref
-                                    .read(editorProvider.notifier)
-                                    .saveFile(safeActiveIndex),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyS,
-                                  meta: true,
-                                ): () => ref
-                                    .read(editorProvider.notifier)
-                                    .saveFile(safeActiveIndex),
-                                // Quick open files (Ctrl+P / Cmd+P)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyP,
-                                  control: true,
-                                ): () => QuickSwitcherDialog.show(
-                                  context,
-                                  initialMode: SwitcherMode.files,
-                                ),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyP,
-                                  meta: true,
-                                ): () => QuickSwitcherDialog.show(
-                                  context,
-                                  initialMode: SwitcherMode.files,
-                                ),
-                                // Command palette (Ctrl+Shift+P / Cmd+Shift+P)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyP,
-                                  control: true,
-                                  shift: true,
-                                ): () => QuickSwitcherDialog.show(
-                                  context,
-                                  initialMode: SwitcherMode.commands,
-                                ),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyP,
-                                  meta: true,
-                                  shift: true,
-                                ): () => QuickSwitcherDialog.show(
-                                  context,
-                                  initialMode: SwitcherMode.commands,
-                                ),
-                                // Search files (Ctrl+Shift+F / Cmd+Shift+F)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyF,
-                                  control: true,
-                                  shift: true,
-                                ): () => QuickSwitcherDialog.show(
-                                  context,
-                                  initialMode: SwitcherMode.files,
-                                ),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyF,
-                                  meta: true,
-                                  shift: true,
-                                ): () => QuickSwitcherDialog.show(
-                                  context,
-                                  initialMode: SwitcherMode.files,
-                                ),
-                                // Toggle Sidebar (Ctrl+B / Cmd+B)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyB,
-                                  control: true,
-                                ): () {
-                                  if (isDesktop) {
-                                    ref
-                                        .read(leftPanelOpenProvider.notifier)
-                                        .update((v) => !v);
-                                  } else {
-                                    if (_scaffoldKey
-                                            .currentState
-                                            ?.isDrawerOpen ??
-                                        false) {
-                                      _scaffoldKey.currentState?.closeDrawer();
-                                    } else {
-                                      _scaffoldKey.currentState?.openDrawer();
-                                    }
-                                  }
-                                },
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyB,
-                                  meta: true,
-                                ): () {
-                                  if (isDesktop) {
-                                    ref
-                                        .read(leftPanelOpenProvider.notifier)
-                                        .update((v) => !v);
-                                  } else {
-                                    if (_scaffoldKey
-                                            .currentState
-                                            ?.isDrawerOpen ??
-                                        false) {
-                                      _scaffoldKey.currentState?.closeDrawer();
-                                    } else {
-                                      _scaffoldKey.currentState?.openDrawer();
-                                    }
-                                  }
-                                },
-                                // Toggle Terminal Panel (Ctrl+` / Cmd+`)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.backquote,
-                                  control: true,
-                                ): () =>
-                                    panelNotifier.toggle(),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.backquote,
-                                  meta: true,
-                                ): () =>
-                                    panelNotifier.toggle(),
-                                // Quick symbols (Ctrl+T / Cmd+T)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyT,
-                                  control: true,
-                                ): () => QuickSwitcherDialog.show(
-                                  context,
-                                  initialMode: SwitcherMode.symbols,
-                                ),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyT,
-                                  meta: true,
-                                ): () => QuickSwitcherDialog.show(
-                                  context,
-                                  initialMode: SwitcherMode.symbols,
-                                ),
-                                // Close active tab (Ctrl+W / Cmd+W)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyW,
-                                  control: true,
-                                ): () => ref
-                                    .read(editorProvider.notifier)
-                                    .closeTab(safeActiveIndex),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyW,
-                                  meta: true,
-                                ): () => ref
-                                    .read(editorProvider.notifier)
-                                    .closeTab(safeActiveIndex),
-                                // Find in file (Ctrl+F / Cmd+F)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyF,
-                                  control: true,
-                                ): () =>
-                                    _showFindPanel(context, ref),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyF,
-                                  meta: true,
-                                ): () =>
-                                    _showFindPanel(context, ref),
-                                // Replace in file (Ctrl+H / Cmd+H)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyH,
-                                  control: true,
-                                ): () =>
-                                    _showFindPanel(context, ref, replace: true),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyH,
-                                  meta: true,
-                                ): () =>
-                                    _showFindPanel(context, ref, replace: true),
-                                // Duplicate line (Ctrl+D / Cmd+D)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyD,
-                                  control: true,
-                                ): () =>
-                                    _duplicateLine(ref),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyD,
-                                  meta: true,
-                                ): () =>
-                                    _duplicateLine(ref),
-                                // Zen mode (Ctrl+K / Cmd+K)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyK,
-                                  control: true,
-                                ): () =>
-                                    _toggleZenMode(ref),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.keyK,
-                                  meta: true,
-                                ): () =>
-                                    _toggleZenMode(ref),
-                                // Split editor (Ctrl+\ / Cmd+\)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.backslash,
-                                  control: true,
-                                ): () =>
-                                    _toggleSplitMode(ref),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.backslash,
-                                  meta: true,
-                                ): () =>
-                                    _toggleSplitMode(ref),
-                                // Problems tab
-                                const SingleActivator(
-                                  LogicalKeyboardKey.bracketLeft,
-                                  control: true,
-                                  shift: true,
-                                ): () =>
-                                    panelNotifier.selectTab(PanelTab.problems),
-                                const SingleActivator(
-                                  LogicalKeyboardKey.bracketLeft,
-                                  meta: true,
-                                  shift: true,
-                                ): () =>
-                                    panelNotifier.selectTab(PanelTab.problems),
-                                // Run project (F5)
-                                const SingleActivator(
-                                  LogicalKeyboardKey.f5,
-                                ): () {
-                                  if (currentProject != null) {
-                                    ref
-                                        .read(projectServiceProvider.notifier)
-                                        .runProject(currentProject);
-                                    panelNotifier.selectTab(PanelTab.terminal);
-                                    panelNotifier.openPanel();
-                                  }
-                                },
-                              },
-                              child: _isSplitMode
-                                  ? _buildSplitEditor(ref, settings, activeFile)
-                                  : _buildSingleEditor(
-                                      ref,
-                                      settings,
-                                      activeFile,
-                                    ),
-                            ),
-                          ),
-                        ),
-                        if (Platform.isAndroid || Platform.isIOS || !isDesktop)
-                          KeyboardAccessoryBar(
-                            controller: activeFile.controller,
-                          ),
-                      ],
-                    ),
-            ),
-
-            // ── Панель (overlay, выезжает снизу поверх редактора над клавиатурой) ────
-            AnimatedPositioned(
-              duration: (_isDragging || isKeyboardOpen)
-                  ? Duration.zero
-                  : const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              left: 0,
-              right: 0,
-              bottom: keyboardInset,
-              height: activePanelHeight,
-              child: activePanelHeight > 0
-                  ? _buildBottomPanel(
-                      context,
-                      ref,
-                      panelState,
-                      panelNotifier,
-                      availableHeight,
-                    )
-                  : const SizedBox.shrink(),
-            ),
-
-            // ── Плавающий баннер синхронизации проекта (Синхронизация проекта...) ────
-            const Positioned(
-              top: 14,
-              left: 0,
-              right: 0,
-              child: ProjectSyncFloatingBanner(),
-            ),
-
-            // ── Панель синхронизации проекта снизу (Вывод / Проблемы / Логи) ────
-            const Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: ProjectSyncOutputPanel(),
-            ),
-
-            // ── Кнопка выхода из Zen Mode (плавающий неоновый бейдж) ────
-            if (_isZenMode)
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 8,
-                right: 12,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => _toggleZenMode(ref),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF141824).withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.cyanAccent.withValues(alpha: 0.45),
-                          width: 0.8,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            LucideIcons.minimize_2,
-                            size: 13,
-                            color: Colors.cyanAccent,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            'Выйти из Zen',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.cyanAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+            return Stack(
+              children: [
+                // ── Редактор (динамически уменьшает высоту при открытии панели) ────
+                AnimatedPositioned(
+                  duration: (_isDragging || isKeyboardOpen)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: (panelState.isOpened && isMobileTerminalWithKeyboard)
+                      ? 0.0
+                      : activePanelHeight + keyboardInset,
+                  child: editorChild,
                 ),
-              ),
-          ],
+
+                // ── Панель (overlay, выезжает снизу поверх редактора над клавиатурой) ────
+                AnimatedPositioned(
+                  duration: (_isDragging || isKeyboardOpen)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  left: 0,
+                  right: 0,
+                  bottom: keyboardInset,
+                  height: activePanelHeight,
+                  child: activePanelHeight > 0
+                      ? _buildBottomPanel(
+                          context,
+                          ref,
+                          panelState,
+                          panelNotifier,
+                          availableHeight,
+                          isKeyboardOpen: isKeyboardOpen,
+                        )
+                      : const SizedBox.shrink(),
+                ),
+
+                // ── Плавающий баннер синхронизации проекта (Синхронизация проекта...) ────
+                const Positioned(
+                  top: 14,
+                  left: 0,
+                  right: 0,
+                  child: ProjectSyncFloatingBanner(),
+                ),
+
+                // ── Панель синхронизации проекта снизу (Вывод / Проблемы / Логи) ────
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: ProjectSyncOutputPanel(),
+                ),
+
+                // ── Кнопка выхода из Zen Mode (плавающий неоновый бейдж) ────
+                if (zenExitBadge != null) zenExitBadge,
+              ],
+            );
+          },
         );
       },
     );
@@ -990,7 +1002,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
 
-        if (isKeyboardOpen) {
+        if ((View.maybeOf(context)?.viewInsets.bottom ?? 0) > 0) {
           FocusManager.instance.primaryFocus?.unfocus();
           return;
         }
@@ -1331,13 +1343,15 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     WidgetRef ref,
     PanelState panelState,
     PanelNotifier panelNotifier,
-    double maxAllowedPanelHeight,
-  ) {
-    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-    final isDesktop = MediaQuery.of(context).size.width >= 768;
+    double maxAllowedPanelHeight, {
+    bool? isKeyboardOpen,
+  }) {
+    final bool keyboardOpen =
+        isKeyboardOpen ?? (MediaQuery.viewInsetsOf(context).bottom > 0);
+    final isDesktop = MediaQuery.sizeOf(context).width >= 768;
     final isMobileTerminalWithKeyboard =
         (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
-        isKeyboardOpen &&
+        keyboardOpen &&
         panelState.selectedTab == PanelTab.terminal;
 
     final double targetHeight =
@@ -1605,7 +1619,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       child: Builder(
                         builder: (context) {
                           final isMobile =
-                              MediaQuery.of(context).size.width <= 800;
+                              MediaQuery.sizeOf(context).width <= 800;
                           final pluginState = ref.watch(
                             quantumPluginServiceProvider,
                           );

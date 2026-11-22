@@ -8,6 +8,7 @@ import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/core/theme/conduit_terminal_appearance.dart';
 import 'package:quantum_ide/core/theme/system_navigation_insets.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_keyboard_controller.dart';
+import 'package:quantum_ide/shared/widgets/keyboard_visibility_builder.dart';
 
 /// Virtual keyboard bar adapted from Conduit for `conduit_vt`.
 class ConduitKeyboardBar extends StatelessWidget {
@@ -65,106 +66,110 @@ class ConduitKeyboardBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final safePadding = MediaQuery.paddingOf(context);
-    final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 20;
     final customRows = rows;
 
-    return ListenableBuilder(
-      listenable: keyboardController,
-      builder: (context, _) {
-        final dividerColor = palette.hairlineFor(brightness);
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            color: palette.canvasFor(brightness),
-            border: Border(
-              top: BorderSide(color: dividerColor),
-            ),
-          ),
-          child: SafeArea(
-            top: false,
-            bottom: shouldApplyBottomSafeArea(context),
-            left: false,
-            right: false,
-            child: customRows != null
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final (index, row) in customRows.indexed)
-                        SizedBox(
-                          height: row.height.clamp(34.0, 44.0),
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
-                            padding: EdgeInsets.fromLTRB(
-                              safePadding.left + 6,
-                              index == 0 ? 4 : 2,
-                              safePadding.right + 6,
-                              index == customRows.length - 1 ? 4 : 2,
+    return KeyboardVisibilityBuilder(
+      threshold: 20.0,
+      builder: (context, isKeyboardOpen) {
+        return ListenableBuilder(
+          listenable: keyboardController,
+          builder: (context, _) {
+            final dividerColor = palette.hairlineFor(brightness);
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.canvasFor(brightness),
+                border: Border(
+                  top: BorderSide(color: dividerColor),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                bottom: !isKeyboardOpen && shouldApplyBottomSafeArea(context),
+                left: false,
+                right: false,
+                child: customRows != null
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final (index, row) in customRows.indexed)
+                            SizedBox(
+                              height: row.height.clamp(34.0, 44.0),
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                padding: EdgeInsets.fromLTRB(
+                                  safePadding.left + 6,
+                                  index == 0 ? 4 : 2,
+                                  safePadding.right + 6,
+                                  index == customRows.length - 1 ? 4 : 2,
+                                ),
+                                children: [
+                                  for (final item in row.items)
+                                    _buildItem(context, item),
+                                ],
+                              ),
                             ),
+                        ],
+                      )
+                    : SizedBox(
+                        height: _barHeight,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            left: safePadding.left + 4,
+                            right: safePadding.right + 4,
+                            top: 4,
+                            bottom: 4,
+                          ),
+                          child: Row(
                             children: [
-                              for (final item in row.items)
-                                _buildItem(context, item),
+                              // Left pinned zone: ESC, CTRL, TAB
+                              _buildAction(context, TerminalKeyboardAction.escape),
+                              _buildAction(context, TerminalKeyboardAction.control),
+                              _buildAction(context, TerminalKeyboardAction.tab),
+                              Container(
+                                width: 1,
+                                height: 20,
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                color: dividerColor,
+                              ),
+                              // Center scrollable zone
+                              Expanded(
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  children: [
+                                    for (final item in _centerScrollItems)
+                                      _buildItem(context, item),
+                                    if (onToggleFullscreen != null)
+                                      _buildAction(
+                                        context,
+                                        TerminalKeyboardAction.fullscreen,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              // Right pinned zone: keyboard toggle
+                              if (onToggleKeyboard != null) ...[
+                                Container(
+                                  width: 1,
+                                  height: 20,
+                                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                                  color: dividerColor,
+                                ),
+                                _Key(
+                                  icon: isKeyboardOpen
+                                      ? LucideIcons.keyboard_off
+                                      : LucideIcons.keyboard,
+                                  palette: palette,
+                                  brightness: brightness,
+                                  onPressed: onToggleKeyboard!,
+                                ),
+                              ],
                             ],
                           ),
                         ),
-                    ],
-                  )
-                : SizedBox(
-                    height: _barHeight,
-                    child: Padding(
-                      padding: EdgeInsets.only(
-                        left: safePadding.left + 4,
-                        right: safePadding.right + 4,
-                        top: 4,
-                        bottom: 4,
                       ),
-                      child: Row(
-                        children: [
-                          // Left pinned zone: ESC, CTRL, TAB
-                          _buildAction(context, TerminalKeyboardAction.escape),
-                          _buildAction(context, TerminalKeyboardAction.control),
-                          _buildAction(context, TerminalKeyboardAction.tab),
-                          Container(
-                            width: 1,
-                            height: 20,
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            color: dividerColor,
-                          ),
-                          // Center scrollable zone
-                          Expanded(
-                            child: ListView(
-                              scrollDirection: Axis.horizontal,
-                              children: [
-                                for (final item in _centerScrollItems)
-                                  _buildItem(context, item),
-                                if (onToggleFullscreen != null)
-                                  _buildAction(
-                                    context,
-                                    TerminalKeyboardAction.fullscreen,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          // Right pinned zone: keyboard toggle
-                          if (onToggleKeyboard != null) ...[
-                            Container(
-                              width: 1,
-                              height: 20,
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              color: dividerColor,
-                            ),
-                            _Key(
-                              icon: isKeyboardOpen
-                                  ? LucideIcons.keyboard_off
-                                  : LucideIcons.keyboard,
-                              palette: palette,
-                              brightness: brightness,
-                              onPressed: onToggleKeyboard!,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

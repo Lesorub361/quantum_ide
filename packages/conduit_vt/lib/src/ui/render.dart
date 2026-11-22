@@ -1,3 +1,4 @@
+import 'dart:async' show Timer;
 import 'dart:math' show max, min;
 import 'dart:ui';
 
@@ -59,7 +60,13 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     if (attached) _terminal.removeListener(_onTerminalChange);
     _terminal = terminal;
     if (attached) _terminal.addListener(_onTerminalChange);
-    _resizeTerminalIfNeeded();
+    _hasPerformedInitialResize = false;
+    _lastLineCount = 0;
+    _lastCursorX = -1;
+    _lastCursorY = -1;
+    _resizeDebounceTimer?.cancel();
+    _resizeDebounceTimer = null;
+    _resizeTerminalIfNeeded(immediate: true);
     markNeedsLayout();
   }
 
@@ -93,7 +100,12 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   set autoResize(bool value) {
     if (value == _autoResize) return;
     _autoResize = value;
-    markNeedsLayout();
+    if (!value) {
+      _resizeDebounceTimer?.cancel();
+      _resizeDebounceTimer = null;
+    } else {
+      markNeedsLayout();
+    }
   }
 
   set textStyle(TerminalStyle value) {
@@ -167,6 +179,12 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   var _stickToBottom = true;
   var _isUpdatingLayout = false;
   var _editableRectScheduled = false;
+  int _lastLineCount = 0;
+  int _lastCursorX = -1;
+  int _lastCursorY = -1;
+  bool _hasPerformedInitialResize = false;
+  Timer? _resizeDebounceTimer;
+  static const Duration _resizeDebounceDuration = Duration(milliseconds: 140);
 
   void _onScroll() {
     if (_isUpdatingLayout) return;
@@ -178,18 +196,34 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
   void _onFocusChange() {
     markNeedsPaint();
+    if (_focusNode.hasFocus) {
+      _scheduleNotifyEditableRect();
+    }
   }
 
   void _onTerminalChange() {
+    final lineCount = _terminal.buffer.lines.length;
+    final cursorX = _terminal.buffer.cursorX;
+    final cursorY = _terminal.buffer.absoluteCursorY;
+
     if (!_isUpdatingLayout) {
-      markNeedsLayout();
+      if (lineCount != _lastLineCount || _viewportSize == null) {
+        markNeedsLayout();
+      }
       // This render object is a repaint boundary, so a layout that resolves to
       // the same size (e.g. switching between two same-size alt-screen buffers)
       // would otherwise reuse the cached layer and never repaint. The visible
       // cell contents changed, so always repaint.
       markNeedsPaint();
     }
-    _notifyEditableRect();
+
+    if (cursorX != _lastCursorX ||
+        cursorY != _lastCursorY ||
+        lineCount != _lastLineCount) {
+      _lastCursorX = cursorX;
+      _lastCursorY = cursorY;
+      _scheduleNotifyEditableRect();
+    }
   }
 
   void _onControllerUpdate() {
@@ -212,6 +246,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
   @override
   void detach() {
+    _resizeDebounceTimer?.cancel();
+    _resizeDebounceTimer = null;
     super.detach();
     _offset.removeListener(_onScroll);
     _terminal.removeListener(_onTerminalChange);
@@ -245,6 +281,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
         _offset.correctBy(_maxScrollExtent - _scrollOffset);
         _stickToBottom = true;
       }
+      _lastLineCount = _terminal.buffer.lines.length;
     } finally {
       _isUpdatingLayout = false;
     }
@@ -381,7 +418,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   /// Update the viewport size in cells based on the current widget size in
   /// pixels.
   void _updateViewportSize() {
-    if (size <= _painter.cellSize) {
+    if (!_autoResize || size <= _painter.cellSize) {
       return;
     }
 
@@ -398,15 +435,36 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   }
 
   /// Notify the underlying terminal that the viewport size has changed.
-  void _resizeTerminalIfNeeded() {
-    if (_autoResize && _viewportSize != null) {
-      _terminal.resize(
-        _viewportSize!.width,
-        _viewportSize!.height,
-        _painter.cellSize.width.round(),
-        _painter.cellSize.height.round(),
-      );
+  void _resizeTerminalIfNeeded({bool immediate = false}) {
+    if (!_autoResize || _viewportSize == null) {
+      return;
     }
+    if (immediate || !_hasPerformedInitialResize) {
+      _resizeDebounceTimer?.cancel();
+      _resizeDebounceTimer = null;
+      _hasPerformedInitialResize = true;
+      _applyTerminalResize();
+      return;
+    }
+    _resizeDebounceTimer?.cancel();
+    _resizeDebounceTimer = Timer(_resizeDebounceDuration, () {
+      _resizeDebounceTimer = null;
+      if (!attached || !_autoResize || _viewportSize == null) {
+        return;
+      }
+      _applyTerminalResize();
+    });
+  }
+
+  void _applyTerminalResize() {
+    final viewportSize = _viewportSize;
+    if (viewportSize == null) return;
+    _terminal.resize(
+      viewportSize.width,
+      viewportSize.height,
+      _painter.cellSize.width.round(),
+      _painter.cellSize.height.round(),
+    );
   }
 
   /// Update the scroll offset based on the current terminal state. This should

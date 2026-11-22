@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:quantum_ide/core/services/log_service.dart';
 
 class ShizukuBridge {
   static final ShizukuBridge instance = ShizukuBridge._();
@@ -11,6 +12,7 @@ class ShizukuBridge {
 
   final ValueNotifier<int> statusVersion = ValueNotifier<int>(0);
 
+  bool _handlerBound = false;
   bool _isAvailable = false;
   bool _permissionGranted = false;
   int _uid = -1;
@@ -26,6 +28,31 @@ class ShizukuBridge {
     statusVersion.value++;
   }
 
+  void _bindNativeCallback() {
+    if (_handlerBound) return;
+    _handlerBound = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onShizukuStatusChanged' && call.arguments is Map) {
+        final status = Map<dynamic, dynamic>.from(call.arguments as Map);
+        _applyStatusMap(status);
+        _notifyStatusChanged();
+      }
+    });
+  }
+
+  void _applyStatusMap(Map<dynamic, dynamic> status) {
+    _isAvailable = status['available'] == true;
+    _permissionGranted = status['permissionGranted'] == true;
+    _uid = (status['uid'] as num?)?.toInt() ?? -1;
+    _lastError = status['error']?.toString();
+    final msg =
+        '[Shizuku] binder=$_isAvailable, permission=$_permissionGranted, uid=$_uid${_lastError != null && _lastError!.isNotEmpty ? ', err=$_lastError' : ''}';
+    debugPrint(msg);
+    try {
+      LogService.log(msg);
+    } catch (_) {}
+  }
+
   Future<void> initialize() async {
     if (!Platform.isAndroid) {
       _isAvailable = false;
@@ -34,22 +61,20 @@ class ShizukuBridge {
       _notifyStatusChanged();
       return;
     }
+    _bindNativeCallback();
     try {
       final status = await _channel.invokeMapMethod<String, dynamic>('shizukuStatus');
       if (status != null) {
-        _isAvailable = status['available'] == true;
-        _permissionGranted = status['permissionGranted'] == true;
-        _uid = (status['uid'] as num?)?.toInt() ?? -1;
-        _lastError = status['error']?.toString();
-        debugPrint(
-          'Shizuku initialized: binder=$_isAvailable, permission=$_permissionGranted, uid=$_uid, err=$_lastError',
-        );
+        _applyStatusMap(status);
       }
     } catch (e) {
       debugPrint('Shizuku init error: $e');
       _isAvailable = false;
       _permissionGranted = false;
       _lastError = e.toString();
+      try {
+        LogService.log('[Shizuku] init error: $_lastError');
+      } catch (_) {}
     }
     _notifyStatusChanged();
   }
@@ -104,8 +129,8 @@ class ShizukuBridge {
   /// Boosts Android OS build performance via Shizuku before heavy compilation:
   /// 1. Disables Android 12+ Phantom Process Killer (32 child process limit)
   /// 2. Whitelists QuantumIDE from Doze & App Standby CPU/network throttling
-  /// 3. Frees cached background app RAM (`am kill-all`) to avoid swap thrashing
-  /// 4. If running as root (`uid == 0`), lowers swappiness and drops clean pagecache
+  /// 3. If running as root (`uid == 0`), lowers swappiness
+  /// (Avoids `am kill-all` / `drop_caches` so the soft IME keyboard and hot build cache stay alive.)
   Future<void> boostForBuild() async {
     if (!Platform.isAndroid) return;
     if (!isAvailable) {
@@ -120,11 +145,9 @@ class ShizukuBridge {
         'dumpsys deviceidle whitelist +com.example.quantum_ide >/dev/null 2>&1 || true',
         'cmd appops set com.example.quantum_ide RUN_IN_BACKGROUND allow 2>/dev/null || true',
         'cmd appops set com.example.quantum_ide RUN_ANY_IN_BACKGROUND allow 2>/dev/null || true',
-        'am kill-all 2>/dev/null || true',
       ];
       if (_uid == 0) {
         cmds.add('sysctl -w vm.swappiness=20 >/dev/null 2>&1 || true');
-        cmds.add('sync && echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true');
       }
       await execute('sh', ['-c', cmds.join('; ')]);
     } catch (e) {

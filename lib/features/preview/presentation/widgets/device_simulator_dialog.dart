@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:quantum_ide/features/preview/utils/preview_cache_helper.dart';
 
 class DeviceOption {
   final String name;
@@ -387,7 +388,15 @@ class _DeviceSimulatorDialogState extends State<DeviceSimulatorDialog> {
                 tooltip: 'Обновить страницу',
                 icon: const Icon(LucideIcons.rotate_cw, size: 14, color: Colors.white70),
                 onPressed: () {
-                  _webViewController?.reload();
+                  if (widget.initialHtmlContent == null) {
+                    PreviewCacheHelper.hardLoad(
+                      _webViewController,
+                      widget.initialUrl ?? 'http://localhost:8080',
+                      clearCache: true,
+                    );
+                  } else {
+                    _webViewController?.reload();
+                  }
                 },
               ),
             ],
@@ -403,7 +412,8 @@ class _DeviceSimulatorDialogState extends State<DeviceSimulatorDialog> {
 
     if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
       return InAppWebView(
-        initialUrlRequest: html == null ? URLRequest(url: WebUri(url)) : null,
+        initialUrlRequest:
+            html == null ? PreviewCacheHelper.buildFreshRequest(url) : null,
         initialData: html != null
             ? InAppWebViewInitialData(data: html, mimeType: 'text/html', encoding: 'utf-8')
             : null,
@@ -414,12 +424,8 @@ class _DeviceSimulatorDialogState extends State<DeviceSimulatorDialog> {
           Factory<ScaleGestureRecognizer>(() => ScaleGestureRecognizer()),
           Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
         },
-        initialSettings: InAppWebViewSettings(
-          javaScriptEnabled: true,
-          useWideViewPort: true,
+        initialSettings: PreviewCacheHelper.freshWebViewSettings(
           loadWithOverviewMode: true,
-          supportZoom: true,
-          transparentBackground: true,
         ),
       );
     }

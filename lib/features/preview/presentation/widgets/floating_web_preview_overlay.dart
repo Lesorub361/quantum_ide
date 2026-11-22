@@ -12,6 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/preview/presentation/widgets/mobile_companion_qr_dialog.dart';
+import 'package:quantum_ide/features/preview/utils/preview_cache_helper.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
@@ -46,7 +47,9 @@ class _FloatingWebPreviewOverlayState
   @override
   void initState() {
     super.initState();
-    _urlController.text = ref.read(floatingPreviewUrlProvider);
+    _urlController.text = PreviewCacheHelper.stripCacheBuster(
+      ref.read(floatingPreviewUrlProvider),
+    );
   }
 
   @override
@@ -55,16 +58,29 @@ class _FloatingWebPreviewOverlayState
     super.dispose();
   }
 
+  Future<void> _hardReload({String? url, bool clearCache = true}) async {
+    final candidate = (url ?? _urlController.text).trim();
+    final cleanUrl = PreviewCacheHelper.stripCacheBuster(
+      candidate.isNotEmpty
+          ? PreviewCacheHelper.normalizeUrl(candidate)
+          : ref.read(floatingPreviewUrlProvider),
+    );
+    final target = cleanUrl.isNotEmpty ? cleanUrl : 'http://127.0.0.1:8080';
+    await PreviewCacheHelper.hardLoad(
+      _webViewController,
+      target,
+      clearCache: clearCache,
+    );
+  }
+
   void _navigateTo(String rawUrl) {
-    var normalized = rawUrl.trim();
+    final normalized = PreviewCacheHelper.normalizeUrl(rawUrl);
     if (normalized.isEmpty) return;
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
-      normalized = 'http://$normalized';
-    }
-    _urlController.text = normalized;
-    ref.read(floatingPreviewUrlProvider.notifier).state = normalized;
+    final cleanUrl = PreviewCacheHelper.stripCacheBuster(normalized);
+    _urlController.text = cleanUrl;
+    ref.read(floatingPreviewUrlProvider.notifier).state = cleanUrl;
     ref.read(serverRunningProvider.notifier).state = true;
-    _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(normalized)));
+    _hardReload(url: cleanUrl, clearCache: true);
   }
 
   void _selectPort(int port) {
@@ -95,13 +111,22 @@ class _FloatingWebPreviewOverlayState
     final isRunActive = runSession != null && !runSession.isExited;
 
     if (_urlController.text.isEmpty && currentUrl.isNotEmpty) {
-      _urlController.text = currentUrl;
+      _urlController.text = PreviewCacheHelper.stripCacheBuster(currentUrl);
     }
 
     ref.listen<String>(floatingPreviewUrlProvider, (prev, next) {
-      if (next != prev && next.isNotEmpty && _urlController.text != next) {
-        _urlController.text = next;
-        _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(next)));
+      if (next.isNotEmpty && next != prev) {
+        final clean = PreviewCacheHelper.stripCacheBuster(next);
+        if (_urlController.text != clean) {
+          _urlController.text = clean;
+        }
+        _hardReload(url: clean, clearCache: true);
+      }
+    });
+
+    ref.listen<int>(floatingPreviewReloadTokenProvider, (prev, next) {
+      if (next != prev) {
+        _hardReload(clearCache: true);
       }
     });
 
@@ -230,6 +255,9 @@ class _FloatingWebPreviewOverlayState
             },
             onTap: () {
               ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _hardReload(clearCache: true);
+              });
             },
             child: Material(
               color: Colors.transparent,
@@ -468,7 +496,7 @@ class _FloatingWebPreviewOverlayState
             icon: LucideIcons.rotate_cw,
             tooltip: 'Reload Page',
             color: Colors.cyanAccent,
-            onTap: () => _webViewController?.reload(),
+            onTap: () => _hardReload(clearCache: true),
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -627,6 +655,11 @@ class _FloatingWebPreviewOverlayState
                   ref
                       .read(dedicatedTerminalProvider.notifier)
                       .sendRawChar(DedicatedTerminalType.run, 'R');
+                  Future.delayed(const Duration(milliseconds: 1800), () {
+                    if (mounted) {
+                      _hardReload(clearCache: true);
+                    }
+                  });
                 },
               ),
               const SizedBox(width: 4),
@@ -712,10 +745,10 @@ class _FloatingWebPreviewOverlayState
 
     final Widget content = webSupported
         ? InAppWebView(
-            initialUrlRequest: URLRequest(
-              url: WebUri(_urlController.text.isEmpty
+            initialUrlRequest: PreviewCacheHelper.buildFreshRequest(
+              _urlController.text.isEmpty
                   ? 'http://127.0.0.1:8080'
-                  : _urlController.text),
+                  : _urlController.text,
             ),
             gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
               Factory<VerticalDragGestureRecognizer>(
@@ -725,24 +758,15 @@ class _FloatingWebPreviewOverlayState
               Factory<ScaleGestureRecognizer>(() => ScaleGestureRecognizer()),
               Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
             },
-            initialSettings: InAppWebViewSettings(
-              transparentBackground: true,
-              javaScriptEnabled: true,
-              supportZoom: true,
-              useWideViewPort: true,
-              verticalScrollBarEnabled: true,
-              horizontalScrollBarEnabled: true,
-              disableVerticalScroll: false,
-              disableHorizontalScroll: false,
-              overScrollMode: OverScrollMode.ALWAYS,
-            ),
+            initialSettings: PreviewCacheHelper.freshWebViewSettings(),
             onWebViewCreated: (controller) => _webViewController = controller,
             onLoadStart: (controller, url) {
               if (!mounted) return;
               setState(() {
                 _isLoading = true;
                 if (url != null) {
-                  _urlController.text = url.toString();
+                  _urlController.text =
+                      PreviewCacheHelper.stripCacheBuster(url.toString());
                 }
               });
             },
@@ -767,7 +791,7 @@ class _FloatingWebPreviewOverlayState
               if (serverRunning) {
                 Future.delayed(const Duration(seconds: 3), () {
                   if (mounted) {
-                    _webViewController?.reload();
+                    _hardReload(clearCache: false);
                   }
                 });
               }
