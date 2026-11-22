@@ -451,10 +451,13 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
     final runtime = ref.read(runtimeServiceProvider);
     try {
       final levelFilter = _selectedLogLevel == 'ALL' ? '' : '*:$_selectedLogLevel';
-      final cmd = 'adb -s ${selected.id} logcat -d -t 120 $levelFilter 2>/dev/null || true';
+      final cmd = 'timeout 6 adb -s ${selected.id} logcat -d -t 120 $levelFilter 2>&1 || true';
       final output = await runtime.runCommand(cmd);
-      if (mounted && output.isNotEmpty) {
-        final lines = output.split('\n');
+      if (mounted) {
+        final trimmed = output.trim();
+        final lines = trimmed.isNotEmpty
+            ? trimmed.split('\n')
+            : <String>['Нет записей logcat для фильтра $_selectedLogLevel'];
         setState(() {
           _logLines = lines;
         });
@@ -462,7 +465,13 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
           _logScrollController.jumpTo(_logScrollController.position.maxScrollExtent);
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _logLines = <String>['Ошибка получения logcat: $e'];
+        });
+      }
+    }
   }
 
   void _clearLogcat() async {
@@ -480,12 +489,15 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
     final ipController = TextEditingController(text: '192.168.1.');
     final portController = TextEditingController(text: '5555');
     final codeController = TextEditingController();
-    bool isPairingMode = false;
+    var isPairingMode = false;
+    var isSubmitting = false;
+    String? statusMessage;
+    var isError = false;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (context, setDlgState) => AlertDialog(
+        builder: (dlgContext, setDlgState) => AlertDialog(
           backgroundColor: const Color(0xFF161922),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
           title: Row(
@@ -504,13 +516,23 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                   ChoiceChip(
                     label: const Text('Прямое подключение'),
                     selected: !isPairingMode,
-                    onSelected: (v) => setDlgState(() => isPairingMode = !v),
+                    onSelected: isSubmitting
+                        ? null
+                        : (v) => setDlgState(() {
+                              isPairingMode = !v;
+                              statusMessage = null;
+                            }),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
                     label: const Text('Сопряжение (Android 11+)'),
                     selected: isPairingMode,
-                    onSelected: (v) => setDlgState(() => isPairingMode = v),
+                    onSelected: isSubmitting
+                        ? null
+                        : (v) => setDlgState(() {
+                              isPairingMode = v;
+                              statusMessage = null;
+                            }),
                   ),
                 ],
               ),
@@ -521,6 +543,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                     flex: 3,
                     child: TextField(
                       controller: ipController,
+                      enabled: !isSubmitting,
                       style: GoogleFonts.firaCode(color: Colors.white, fontSize: 13),
                       decoration: const InputDecoration(labelText: 'IP адрес', hintText: '192.168.1.105'),
                     ),
@@ -530,8 +553,13 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                     flex: 2,
                     child: TextField(
                       controller: portController,
+                      enabled: !isSubmitting,
+                      keyboardType: TextInputType.number,
                       style: GoogleFonts.firaCode(color: Colors.white, fontSize: 13),
-                      decoration: const InputDecoration(labelText: 'Порт', hintText: '5555'),
+                      decoration: InputDecoration(
+                        labelText: isPairingMode ? 'Порт сопряжения' : 'Порт',
+                        hintText: isPairingMode ? '37123' : '5555',
+                      ),
                     ),
                   ),
                 ],
@@ -540,36 +568,110 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: codeController,
+                  enabled: !isSubmitting,
+                  keyboardType: TextInputType.number,
                   style: GoogleFonts.firaCode(color: Colors.white, fontSize: 13),
                   decoration: const InputDecoration(labelText: 'Код сопряжения (6 цифр)', hintText: '123456'),
+                ),
+              ],
+              if (statusMessage != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (isError ? Colors.redAccent : Colors.greenAccent).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: (isError ? Colors.redAccent : Colors.greenAccent).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    statusMessage!,
+                    style: GoogleFonts.firaCode(
+                      fontSize: 11,
+                      color: isError ? Colors.redAccent : Colors.greenAccent,
+                    ),
+                  ),
                 ),
               ],
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
               child: const Text('Отмена', style: TextStyle(color: Colors.white60)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                final target = '${ipController.text.trim()}:${portController.text.trim()}';
-                final adb = ref.read(adbDeviceServiceProvider.notifier);
-                String result;
-                if (isPairingMode) {
-                  result = await adb.pairWifi(target, codeController.text.trim());
-                } else {
-                  result = await adb.connectWifi(target);
-                }
-                if (mounted && context.mounted) {
-                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                    SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(result, style: GoogleFonts.firaCode())),
-                  );
-                }
-              },
-              child: Text(isPairingMode ? 'Сопрячь' : 'Подключить', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final ip = ipController.text.trim();
+                      final port = portController.text.trim();
+                      final code = codeController.text.trim();
+                      if (ip.isEmpty || port.isEmpty || (isPairingMode && code.isEmpty)) {
+                        setDlgState(() {
+                          isError = true;
+                          statusMessage = isPairingMode
+                              ? 'Введите IP, порт сопряжения и 6-значный код'
+                              : 'Введите IP адрес и порт подключения';
+                        });
+                        return;
+                      }
+
+                      setDlgState(() {
+                        isSubmitting = true;
+                        statusMessage = isPairingMode ? 'Выполняется сопряжение...' : 'Подключение к $ip:$port...';
+                        isError = false;
+                      });
+
+                      final target = '$ip:$port';
+                      final adb = ref.read(adbDeviceServiceProvider.notifier);
+                      final String result;
+                      if (isPairingMode) {
+                        result = await adb.pairWifi(target, code);
+                      } else {
+                        result = await adb.connectWifi(target);
+                      }
+
+                      final ok = isPairingMode
+                          ? result.startsWith('Успешно')
+                          : result.startsWith('Подключено');
+
+                      if (!dlgContext.mounted) return;
+                      if (ok && !isPairingMode) {
+                        Navigator.pop(ctx);
+                        if (mounted && context.mounted) {
+                          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                            SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(result, style: GoogleFonts.firaCode())),
+                          );
+                        }
+                        return;
+                      }
+
+                      setDlgState(() {
+                        isSubmitting = false;
+                        isError = !ok;
+                        statusMessage = ok
+                            ? '$result\nТеперь введите основной порт отладки по Wi-Fi и нажмите «Подключить».'
+                            : result;
+                        if (ok && isPairingMode) {
+                          isPairingMode = false;
+                          portController.clear();
+                        }
+                      });
+                    },
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                    )
+                  : Text(
+                      isPairingMode ? 'Сопрячь' : 'Подключить',
+                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                    ),
             ),
           ],
         ),

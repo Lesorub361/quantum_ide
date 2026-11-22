@@ -180,19 +180,31 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
       // Start ADB server once on initial run or manual explicit refresh
       if (!_hasInitialServerStarted || !silent) {
         _hasInitialServerStarted = true;
-        await runtime.runCommand('timeout 3 adb start-server 2>/dev/null || true');
+        await runtime.runCommand('timeout 4 adb start-server 2>/dev/null || true');
       }
 
-      // Connect any active native USB-OTG bridges (e.g. 127.0.0.1:15555)
+      var output = await runtime.runCommand('timeout 4 adb devices -l 2>/dev/null || true').catchError((e) => '');
+
+      // Connect only USB-OTG bridges that are not already present in adb devices
+      bool connectedNewBridge = false;
       for (final usbDev in state.rawUsbDevices) {
         final bridgeActive = usbDev['bridgeActive'] == true;
         final bridgeAddr = (usbDev['bridgeAddress'] ?? '').toString().trim();
-        if (bridgeActive && bridgeAddr.isNotEmpty) {
-          await runtime.runCommand('timeout 2 adb connect $bridgeAddr 2>/dev/null || true');
+        if (bridgeActive && bridgeAddr.isNotEmpty && !output.contains(bridgeAddr)) {
+          await runtime.runCommand('timeout 3 adb connect $bridgeAddr 2>/dev/null || true');
+          connectedNewBridge = true;
         }
       }
+      if (connectedNewBridge) {
+        output = await runtime.runCommand('timeout 4 adb devices -l 2>/dev/null || true').catchError((e) => '');
+      }
 
-      final String output = await runtime.runCommand('timeout 3 adb devices -l 2>/dev/null || true').catchError((e) => '');
+      // If silent background poll timed out while an active USB bridge exists, preserve current devices
+      if (silent && output.trim().isEmpty && state.devices.isNotEmpty && state.rawUsbDevices.any((u) => u['bridgeActive'] == true)) {
+        _isRefreshing = false;
+        return;
+      }
+
       final List<AdbDevice> parsed = [];
 
       final lines = output.split('\n');
@@ -338,27 +350,33 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      final res = await runtime.runCommand('adb connect $clean 2>&1 || true');
+      var res = await runtime.runCommand('timeout 10 adb connect $clean 2>&1 || true');
+      if (res.contains('command not found') || res.contains('adb: not found')) {
+        await fixAdbEnvironment();
+        res = await runtime.runCommand('timeout 10 adb connect $clean 2>&1 || true');
+      }
       if (res.contains('connected to') || res.contains('already connected')) {
         await refreshDevices();
         return res.trim();
       }
 
       // Auto-heal on protocol fault or broken server
-      if (res.contains('protocol fault') || res.contains('cannot connect') || res.contains('failed')) {
-        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
-        final retry = await runtime.runCommand('adb connect $clean 2>&1 || true');
+      if (res.contains('protocol fault') || res.contains('cannot connect') || res.contains('failed') || res.trim().isEmpty) {
+        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; timeout 5 adb start-server 2>/dev/null || true');
+        final retry = await runtime.runCommand('timeout 10 adb connect $clean 2>&1 || true');
         await refreshDevices();
         if (retry.contains('connected to') || retry.contains('already connected')) {
           return retry.trim();
         }
-        return _formatAdbError(retry.trim().isNotEmpty ? retry : res);
+        final msg = _formatAdbError(retry.trim().isNotEmpty ? retry : res);
+        return msg.isNotEmpty ? msg : 'Не удалось подключиться к $clean (проверьте IP, порт и что оба устройства в одной Wi-Fi сети)';
       }
       await refreshDevices();
-      return _formatAdbError(res.trim());
+      final msg = _formatAdbError(res.trim());
+      return msg.isNotEmpty ? msg : 'Ответ ADB: ${res.trim()}';
     } catch (e) {
       try {
-        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
+        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; timeout 5 adb start-server 2>/dev/null || true');
       } catch (_) {}
       return _formatAdbError(e.toString());
     }
@@ -374,39 +392,45 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      final res = await runtime.runCommand('adb pair $cleanIp $cleanCode 2>&1 || true');
+      var res = await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true');
+      if (res.contains('command not found') || res.contains('adb: not found')) {
+        await fixAdbEnvironment();
+        res = await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true');
+      }
       if (res.contains('Successfully paired') || res.contains('paired to')) {
         await refreshDevices();
-        return '✅ Устройство успешно сопряжено! Теперь нажмите «Подключить» в блоке 1.';
+        return '✅ Устройство успешно сопряжено! Теперь переключите режим на «Подключение» и введите основной порт из «Беспроводной отладки».';
       }
 
       // If adb is too old and lacks 'pair' command (Ubuntu 20.04 default), auto-upgrade adb
       if (res.contains('unknown command pair') || res.contains('unknown command')) {
         try {
           await upgradeAdbBinary();
-          final retry = await runtime.runCommand('adb pair $cleanIp $cleanCode 2>&1 || true');
+          final retry = await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true');
           await refreshDevices();
           if (retry.contains('Successfully paired') || retry.contains('paired to')) {
-            return '✅ ADB обновлён и устройство успешно сопряжено! Теперь нажмите «Подключить» в блоке 1.';
+            return '✅ ADB обновлён и устройство успешно сопряжено! Теперь переключите режим на «Подключение» и введите основной порт из «Беспроводной отладки».';
           }
           return _formatAdbError(retry.trim().isNotEmpty ? retry : res);
         } catch (_) {}
       }
 
-      if (res.contains('protocol fault') || res.contains('failed')) {
-        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
-        final retry = await runtime.runCommand('adb pair $cleanIp $cleanCode 2>&1 || true');
+      if (res.contains('protocol fault') || res.contains('failed') || res.trim().isEmpty) {
+        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; timeout 5 adb start-server 2>/dev/null || true');
+        final retry = await runtime.runCommand('timeout 12 adb pair $cleanIp $cleanCode 2>&1 || true');
         await refreshDevices();
         if (retry.contains('Successfully paired') || retry.contains('paired to')) {
-          return '✅ Устройство успешно сопряжено! Теперь нажмите «Подключить» в блоке 1.';
+          return '✅ Устройство успешно сопряжено! Теперь переключите режим на «Подключение» и введите основной порт из «Беспроводной отладки».';
         }
-        return _formatAdbError(retry.trim().isNotEmpty ? retry : res);
+        final msg = _formatAdbError(retry.trim().isNotEmpty ? retry : res);
+        return msg.isNotEmpty ? msg : 'Таймаут сопряжения с $cleanIp. Проверьте порт и 6-значный код (окно сопряжения на телефоне должно оставаться открытым).';
       }
       await refreshDevices();
-      return _formatAdbError(res.trim());
+      final msg = _formatAdbError(res.trim());
+      return msg.isNotEmpty ? msg : 'Ответ ADB: ${res.trim()}';
     } catch (e) {
       try {
-        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
+        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; timeout 5 adb start-server 2>/dev/null || true');
       } catch (_) {}
       return _formatAdbError(e.toString());
     }
@@ -667,18 +691,33 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     if (targetId == null) return;
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      await runtime.runCommand('adb -s $targetId shell input tap $x $y');
+      await runtime.runCommand(
+        'timeout 4 adb -s $targetId shell input tap $x $y 2>/dev/null || true',
+      );
     } catch (_) {}
   }
 
   /// Sends text to target device
   Future<void> sendText(String text, {String? deviceId}) async {
     final targetId = deviceId ?? state.selectedDevice?.id;
-    if (targetId == null) return;
+    if (targetId == null || text.isEmpty) return;
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      final escaped = text.replaceAll(' ', '%s').replaceAll("'", "\\'");
-      await runtime.runCommand("adb -s $targetId shell input text '$escaped'");
+      final escaped = text
+          .replaceAll('\\', '\\\\')
+          .replaceAll(' ', '%s')
+          .replaceAll('"', '\\"')
+          .replaceAll("'", "\\'")
+          .replaceAll('&', '\\&')
+          .replaceAll('(', '\\(')
+          .replaceAll(')', '\\)')
+          .replaceAll(';', '\\;')
+          .replaceAll('<', '\\<')
+          .replaceAll('>', '\\>');
+      final bashSafe = escaped.replaceAll("'", "'\"'\"'");
+      await runtime.runCommand(
+        "timeout 5 adb -s $targetId shell input text '$bashSafe' 2>/dev/null || true",
+      );
     } catch (_) {}
   }
 
@@ -688,7 +727,9 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     if (targetId == null) return;
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      await runtime.runCommand('adb -s $targetId shell input swipe $x1 $y1 $x2 $y2 $durationMs');
+      await runtime.runCommand(
+        'timeout 5 adb -s $targetId shell input swipe $x1 $y1 $x2 $y2 $durationMs 2>/dev/null || true',
+      );
     } catch (_) {}
   }
 
@@ -698,7 +739,9 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     if (targetId == null) return;
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      await runtime.runCommand('adb -s $targetId shell input keyevent $keyCode');
+      await runtime.runCommand(
+        'timeout 4 adb -s $targetId shell input keyevent $keyCode 2>/dev/null || true',
+      );
     } catch (_) {}
   }
 
@@ -708,7 +751,9 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     if (targetId == null) return 'Телефон не подключен';
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      final out = await runtime.runCommand('adb -s $targetId logcat -d -t $lines *:E');
+      final out = await runtime.runCommand(
+        'timeout 6 adb -s $targetId logcat -d -t $lines *:E 2>&1 || true',
+      );
       return out.trim();
     } catch (e) {
       return 'Ошибка получения логов: $e';
@@ -744,14 +789,20 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     if (targetId == null) return null;
     final runtime = _ref.read(runtimeServiceProvider);
 
-    // Method 1: Pull directly from device RAM tmpfs (/data/local/tmp) to /tmp
+    // Method 1: Pull directly from device RAM tmpfs (/data/local/tmp) to shared tmp
     try {
-      final localTmp = '/tmp/q_frame_$targetId.png';
+      final safeId = targetId.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final tmpDir = Directory('${runtime.filesDir}${Platform.pathSeparator}tmp');
+      if (!await tmpDir.exists()) {
+        await tmpDir.create(recursive: true);
+      }
+      final hostTmp = '${tmpDir.path}${Platform.pathSeparator}q_frame_$safeId.png';
+      final guestTmp = runtime.toProotPath(hostTmp);
       await runtime.runCommand(
-        'adb -s $targetId shell "screencap -p /data/local/tmp/q_screen.png" 2>/dev/null && '
-        'adb -s $targetId pull /data/local/tmp/q_screen.png "$localTmp" 2>/dev/null || true'
+        'timeout 5 adb -s $targetId shell "screencap -p /data/local/tmp/q_screen.png" 2>/dev/null && '
+        'timeout 5 adb -s $targetId pull /data/local/tmp/q_screen.png "$guestTmp" 2>/dev/null || true'
       );
-      final f = File(localTmp);
+      final f = File(hostTmp);
       if (await f.exists() && await f.length() > 500) {
         final bytes = await f.readAsBytes();
         return bytes;
@@ -761,7 +812,7 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     // Method 2: exec-out with base64 stream
     try {
       final base64Str = await runtime.runCommand(
-        'adb -s $targetId exec-out "screencap -p" 2>/dev/null | base64 -w 0 2>/dev/null || true'
+        'timeout 6 adb -s $targetId exec-out "screencap -p" 2>/dev/null | base64 -w 0 2>/dev/null || true'
       );
       final clean = base64Str.replaceAll('\n', '').replaceAll('\r', '').replaceAll(' ', '').trim();
       if (clean.length > 500) {

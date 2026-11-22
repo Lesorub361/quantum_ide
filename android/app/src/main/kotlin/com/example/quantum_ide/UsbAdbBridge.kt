@@ -206,6 +206,7 @@ class UsbAdbBridge(
             var hasPerm = try { manager.hasPermission(dev) } catch (_: Exception) { false }
 
             if (autoRequestPermission && !hasPerm && (hasAdb || dev.deviceClass != UsbConstants.USB_CLASS_HUB)) {
+                pendingPermissions.remove(dev.deviceName)
                 requestUsbPermission(dev)
                 hasPerm = try { manager.hasPermission(dev) } catch (_: Exception) { false }
             }

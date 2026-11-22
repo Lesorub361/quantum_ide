@@ -1,16 +1,16 @@
 {
-  "versionCode": 307,
-  "versionName": "1.2.291",
-  "notes": "## 🚀 QuantumIDE v1.2.291\n\n### Что исправлено\n- **Вылет приложения на планшете (`ShizukuProvider`)**:\n  - В `AndroidManifest.xml` зафиксированы `android:exported=\"true\"`, `android:multiprocess=\"false\"` и `tools:replace=\"android:exported,android:multiprocess\"` — AAR `ShizukuProvider` больше не перезаписывает атрибуты и не вызывает `IllegalStateException: android:exported must be true` при запуске.\n- **Сборка APK в GitHub Actions**:\n  - Восстановлен полный рабочий `.github/workflows/build-apk.yml` (патч плагинов `proguard-android.txt` под AGP 9 для `flutter_inappwebview_android`, сборка `ruri-arm64`, подпись релиза, публикация всех ABI APK и AAB), удалён случайно закоммиченный `local.properties`.\n- **Исправления из предыдущих коммитов**:\n  - Встроены `builtin:filesystem` + `builtin:shell` MCP, убран SELinux-спам sysfs в `SystemStatsService`, добавлен fallback загрузки `aapt2`.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
+  "versionCode": 308,
+  "versionName": "1.2.292",
+  "notes": "## 🚀 QuantumIDE v1.2.292\n\n### Что исправлено\n- **USB OTG ADB (`UsbAdbBridge.kt`, `AdbDeviceService`)**:\n  - Устранено мерцание/пропадание подключённого по OTG телефона: `refreshDevices` не переподключает уже активные bridge-порты каждые 15 секунд и сохраняет список устройств при кратковременном таймауте опроса.\n  - При отклонении диалога USB-разрешения оно больше не блокируется навсегда — можно повторно запросить доступ.\n- **Wi-Fi отладка ADB (`DeviceMirrorPanel`, `AdbDeviceService`)**:\n  - Диалог Wi-Fi подключения больше не закрывается молча до завершения команды: показывает индикатор загрузки, текст ошибки прямо в окне и после `adb pair` переводит сразу к вводу основного порта для `adb connect`.\n  - Добавлены таймауты и авто-восстановление `adb` (`fixAdbEnvironment`), если бинарник не найден.\n- **Зеркало экрана, ввод и Logcat**:\n  - Исправлен путь захвата экрана (`Method 1`) через общую папку `filesDir/tmp` и `toProotPath`, добавлены таймауты и корректное экранирование спецсимволов в `sendText`.\n  - В `logcat` добавлены таймаут и отображение ошибок/пустого состояния.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.291/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.292/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.291",
-  "buildNumber": 307,
-  "tag_name": "v1.2.291",
-  "releaseNotes": "Исправлен вылет ShizukuProvider при запуске на Android 12+, восстановлена сборка APK/AAB под AGP 9 в GitHub Actions и удалён лишний local.properties."
+  "version": "1.2.292",
+  "buildNumber": 308,
+  "tag_name": "v1.2.292",
+  "releaseNotes": "Стабилизировано USB OTG ADB подключение, исправлен диалог Wi-Fi отладки (pair/connect), захват экрана, ввод текста/тапов и logcat в Device Mirror."
 }
