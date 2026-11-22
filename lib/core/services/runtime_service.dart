@@ -35,6 +35,14 @@ class RuntimeService extends ChangeNotifier {
   String _nativeLibDir = '';
   final _dio = Dio();
 
+  List<String> get _aapt2Targets => [
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'aapt2'),
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'aapt2-arm64'),
+        p.join(_filesDir, 'bin', 'aapt2'),
+        '/usr/bin/aapt2',
+        '/usr/local/bin/aapt2-arm64',
+      ];
+
   static const int _maxConcurrentCommands = 3;
   int _runningCommands = 0;
   final List<Completer<void>> _commandQueue = [];
@@ -2500,15 +2508,7 @@ fi
   /// and Android SDK build-tools to ensure AGP 8+ builds never fail with '--source-path'.
   Future<void> _ensureBundledAapt2() async {
     try {
-      final aapt2Targets = [
-        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'aapt2'),
-        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'aapt2-arm64'),
-        p.join(_filesDir, 'bin', 'aapt2'),
-        '/usr/bin/aapt2',
-        '/usr/local/bin/aapt2-arm64',
-      ];
-
-      final primaryAapt2 = File(aapt2Targets.first);
+      final primaryAapt2 = File(_aapt2Targets.first);
       bool needsExtract = true;
       if (await primaryAapt2.exists()) {
         try {
@@ -2527,52 +2527,86 @@ fi
           byteData.lengthInBytes,
         );
         final decompressedBytes = gzip.decode(compressedBytes);
-
-        for (final targetPath in aapt2Targets) {
-          try {
-            final f = File(targetPath);
-            if (await f.parent.exists()) {
-              if (await f.exists()) await f.delete();
-              await f.writeAsBytes(decompressedBytes, flush: true);
-              await Process.run('chmod', ['755', targetPath]);
-              debugPrint('[AAPT2] Installed modern aapt2 at $targetPath');
-            }
-          } catch (_) {}
-        }
-
-        final buildToolsDir = Directory(
-          p.join(_filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'build-tools'),
-        );
-        if (await buildToolsDir.exists()) {
-          await for (final entity in buildToolsDir.list()) {
-            if (entity is Directory) {
-              final btAapt2 = File(p.join(entity.path, 'aapt2'));
-              try {
-                if (await btAapt2.exists()) await btAapt2.delete();
-                await btAapt2.writeAsBytes(decompressedBytes, flush: true);
-                await Process.run('chmod', ['755', btAapt2.path]);
-                debugPrint('[AAPT2] Updated build-tools aapt2 at ${btAapt2.path}');
-              } catch (_) {}
-            }
-          }
-        }
-
-        final globalBuildTools = Directory('/root/android-sdk/build-tools');
-        if (await globalBuildTools.exists()) {
-          await for (final entity in globalBuildTools.list()) {
-            if (entity is Directory) {
-              final btAapt2 = File(p.join(entity.path, 'aapt2'));
-              try {
-                if (await btAapt2.exists()) await btAapt2.delete();
-                await btAapt2.writeAsBytes(decompressedBytes, flush: true);
-                await Process.run('chmod', ['755', btAapt2.path]);
-              } catch (_) {}
-            }
-          }
-        }
+        _installAapt2ToTargets(decompressedBytes);
       }
     } catch (e) {
-      debugPrint('[AAPT2] Warning: Failed to extract bundled aapt2: $e');
+      debugPrint('[AAPT2] Bundled asset not available: $e; trying download fallback...');
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(minutes: 3),
+      ));
+      final urls = [
+        'https://github.com/Lesorub361/quantum_ide/releases/download/aapt2/aapt2-arm64.gz',
+        'https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip',
+      ];
+      List<int>? gzBytes;
+      for (final url in urls) {
+        try {
+          final res = await dio.get<List<int>>(
+            url,
+            options: Options(responseType: ResponseType.bytes),
+          );
+          if (res.statusCode == 200 && res.data != null && res.data!.length > 100000) {
+            gzBytes = res.data;
+            break;
+          }
+        } catch (ee) {
+          debugPrint('[AAPT2] Download failed from $url: $ee');
+        }
+      }
+      if (gzBytes == null) {
+        debugPrint('[AAPT2] Warning: Failed to obtain aapt2 from any source; builds may need system aapt2.');
+        return;
+      }
+      try {
+        final decompressedBytes = gzBytes!.length > 2 && gzBytes[0] == 0x1f && gzBytes[1] == 0x8b
+            ? gzip.decode(gzBytes!)
+            : gzBytes!;
+        _installAapt2ToTargets(decompressedBytes);
+      } catch (ee) {
+        debugPrint('[AAPT2] Warning: Failed to process downloaded aapt2: $ee');
+      }
+    }
+  }
+
+  void _installAapt2ToTargets(List<int> decompressedBytes) {
+    for (final targetPath in _aapt2Targets) {
+      try {
+        final f = File(targetPath);
+        if (f.parent.existsSync()) {
+          if (f.existsSync()) f.deleteSync();
+          f.writeAsBytesSync(decompressedBytes, flush: true);
+          Process.runSync('chmod', ['755', targetPath]);
+          debugPrint('[AAPT2] Installed modern aapt2 at $targetPath');
+        }
+      } catch (_) {}
+    }
+    final buildToolsDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'build-tools'));
+    if (buildToolsDir.existsSync()) {
+      for (final entity in buildToolsDir.listSync()) {
+        if (entity is Directory) {
+          final btAapt2 = File(p.join(entity.path, 'aapt2'));
+          try {
+            if (btAapt2.existsSync()) btAapt2.deleteSync();
+            btAapt2.writeAsBytesSync(decompressedBytes, flush: true);
+            Process.runSync('chmod', ['755', btAapt2.path]);
+            debugPrint('[AAPT2] Updated build-tools aapt2 at ${btAapt2.path}');
+          } catch (_) {}
+        }
+      }
+    }
+    final globalBuildTools = Directory('/root/android-sdk/build-tools');
+    if (globalBuildTools.existsSync()) {
+      for (final entity in globalBuildTools.listSync()) {
+        if (entity is Directory) {
+          final btAapt2 = File(p.join(entity.path, 'aapt2'));
+          try {
+            if (btAapt2.existsSync()) btAapt2.deleteSync();
+            btAapt2.writeAsBytesSync(decompressedBytes, flush: true);
+            Process.runSync('chmod', ['755', btAapt2.path]);
+          } catch (_) {}
+        }
+      }
     }
   }
 

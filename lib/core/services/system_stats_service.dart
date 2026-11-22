@@ -1338,18 +1338,22 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   Future<int> _parsePeakCpuFreqMhz() async {
     int maxFreqKHz = 0;
-    try {
-      for (int i = 0; i < _cpuCores; i++) {
-        final curFile = File('/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq');
-        if (await curFile.exists()) {
-          final curStr = (await curFile.readAsString()).trim();
-          final val = int.tryParse(curStr);
-          if (val != null && val > maxFreqKHz) {
-            maxFreqKHz = val;
+    if (!_sysfsCpuBlocked) {
+      try {
+        for (int i = 0; i < _cpuCores; i++) {
+          final curFile = File('/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq');
+          if (await curFile.exists()) {
+            final curStr = (await curFile.readAsString()).trim();
+            final val = int.tryParse(curStr);
+            if (val != null && val > maxFreqKHz) {
+              maxFreqKHz = val;
+            }
           }
         }
+      } catch (_) {
+        _sysfsCpuBlocked = true;
       }
-    } catch (_) {}
+    }
     if (maxFreqKHz == 0 && ShizukuBridge.instance.isAvailable) {
       await _fetchShizukuTelemetryBatch();
       maxFreqKHz = _cachedShizukuCpuFreqKHz;
@@ -1358,6 +1362,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   }
 
   Future<int> _parseGpuFreqMhz() async {
+    if (_gpuSysfsBlocked) {
+      if (ShizukuBridge.instance.isAvailable && ShizukuBridge.instance.uid == 0) {
+        await _fetchShizukuTelemetryBatch();
+        return _cachedShizukuGpuFreqMhz;
+      }
+      return 0;
+    }
     try {
       final curClkFile = File('/sys/class/kgsl/kgsl-3d0/gpuclk');
       if (await curClkFile.exists()) {
@@ -1366,7 +1377,9 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
           return clk > 1000000 ? (clk / 1000000).round() : (clk / 1000).round();
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      _gpuSysfsBlocked = true;
+    }
 
     if (ShizukuBridge.instance.isAvailable && ShizukuBridge.instance.uid == 0) {
       await _fetchShizukuTelemetryBatch();

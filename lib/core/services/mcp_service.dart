@@ -772,6 +772,128 @@ class McpClientInstance {
             },
           },
         ];
+      case 'builtin:filesystem':
+        return [
+          {
+            'name': 'read_file',
+            'description':
+                'Reads a text file from the project or device filesystem.',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'path': {
+                  'type': 'string',
+                  'description': 'Absolute or relative file path.',
+                },
+              },
+              'required': ['path'],
+            },
+          },
+          {
+            'name': 'write_file',
+            'description':
+                'Writes text content to a file (creates or overwrites).',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'path': {
+                  'type': 'string',
+                  'description': 'Absolute or relative file path.',
+                },
+                'content': {
+                  'type': 'string',
+                  'description': 'Text content to write.',
+                },
+              },
+              'required': ['path', 'content'],
+            },
+          },
+          {
+            'name': 'list_directory',
+            'description':
+                'Lists files and subdirectories in a directory.',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'path': {
+                  'type': 'string',
+                  'description': 'Directory path (defaults to workspace root).',
+                },
+                'recursive': {
+                  'type': 'boolean',
+                  'description': 'Recursively list subdirectories.',
+                },
+              },
+            },
+          },
+          {
+            'name': 'file_exists',
+            'description':
+                'Checks whether a file or directory exists.',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'path': {
+                  'type': 'string',
+                  'description': 'Path to check.',
+                },
+              },
+              'required': ['path'],
+            },
+          },
+          {
+            'name': 'delete_file',
+            'description':
+                'Deletes a file or empty directory.',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'path': {
+                  'type': 'string',
+                  'description': 'Path to delete.',
+                },
+              },
+              'required': ['path'],
+            },
+          },
+        ];
+      case 'builtin:shell':
+        return [
+          {
+            'name': 'run_command',
+            'description':
+                'Executes a shell command and returns stdout/stderr.',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'command': {
+                  'type': 'string',
+                  'description': 'Shell command to execute.',
+                },
+                'timeoutSeconds': {
+                  'type': 'integer',
+                  'description': 'Timeout in seconds (default 30).',
+                },
+              },
+              'required': ['command'],
+            },
+          },
+          {
+            'name': 'which',
+            'description':
+                'Finds the path of an executable in PATH.',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'executable': {
+                  'type': 'string',
+                  'description': 'Executable name.',
+                },
+              },
+              'required': ['executable'],
+            },
+          },
+        ];
       default:
         return const [];
     }
@@ -1581,6 +1703,93 @@ class McpClientInstance {
         }
         return {'content': buf.toString().trim()};
       }
+      if (builtinId == 'builtin:filesystem') {
+        if (toolName == 'read_file') {
+          final path = args['path']?.toString() ?? '';
+          final file = File(p.isAbsolute(path) ? path : p.join(workspace, path));
+          if (!await file.exists()) {
+            return {'isError': true, 'content': 'File not found: $path'};
+          }
+          final content = await file.readAsString();
+          return {'content': content};
+        }
+        if (toolName == 'write_file') {
+          final path = args['path']?.toString() ?? '';
+          final content = args['content']?.toString() ?? '';
+          final file = File(p.isAbsolute(path) ? path : p.join(workspace, path));
+          await file.parent.create(recursive: true);
+          await file.writeAsString(content);
+          return {'content': 'Written ${content.length} bytes to $path'};
+        }
+        if (toolName == 'list_directory') {
+          final dirPath = args['path']?.toString() ?? '';
+          final recursive = args['recursive'] as bool? ?? false;
+          final dir = Directory(
+            p.isAbsolute(dirPath) ? dirPath : p.join(workspace, dirPath),
+          );
+          if (!await dir.exists()) {
+            return {'isError': true, 'content': 'Directory not found: $dirPath'};
+          }
+          final buf = StringBuffer();
+          await for (final entity
+              in dir.list(recursive: recursive, followLinks: false)) {
+            buf.writeln('${entity.path} (${entity.runtimeType == File ? 'file' : 'dir'})');
+          }
+          return {'content': buf.toString().trim()};
+        }
+        if (toolName == 'file_exists') {
+          final path = args['path']?.toString() ?? '';
+          final f = FileSystemEntity.type(
+            p.isAbsolute(path) ? path : p.join(workspace, path),
+          );
+          return {'content': f != FileSystemEntityType.notFound ? 'exists' : 'not found'};
+        }
+        if (toolName == 'delete_file') {
+          final path = args['path']?.toString() ?? '';
+          final target = p.isAbsolute(path) ? path : p.join(workspace, path);
+          final type = FileSystemEntity.type(target);
+          if (type != FileSystemEntityType.notFound) {
+            if (type == FileSystemEntityType.file) {
+              await File(target).delete();
+            } else if (type == FileSystemEntityType.directory) {
+              await Directory(target).delete(recursive: false);
+            }
+            return {'content': 'Deleted $path'};
+          }
+          return {'isError': true, 'content': 'Not found: $path'};
+        }
+      }
+      if (builtinId == 'builtin:shell') {
+        if (toolName == 'run_command') {
+          final command = args['command']?.toString() ?? '';
+          final timeoutSec = ((args['timeoutSeconds'] as num?)?.toInt() ?? 30);
+          try {
+            final result = await Process.run(
+              'sh',
+              ['-c', command],
+              workingDirectory: workspace,
+            );
+            return {
+              'content':
+                  'EXIT CODE: ${result.exitCode}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}',
+            };
+          } catch (e) {
+            return {'isError': true, 'content': 'Command failed: $e'};
+          }
+        }
+        if (toolName == 'which') {
+          final executable = args['executable']?.toString() ?? '';
+          try {
+            final result = await Process.run('which', [executable]);
+            if (result.exitCode == 0) {
+              return {'content': result.stdout.trim()};
+            }
+            return {'isError': true, 'content': 'Executable not found: $executable'};
+          } catch (e) {
+            return {'isError': true, 'content': 'which failed: $e'};
+          }
+        }
+      }
     } catch (e) {
       return {'isError': true, 'content': 'Builtin MCP error: $e'};
     }
@@ -1825,63 +2034,23 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
               ),
             ),
             (
-              title: '🎯 Dart & Flutter Official MCP',
+              title: '📂 Quantum Filesystem (Builtin, без npm)',
               description:
-                  'Официальный Dart/Flutter MCP: анализ, pub get, поиск ошибок и виджетов',
+                  'Безопасная работа с файлами и каталогами проекта через встроенный Dart IO (не требует npm/npx)',
               config: McpServerConfig(
-                name: 'dart-flutter',
+                name: 'quantum-filesystem',
                 type: McpServerType.stdio,
-                command: 'dart',
-                args: const ['mcp-server'],
+                command: 'builtin:filesystem',
               ),
             ),
             (
-              title: '📚 Context7 Live Docs (@upstash/context7-mcp)',
+              title: '🐚 Quantum Shell/Terminal (Builtin, без npm)',
               description:
-                  'Актуальная документация Flutter, Dart (pub.dev), Riverpod и любых библиотек',
+                  'Выполнение команд оболочки и терминала через встроенный Process API (не требует npm/npx)',
               config: McpServerConfig(
-                name: 'context7',
+                name: 'quantum-shell',
                 type: McpServerType.stdio,
-                command: 'npx',
-                args: const ['-y', '@upstash/context7-mcp'],
-              ),
-            ),
-            (
-              title: '🧩 Sequential Thinking (@modelcontextprotocol)',
-              description:
-                  'Пошаговое глубокое планирование перед сложными изменениями кода',
-              config: McpServerConfig(
-                name: 'sequential-thinking',
-                type: McpServerType.stdio,
-                command: 'npx',
-                args: const [
-                  '-y',
-                  '@modelcontextprotocol/server-sequential-thinking',
-                ],
-              ),
-            ),
-            (
-              title: '📂 Filesystem MCP (@modelcontextprotocol)',
-              description: 'Безопасная работа с файлами и каталогами проекта',
-              config: McpServerConfig(
-                name: 'filesystem',
-                type: McpServerType.stdio,
-                command: 'npx',
-                args: [
-                  '-y',
-                  '@modelcontextprotocol/server-filesystem',
-                  workspacePath,
-                ],
-              ),
-            ),
-            (
-              title: '🐙 GitHub MCP (@modelcontextprotocol)',
-              description: 'Работа с репозиториями, Issues и Pull Requests на GitHub',
-              config: McpServerConfig(
-                name: 'github',
-                type: McpServerType.stdio,
-                command: 'npx',
-                args: const ['-y', '@modelcontextprotocol/server-github'],
+                command: 'builtin:shell',
               ),
             ),
           ];
