@@ -37,15 +37,15 @@ class RoxumTimelineItem {
   });
 
   static Map<String, dynamic> _toolCallToJson(RoxumToolCallRecord tc) => {
-        'id': tc.id,
-        'name': tc.name,
-        'arguments': tc.arguments,
-        'isRunning': false,
-        'success': tc.success,
-        'output': tc.output.length > 4000
-            ? '${tc.output.substring(0, 4000)}\n... [truncated]'
-            : tc.output,
-      };
+    'id': tc.id,
+    'name': tc.name,
+    'arguments': tc.arguments,
+    'isRunning': false,
+    'success': tc.success,
+    'output': tc.output.length > 4000
+        ? '${tc.output.substring(0, 4000)}\n... [truncated]'
+        : tc.output,
+  };
 
   static RoxumToolCallRecord _toolCallFromJson(Map<String, dynamic> j) =>
       RoxumToolCallRecord(
@@ -60,11 +60,11 @@ class RoxumTimelineItem {
       );
 
   static Map<String, dynamic> _pendingEditToJson(RoxumPendingEdit fe) => {
-        'filePath': fe.filePath,
-        'existedBefore': fe.existedBefore,
-        'addedLines': fe.addedLines,
-        'removedLines': fe.removedLines,
-      };
+    'filePath': fe.filePath,
+    'existedBefore': fe.existedBefore,
+    'addedLines': fe.addedLines,
+    'removedLines': fe.removedLines,
+  };
 
   static RoxumPendingEdit _pendingEditFromJson(Map<String, dynamic> j) =>
       RoxumPendingEdit(
@@ -77,13 +77,13 @@ class RoxumTimelineItem {
       );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'text': text,
-        'durationMs': durationMs,
-        if (toolCall != null) 'toolCall': _toolCallToJson(toolCall!),
-        if (fileEdit != null) 'fileEdit': _pendingEditToJson(fileEdit!),
-      };
+    'id': id,
+    'kind': kind.name,
+    'text': text,
+    'durationMs': durationMs,
+    if (toolCall != null) 'toolCall': _toolCallToJson(toolCall!),
+    if (fileEdit != null) 'fileEdit': _pendingEditToJson(fileEdit!),
+  };
 
   factory RoxumTimelineItem.fromJson(Map<String, dynamic> json) {
     final kindStr = json['kind']?.toString() ?? 'text';
@@ -168,24 +168,22 @@ class RoxumConversationTurn {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'userRequest': userRequest,
-        'aiResponse': aiResponse,
-        'reasoningText': reasoningText,
-        'thinkingDurationMs': thinkingDurationMs,
-        'toolCalls':
-            toolCalls.map(RoxumTimelineItem._toolCallToJson).toList(),
-        'fileEdits':
-            fileEdits.map(RoxumTimelineItem._pendingEditToJson).toList(),
-        'timeline': timeline.map((e) => e.toJson()).toList(),
-        'attachmentNames': attachmentNames,
-        'promptTokens': usage.promptTokens,
-        'completionTokens': usage.completionTokens,
-        'totalTokens': usage.totalTokens,
-        'costUsd': usage.costUsd,
-        'isError': isError,
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'id': id,
+    'userRequest': userRequest,
+    'aiResponse': aiResponse,
+    'reasoningText': reasoningText,
+    'thinkingDurationMs': thinkingDurationMs,
+    'toolCalls': toolCalls.map(RoxumTimelineItem._toolCallToJson).toList(),
+    'fileEdits': fileEdits.map(RoxumTimelineItem._pendingEditToJson).toList(),
+    'timeline': timeline.map((e) => e.toJson()).toList(),
+    'attachmentNames': attachmentNames,
+    'promptTokens': usage.promptTokens,
+    'completionTokens': usage.completionTokens,
+    'totalTokens': usage.totalTokens,
+    'costUsd': usage.costUsd,
+    'isError': isError,
+    'timestamp': timestamp.toIso8601String(),
+  };
 
   factory RoxumConversationTurn.fromJson(Map<String, dynamic> json) {
     final pTok = (json['promptTokens'] as num?)?.toInt() ?? 0;
@@ -204,21 +202,23 @@ class RoxumConversationTurn {
       thinkingDurationMs: (json['thinkingDurationMs'] as num?)?.toInt() ?? 0,
       toolCalls: rawTools
           .whereType<Map>()
-          .map((e) => RoxumTimelineItem._toolCallFromJson(
-                Map<String, dynamic>.from(e),
-              ))
+          .map(
+            (e) => RoxumTimelineItem._toolCallFromJson(
+              Map<String, dynamic>.from(e),
+            ),
+          )
           .toList(),
       fileEdits: rawEdits
           .whereType<Map>()
-          .map((e) => RoxumTimelineItem._pendingEditFromJson(
-                Map<String, dynamic>.from(e),
-              ))
+          .map(
+            (e) => RoxumTimelineItem._pendingEditFromJson(
+              Map<String, dynamic>.from(e),
+            ),
+          )
           .toList(),
       timeline: rawTimeline
           .whereType<Map>()
-          .map((e) => RoxumTimelineItem.fromJson(
-                Map<String, dynamic>.from(e),
-              ))
+          .map((e) => RoxumTimelineItem.fromJson(Map<String, dynamic>.from(e)))
           .toList(),
       attachmentNames: rawAtts.map((e) => e.toString()).toList(),
       usage: RoxumUsageStats(
@@ -228,7 +228,8 @@ class RoxumConversationTurn {
         costUsd: cost,
       ),
       isError: json['isError'] == true,
-      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
+      timestamp:
+          DateTime.tryParse(json['timestamp']?.toString() ?? '') ??
           DateTime.now(),
     );
   }
@@ -261,11 +262,11 @@ class RoxumChatSession {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'turns': turns.map((t) => t.toJson()).toList(),
-        'updatedAt': updatedAt.toIso8601String(),
-      };
+    'id': id,
+    'title': title,
+    'turns': turns.map((t) => t.toJson()).toList(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
 
   factory RoxumChatSession.fromJson(Map<String, dynamic> json) {
     final rawTurns = (json['turns'] as List?) ?? const [];
@@ -276,7 +277,8 @@ class RoxumChatSession {
           .whereType<Map>()
           .map((e) => RoxumConversationTurn.fromJson(e.cast<String, dynamic>()))
           .toList(),
-      updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
+      updatedAt:
+          DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
           DateTime.now(),
     );
   }
@@ -346,8 +348,9 @@ class RoxumChatState {
   }
 }
 
-final roxumChatProvider =
-    NotifierProvider<RoxumChatNotifier, RoxumChatState>(RoxumChatNotifier.new);
+final roxumChatProvider = NotifierProvider<RoxumChatNotifier, RoxumChatState>(
+  RoxumChatNotifier.new,
+);
 
 class RoxumChatNotifier extends Notifier<RoxumChatState> {
   final RoxumAiClient _client = RoxumAiClient();
@@ -529,7 +532,8 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     try {
       final discovered = await RoxumAiClient.fetchAllProviderModels(settings);
       final merged = availableModels(settings);
-      final currentValid = state.selectedModelId != null &&
+      final currentValid =
+          state.selectedModelId != null &&
           (discovered.any((m) => m.id == state.selectedModelId) ||
               merged.any((m) => m.id == state.selectedModelId));
       state = state.copyWith(
@@ -538,8 +542,8 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         selectedModelId: currentValid
             ? state.selectedModelId
             : (discovered.isNotEmpty
-                ? discovered.first.id
-                : (merged.isNotEmpty ? merged.first.id : null)),
+                  ? discovered.first.id
+                  : (merged.isNotEmpty ? merged.first.id : null)),
       );
     } catch (e) {
       TalkerService.warning('[RoxumChat] Failed to fetch provider models: $e');
@@ -556,7 +560,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       final limits = await RoxumAiClient.fetchOpenRouterKeyLimits(key);
       state = state.copyWith(openRouterLimits: limits);
     } catch (e) {
-      TalkerService.warning('[RoxumChat] Failed to fetch OpenRouter limits: $e');
+      TalkerService.warning(
+        '[RoxumChat] Failed to fetch OpenRouter limits: $e',
+      );
     }
   }
 
@@ -564,7 +570,10 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
   /// (e.g. `[Executed tools in this turn: ...]`) instead of making real calls.
   String _stripFakeToolMarkers(String text) {
     final cleaned = text.replaceAll(
-      RegExp(r'^\s*\[Executed tools in this turn:[^\]]*\]\s*$', multiLine: true),
+      RegExp(
+        r'^\s*\[Executed tools in this turn:[^\]]*\]\s*$',
+        multiLine: true,
+      ),
       '',
     );
     return cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
@@ -579,8 +588,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         if (f.existsSync()) {
           final text = f.readAsStringSync().trim();
           if (text.isNotEmpty) {
-            final clipped =
-                text.length > 4000 ? '${text.substring(0, 4000)}\n...' : text;
+            final clipped = text.length > 4000
+                ? '${text.substring(0, 4000)}\n...'
+                : text;
             buf.writeln('\n[PROJECT RULES ($rel)]:\n$clipped');
             break;
           }
@@ -595,7 +605,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           final clipped = memText.length > 3000
               ? '${memText.substring(0, 3000)}\n...'
               : memText;
-          buf.writeln('\n[PERSISTENT PROJECT MEMORY (.quantum_memory.json)]:\n$clipped');
+          buf.writeln(
+            '\n[PERSISTENT PROJECT MEMORY (.quantum_memory.json)]:\n$clipped',
+          );
         }
       }
     } catch (_) {}
@@ -642,14 +654,11 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
 
     final updatedTitle = baseTurns.isEmpty
         ? (effectiveDisplay.length > 42
-            ? '${effectiveDisplay.substring(0, 42)}...'
-            : effectiveDisplay)
+              ? '${effectiveDisplay.substring(0, 42)}...'
+              : effectiveDisplay)
         : state.currentSession.title;
 
-    _updateCurrentSession(
-      title: updatedTitle,
-      turns: [...baseTurns, newTurn],
-    );
+    _updateCurrentSession(title: updatedTitle, turns: [...baseTurns, newTurn]);
 
     _cancelled = false;
     final runToken = ++_activeRunToken;
@@ -680,30 +689,31 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final mcpSummary = mcpTools.isEmpty
         ? ''
         : '\nACTIVE MCP TOOLS (${mcpTools.length} available — use them proactively!):\n'
-            '${mcpTools.map((t) => '- ${(t['function'] as Map)['name']}: ${(t['function'] as Map)['description']}').join('\n')}\n';
+              '${mcpTools.map((t) => '- ${(t['function'] as Map)['name']}: ${(t['function'] as Map)['description']}').join('\n')}\n';
     final projectBlocks = _loadProjectContextBlocks(workspace);
 
     final systemPrompt = state.chatMode == RoxumChatMode.agent
         ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace, the device/system filesystem (/root, /storage/emulated/0, SDK directories, host paths), shell (including ADB / Shizuku `rish` when available), and MCP servers via tool calls '
-            '(readFile, codeOutline, writeFile, editFile, listFiles, grepInFiles, runCommand, checkEnvironment, installPackages, getLspDiagnostics, gitStatus, and all `mcp__*` tools). '
-            'Workspace root: "$workspace"${guestWorkspace != workspace ? ' (in shell/terminal mapped to "$guestWorkspace")' : ''}. '
-            '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}\n'
-            'CRITICAL RULES FOR HIGH EFFICIENCY & ACCURACY:\n'
-            '0) ACT, DO NOT DESCRIBE: perform the task with REAL tool calls (writeFile/editFile/runCommand...). NEVER write text like "[Executed tools...]", never claim an edit/build succeeded unless a real tool result confirmed it, and never finish with only a plan or description.\n'
-            '1) TOKEN SAVING & CODEGRAPH MCP: For unfamiliar or large files/projects, call `mcp__quantum_codegraph__project_symbols` or `codeOutline` first, use `mcp__quantum_codegraph__read_symbol` to read a specific class/method body with brace balancing, `mcp__quantum_codegraph__find_symbol_usages` to find references across the project, or `readFile` with `startLine` and `endLine`.\n'
-            '2) ENVIRONMENT & SDKS: NEVER assume `flutter`, `dart`, `node`, `python`, `java`, or `git` is missing and NEVER try to manually download huge SDK tarballs via curl unless `checkEnvironment` proves it is absent. Always call `checkEnvironment` first to see exact installed SDK paths and versions.\n'
-            '3) INSTALLING PACKAGES: If a project or system dependency is missing, install it directly using `installPackages` (supports apt, npm, pip, pub, cargo) or `runCommand`.\n'
-            '4) REAL VERIFICATION & SMART ANALYZER MCP: After creating or editing files, ALWAYS call `getLspDiagnostics` or `mcp__quantum_token_saver__smart_analyze_errors` to see all real compiler/analyzer errors and fix them before finishing.\n'
-            '5) PROJECT MEMORY MCP: When you discover important architectural facts, SDK paths, or user preferences, save them using `mcp__quantum_memory__save_memory` so they persist across sessions.\n'
-            '6) WEB & DOCS MCP: When you need external documentation, package versions, or web search, use `mcp__quantum_web_fetch__web_search_docs` and `mcp__quantum_web_fetch__fetch_url_markdown` (or `mcp__context7__*` if enabled).\n'
-            '7) HONESTY: NEVER claim you ran a command, installed an SDK, or edited a file unless you actually invoked the corresponding tool call in this turn.\n'
-            '$mcpSummary'
-            '$projectBlocks\n'
-            'Respond in the user\'s language.'
+              '(readFile, codeOutline, writeFile, editFile, listFiles, grepInFiles, runCommand, checkEnvironment, installPackages, getLspDiagnostics, gitStatus, and all `mcp__*` tools). '
+              'Workspace root: "$workspace"${guestWorkspace != workspace ? ' (in shell/terminal mapped to "$guestWorkspace")' : ''}. '
+              '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}\n'
+              'CRITICAL RULES FOR HIGH EFFICIENCY & ACCURACY:\n'
+              '0) ACT, DO NOT DESCRIBE: perform the task with REAL tool calls (writeFile/editFile/runCommand...). NEVER write text like "[Executed tools...]", never claim an edit/build succeeded unless a real tool result confirmed it, and never finish with only a plan or description.\n'
+              '1) TOKEN SAVING & CODEGRAPH MCP: For unfamiliar or large files/projects, call `mcp__quantum_codegraph__project_symbols` or `codeOutline` first, use `mcp__quantum_codegraph__read_symbol` to read a specific class/method body with brace balancing, `mcp__quantum_codegraph__find_symbol_usages` to find references across the project, or `readFile` with `startLine` and `endLine`.\n'
+              '2) ENVIRONMENT & SDKS: NEVER assume `flutter`, `dart`, `node`, `python`, `java`, or `git` is missing and NEVER try to manually download huge SDK tarballs via curl unless `checkEnvironment` proves it is absent. Always call `checkEnvironment` first to see exact installed SDK paths and versions.\n'
+              '3) INSTALLING PACKAGES: If a project or system dependency is missing, install it directly using `installPackages` (supports apt, npm, pip, pub, cargo) or `runCommand`.\n'
+              '4) REAL VERIFICATION & SMART ANALYZER MCP: After creating or editing files, ALWAYS call `getLspDiagnostics` or `mcp__quantum_token_saver__smart_analyze_errors` to see all real compiler/analyzer errors and fix them before finishing.\n'
+              '5) MCP CATEGORIES: Architecture/navigation=quantum-codegraph; diagnostics/quality=quantum-token-saver; build/dependencies=quantum-build-doctor; devices/runtime=quantum-device-qa; project memory=quantum-memory; docs/web=quantum-web-fetch; data/telemetry=quantum-sqlite-telemetry. Choose the narrowest relevant category instead of calling every MCP.\n'
+              '6) PROJECT MEMORY MCP: When you discover important architectural facts, SDK paths, or user preferences, save them using `mcp__quantum_memory__save_memory` so they persist across sessions.\n'
+              '7) WEB & DOCS MCP: When you need external documentation, package versions, or web search, use `mcp__quantum_web_fetch__web_search_docs` and `mcp__quantum_web_fetch__fetch_url_markdown` (or `mcp__context7__*` if enabled).\n'
+              '8) HONESTY: NEVER claim you ran a command, installed an SDK, or edited a file unless you actually invoked the corresponding tool call in this turn.\n'
+              '$mcpSummary'
+              '$projectBlocks\n'
+              'Respond in the user\'s language.'
         : 'You are a helpful coding assistant inside QuantumIDE. '
-            '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
-            '$projectBlocks\n'
-            'Respond concisely in the user\'s language.';
+              '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
+              '$projectBlocks\n'
+              'Respond concisely in the user\'s language.';
 
     final textBuffer = StringBuffer(trimmed);
     final imageParts = <Map<String, dynamic>>[];
@@ -711,9 +721,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       if (att.isImage) {
         imageParts.add({
           'type': 'image_url',
-          'image_url': {
-            'url': 'data:${att.mimeType};base64,${att.base64Data}',
-          },
+          'image_url': {'url': 'data:${att.mimeType};base64,${att.base64Data}'},
         });
       } else if (att.textContent != null && att.textContent!.isNotEmpty) {
         textBuffer.write(
@@ -738,10 +746,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       for (final t in baseTurns) ...[
         {'role': 'user', 'content': t.userRequest},
         if (t.aiResponse.isNotEmpty)
-          {
-            'role': 'assistant',
-            'content': _stripFakeToolMarkers(t.aiResponse),
-          },
+          {'role': 'assistant', 'content': _stripFakeToolMarkers(t.aiResponse)},
       ],
       {'role': 'user', 'content': currentUserContent},
     ];
@@ -862,27 +867,24 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           final now = DateTime.now();
           final totalElapsed = now.difference(startedAt).inMilliseconds;
           final stepElapsed = now.difference(stepStartedAt).inMilliseconds;
-          _updateTurn(
-            turnId,
-            (turn) {
-              final tl = reasoning.trim().isEmpty
-                  ? turn.timeline
-                  : upsertTimeline(
-                      turn.timeline,
-                      RoxumTimelineItem(
-                        id: 'step_${currentStep}_reasoning',
-                        kind: RoxumTimelineKind.reasoning,
-                        text: reasoning,
-                        durationMs: stepElapsed,
-                      ),
-                    );
-              return turn.copyWith(
-                reasoningText: reasoning,
-                thinkingDurationMs: totalElapsed,
-                timeline: tl,
-              );
-            },
-          );
+          _updateTurn(turnId, (turn) {
+            final tl = reasoning.trim().isEmpty
+                ? turn.timeline
+                : upsertTimeline(
+                    turn.timeline,
+                    RoxumTimelineItem(
+                      id: 'step_${currentStep}_reasoning',
+                      kind: RoxumTimelineKind.reasoning,
+                      text: reasoning,
+                      durationMs: stepElapsed,
+                    ),
+                  );
+            return turn.copyWith(
+              reasoningText: reasoning,
+              thinkingDurationMs: totalElapsed,
+              timeline: tl,
+            );
+          });
         },
         onUsage: (usage) {
           state = state.copyWith(sessionUsage: state.sessionUsage + usage);
@@ -921,10 +923,8 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       if (!_cancelled) {
         _updateTurn(
           turnId,
-          (turn) => turn.copyWith(
-            aiResponse: 'Ошибка запроса: $e',
-            isError: true,
-          ),
+          (turn) =>
+              turn.copyWith(aiResponse: 'Ошибка запроса: $e', isError: true),
         );
       }
     } finally {

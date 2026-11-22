@@ -23,6 +23,28 @@ import 'package:sqflite/sqflite.dart';
 
 enum McpServerType { stdio, sse }
 
+enum McpCategory {
+  architecture,
+  diagnostics,
+  build,
+  devices,
+  memory,
+  web,
+  data,
+}
+
+extension McpCategoryLabel on McpCategory {
+  String get label => switch (this) {
+    McpCategory.architecture => 'Архитектура и навигация по коду',
+    McpCategory.diagnostics => 'Диагностика и качество',
+    McpCategory.build => 'Сборка и зависимости',
+    McpCategory.devices => 'Устройства и runtime',
+    McpCategory.memory => 'Память проекта',
+    McpCategory.web => 'Документация и веб',
+    McpCategory.data => 'Данные и телеметрия',
+  };
+}
+
 class McpServerConfig {
   final String name;
   final McpServerType type;
@@ -138,20 +160,13 @@ class McpClientInstance {
 
   Future<void> _performHandshake() async {
     try {
-      await sendRequest(
-        'initialize',
-        {
-          'protocolVersion': '2024-11-05',
-          'capabilities': {
-            'roots': {'listChanged': false},
-          },
-          'clientInfo': {
-            'name': 'QuantumIDE-RoxumAgent',
-            'version': '1.2.294',
-          },
+      await sendRequest('initialize', {
+        'protocolVersion': '2024-11-05',
+        'capabilities': {
+          'roots': {'listChanged': false},
         },
-        timeout: const Duration(seconds: 12),
-      );
+        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.294'},
+      }, timeout: const Duration(seconds: 12));
       await _sendNotification('notifications/initialized', const {});
       _isHandshakeDone = true;
     } catch (e) {
@@ -203,8 +218,7 @@ class McpClientInstance {
             .join(' ');
         final envExports = config.env.entries
             .map(
-              (e) =>
-                  "export ${e.key}='${e.value.replaceAll("'", "'\\''")}'; ",
+              (e) => "export ${e.key}='${e.value.replaceAll("'", "'\\''")}'; ",
             )
             .join();
         final fullCmd = '$envExports${config.command} $escapedArgs';
@@ -219,10 +233,9 @@ class McpClientInstance {
             environment: {...runtime.env, ...config.env},
           );
         } else if (await File(initHost).exists()) {
-          final guestWorkDir =
-              (workspace != null && workspace.isNotEmpty)
-                  ? runtime.toProotPath(workspace)
-                  : '/root';
+          final guestWorkDir = (workspace != null && workspace.isNotEmpty)
+              ? runtime.toProotPath(workspace)
+              : '/root';
           _process = await Process.start(
             'sh',
             [
@@ -269,8 +282,8 @@ class McpClientInstance {
       _process!.stderr
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
-        debugPrint('MCP [${config.name}] stderr: $data');
-      });
+            debugPrint('MCP [${config.name}] stderr: $data');
+          });
 
       _process!.stdout
           .transform(const Utf8Decoder(allowMalformed: true))
@@ -304,22 +317,22 @@ class McpClientInstance {
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen((line) {
-        if (line.startsWith('data:')) {
-          final data = line.substring(5).trim();
-          try {
-            if (_ssePostUrl == null) {
-              if (data.startsWith('http') || data.startsWith('/')) {
-                final baseUri = Uri.parse(config.url);
-                _ssePostUrl = baseUri.resolve(data).toString();
-                return;
+            if (line.startsWith('data:')) {
+              final data = line.substring(5).trim();
+              try {
+                if (_ssePostUrl == null) {
+                  if (data.startsWith('http') || data.startsWith('/')) {
+                    final baseUri = Uri.parse(config.url);
+                    _ssePostUrl = baseUri.resolve(data).toString();
+                    return;
+                  }
+                }
+                _handleIncomingLine(data);
+              } catch (e) {
+                debugPrint('MCP [${config.name}] error parsing SSE data: $e');
               }
             }
-            _handleIncomingLine(data);
-          } catch (e) {
-            debugPrint('MCP [${config.name}] error parsing SSE data: $e');
-          }
-        }
-      });
+          });
     } catch (e) {
       debugPrint('Failed to start SSE MCP client: $e');
       rethrow;
@@ -422,18 +435,25 @@ class McpClientInstance {
     if (config.isBuiltin) {
       return _executeBuiltinTool(config.command, toolName, arguments);
     }
-    final res = await sendRequest(
-      'tools/call',
-      {
-        'name': toolName,
-        'arguments': arguments,
-      },
-      timeout: const Duration(seconds: 60),
-    );
+    final res = await sendRequest('tools/call', {
+      'name': toolName,
+      'arguments': arguments,
+    }, timeout: _toolTimeout(toolName));
     if (res.containsKey('error')) {
       throw Exception(res['error']['message'] ?? 'MCP execution error');
     }
     return res['result'] ?? {};
+  }
+
+  Duration _toolTimeout(String toolName) {
+    final lower = toolName.toLowerCase();
+    final longRunning =
+        lower.contains('analy') ||
+        lower.contains('test') ||
+        lower.contains('build') ||
+        lower.contains('pub') ||
+        lower.contains('compile');
+    return Duration(seconds: longRunning ? 90 : 30);
   }
 
   List<Map<String, dynamic>> _builtinToolsFor(String builtinId) {
@@ -621,10 +641,7 @@ class McpClientInstance {
             'inputSchema': {
               'type': 'object',
               'properties': {
-                'query': {
-                  'type': 'string',
-                  'description': 'Search query.',
-                },
+                'query': {'type': 'string', 'description': 'Search query.'},
               },
               'required': ['query'],
             },
@@ -641,7 +658,8 @@ class McpClientInstance {
               'properties': {
                 'logLines': {
                   'type': 'integer',
-                  'description': 'Number of build log lines to inspect (default 100).',
+                  'description':
+                      'Number of build log lines to inspect (default 100).',
                 },
               },
             },
@@ -706,7 +724,8 @@ class McpClientInstance {
               'properties': {
                 'includeLogcat': {
                   'type': 'boolean',
-                  'description': 'Whether to fetch recent logcat errors (default true).',
+                  'description':
+                      'Whether to fetch recent logcat errors (default true).',
                 },
               },
             },
@@ -715,10 +734,7 @@ class McpClientInstance {
             'name': 'device_hardware_telemetry',
             'description':
                 'Returns live device hardware profile (CPU cores, total/free RAM, battery level/state, Android SDK / Linux kernel info, Shizuku & Root mode status).',
-            'inputSchema': {
-              'type': 'object',
-              'properties': {},
-            },
+            'inputSchema': {'type': 'object', 'properties': {}},
           },
         ];
       case 'builtin:sqlite_telemetry':
@@ -747,11 +763,13 @@ class McpClientInstance {
               'properties': {
                 'dbPath': {
                   'type': 'string',
-                  'description': 'Relative or absolute path to SQLite database file.',
+                  'description':
+                      'Relative or absolute path to SQLite database file.',
                 },
                 'sql': {
                   'type': 'string',
-                  'description': 'SQL query to run (e.g. SELECT * FROM users LIMIT 20).',
+                  'description':
+                      'SQL query to run (e.g. SELECT * FROM users LIMIT 20).',
                 },
               },
               'required': ['dbPath', 'sql'],
@@ -810,8 +828,7 @@ class McpClientInstance {
           },
           {
             'name': 'list_directory',
-            'description':
-                'Lists files and subdirectories in a directory.',
+            'description': 'Lists files and subdirectories in a directory.',
             'inputSchema': {
               'type': 'object',
               'properties': {
@@ -828,30 +845,22 @@ class McpClientInstance {
           },
           {
             'name': 'file_exists',
-            'description':
-                'Checks whether a file or directory exists.',
+            'description': 'Checks whether a file or directory exists.',
             'inputSchema': {
               'type': 'object',
               'properties': {
-                'path': {
-                  'type': 'string',
-                  'description': 'Path to check.',
-                },
+                'path': {'type': 'string', 'description': 'Path to check.'},
               },
               'required': ['path'],
             },
           },
           {
             'name': 'delete_file',
-            'description':
-                'Deletes a file or empty directory.',
+            'description': 'Deletes a file or empty directory.',
             'inputSchema': {
               'type': 'object',
               'properties': {
-                'path': {
-                  'type': 'string',
-                  'description': 'Path to delete.',
-                },
+                'path': {'type': 'string', 'description': 'Path to delete.'},
               },
               'required': ['path'],
             },
@@ -880,8 +889,7 @@ class McpClientInstance {
           },
           {
             'name': 'which',
-            'description':
-                'Finds the path of an executable in PATH.',
+            'description': 'Finds the path of an executable in PATH.',
             'inputSchema': {
               'type': 'object',
               'properties': {
@@ -922,8 +930,10 @@ class McpClientInstance {
         );
         final out = StringBuffer();
         int fileCount = 0;
-        await for (final entity
-            in rootDir.list(recursive: true, followLinks: false)) {
+        await for (final entity in rootDir.list(
+          recursive: true,
+          followLinks: false,
+        )) {
           if (entity is! File) continue;
           final rel = p.relative(entity.path, from: workspace);
           if (rel.startsWith('.') ||
@@ -955,8 +965,13 @@ class McpClientInstance {
               if (m != null) {
                 final name = m.group(1) ?? m.group(2) ?? m.group(3) ?? '';
                 if (name.isNotEmpty &&
-                    !const {'if', 'for', 'while', 'switch', 'catch'}
-                        .contains(name)) {
+                    !const {
+                      'if',
+                      'for',
+                      'while',
+                      'switch',
+                      'catch',
+                    }.contains(name)) {
                   symbols.add('$name(#L${i + 1})');
                 }
               }
@@ -980,14 +995,21 @@ class McpClientInstance {
       if (toolName == 'read_symbol') {
         final rawFile = args['filePath']?.toString() ?? '';
         final symbolName = args['symbolName']?.toString().trim() ?? '';
-        final fullPath =
-            p.isAbsolute(rawFile) ? rawFile : p.join(workspace, rawFile);
+        final fullPath = p.isAbsolute(rawFile)
+            ? rawFile
+            : p.join(workspace, rawFile);
         final file = File(fullPath);
         if (!await file.exists()) {
           return {'isError': true, 'content': 'File not found: $rawFile'};
         }
         final lines = await file.readAsLines();
         final escapedSym = RegExp.escape(symbolName);
+        // Prefer the actual type/function declaration over a field or comment
+        // that merely references the same identifier (for example
+        // `final Calculator calc = Calculator()`).
+        final primaryDeclRegex = RegExp(
+          '^\\s*(?:abstract\\s+)?(?:class|enum|mixin|extension|typedef|interface|struct)\\s+$escapedSym\\b',
+        );
         final declRegex = RegExp(
           '(?:class|enum|mixin|extension|typedef|def|function|interface|struct|Widget|Future|Stream|void|String|int|bool|double|dynamic|final|const|get|set)\\b[^;]*\\b$escapedSym\\b',
         );
@@ -998,9 +1020,21 @@ class McpClientInstance {
           if (trimmed.startsWith('//') || trimmed.startsWith('import ')) {
             continue;
           }
-          if (declRegex.hasMatch(lines[i])) {
+          if (primaryDeclRegex.hasMatch(lines[i])) {
             startIdx = i;
             break;
+          }
+        }
+        if (startIdx == -1) {
+          for (var i = 0; i < lines.length; i++) {
+            final trimmed = lines[i].trimLeft();
+            if (trimmed.startsWith('//') || trimmed.startsWith('import ')) {
+              continue;
+            }
+            if (declRegex.hasMatch(lines[i])) {
+              startIdx = i;
+              break;
+            }
           }
         }
         if (startIdx == -1) {
@@ -1077,8 +1111,10 @@ class McpClientInstance {
         }
         final wordRegex = RegExp('\\b${RegExp.escape(symbolName)}\\b');
         final hits = <String>[];
-        await for (final entity
-            in rootDir.list(recursive: true, followLinks: false)) {
+        await for (final entity in rootDir.list(
+          recursive: true,
+          followLinks: false,
+        )) {
           if (entity is! File) continue;
           final rel = p.relative(entity.path, from: workspace);
           if (rel.startsWith('.') ||
@@ -1109,7 +1145,8 @@ class McpClientInstance {
 
       if (toolName == 'smart_analyze_errors') {
         final rawTarget = args['targetPath']?.toString().trim() ?? '';
-        final safeTarget = rawTarget.isNotEmpty &&
+        final safeTarget =
+            rawTarget.isNotEmpty &&
                 !rawTarget.contains(';') &&
                 !rawTarget.contains('`') &&
                 !rawTarget.contains(r'$')
@@ -1154,8 +1191,9 @@ class McpClientInstance {
         Map<String, dynamic> data = {};
         if (await memFile.exists()) {
           try {
-            data = jsonDecode(await memFile.readAsString())
-                as Map<String, dynamic>;
+            data =
+                jsonDecode(await memFile.readAsString())
+                    as Map<String, dynamic>;
           } catch (_) {}
         }
         final k = args['key']?.toString() ?? 'note';
@@ -1222,7 +1260,8 @@ class McpClientInstance {
             uri.host.isEmpty) {
           return {
             'isError': true,
-            'content': 'Invalid URL (must start with http:// or https://): $url',
+            'content':
+                'Invalid URL (must start with http:// or https://): $url',
           };
         }
         final client = HttpClient()
@@ -1271,20 +1310,21 @@ class McpClientInstance {
           final linkRe = RegExp(
             r'class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)</a>',
           );
-          final snipRe = RegExp(
-            r'class="result__snippet"[^>]*>([\s\S]*?)</a>',
-          );
+          final snipRe = RegExp(r'class="result__snippet"[^>]*>([\s\S]*?)</a>');
           final links = linkRe.allMatches(html).toList();
           final snips = snipRe.allMatches(html).toList();
           for (var i = 0; i < links.length && results.length < 8; i++) {
             var href = links[i].group(1)!.replaceAll('&amp;', '&');
-            final u = Uri.tryParse(href.startsWith('//') ? 'https:$href' : href);
+            final u = Uri.tryParse(
+              href.startsWith('//') ? 'https:$href' : href,
+            );
             if (u != null && u.queryParameters['uddg'] != null) {
               href = u.queryParameters['uddg']!;
             }
             final title = _cleanHtmlToMarkdown(links[i].group(2)!);
-            final snip =
-                i < snips.length ? _cleanHtmlToMarkdown(snips[i].group(1)!) : '';
+            final snip = i < snips.length
+                ? _cleanHtmlToMarkdown(snips[i].group(1)!)
+                : '';
             results.add('${results.length + 1}. $title\n   $href\n   $snip');
           }
           return {
@@ -1307,8 +1347,10 @@ class McpClientInstance {
         if (_ref.read(symbolIndexerProvider).files.isEmpty) {
           await indexerNotifier.scanWorkspace(workspace);
         }
-        final results =
-            await indexerNotifier.semanticSearch(query, limit: limit);
+        final results = await indexerNotifier.semanticSearch(
+          query,
+          limit: limit,
+        );
         if (results.isEmpty) {
           return {'content': 'No semantic matches found for "$query".'};
         }
@@ -1329,8 +1371,10 @@ class McpClientInstance {
         final hits = <String>[];
         final rootDir = Directory(workspace);
         if (await rootDir.exists()) {
-          await for (final entity
-              in rootDir.list(recursive: true, followLinks: false)) {
+          await for (final entity in rootDir.list(
+            recursive: true,
+            followLinks: false,
+          )) {
             if (entity is! File) continue;
             final rel = p.relative(entity.path, from: workspace);
             if (rel.startsWith('.') ||
@@ -1381,7 +1425,8 @@ class McpClientInstance {
 
       if (toolName == 'run_tests') {
         final testPath = args['testPath']?.toString().trim() ?? '';
-        final safeArg = testPath.isNotEmpty &&
+        final safeArg =
+            testPath.isNotEmpty &&
                 !testPath.contains(';') &&
                 !testPath.contains('`')
             ? ' "$testPath"'
@@ -1409,16 +1454,15 @@ class McpClientInstance {
       }
 
       if (toolName == 'get_build_diagnostics') {
-        final logLines =
-            ((args['logLines'] as num?)?.toInt() ?? 100).clamp(20, 300);
+        final logLines = ((args['logLines'] as num?)?.toInt() ?? 100).clamp(
+          20,
+          300,
+        );
         final progress = BuildProgressTracker.instance.progress.value;
         final tail = BuildProgressTracker.instance.logTail(logLines);
         final tailText = tail.join('\n');
         final diagService = _ref.read(androidBuildDiagnosticsServiceProvider);
-        final issues = diagService.parseBuildIssues(
-          tailText,
-          workspace,
-        );
+        final issues = diagService.parseBuildIssues(tailText, workspace);
         final apkInfo = diagService.findDebugApk(workspace);
 
         final buf = StringBuffer();
@@ -1459,8 +1503,8 @@ class McpClientInstance {
         int? batteryLevel;
         try {
           batteryLevel = await Battery().batteryLevel.timeout(
-                const Duration(seconds: 2),
-              );
+            const Duration(seconds: 2),
+          );
         } catch (_) {}
 
         BuildPerformanceMode perfMode;
@@ -1486,7 +1530,8 @@ class McpClientInstance {
           mode: perfMode,
         );
         return {
-          'content': 'Hardware: $hw'
+          'content':
+              'Hardware: $hw'
               '${batteryLevel != null ? ', Battery: $batteryLevel%' : ''}\n'
               'Selected Profile: ${perfMode.name} (target=${target.name})\n'
               'Command:\n$cmd',
@@ -1545,9 +1590,7 @@ class McpClientInstance {
         buf.writeln(
           'Shizuku Available: ${ShizukuBridge.instance.isAvailable} (uid=${ShizukuBridge.instance.uid})',
         );
-        buf.writeln(
-          'Connected ADB Devices (${adbState.devices.length}):',
-        );
+        buf.writeln('Connected ADB Devices (${adbState.devices.length}):');
         for (final d in adbState.devices) {
           buf.writeln(
             '- ${d.id} [${d.status.name}] model=${d.model} (${d.androidVersion ?? 'Android'})',
@@ -1569,9 +1612,7 @@ class McpClientInstance {
           batteryLevel = await b.batteryLevel.timeout(
             const Duration(seconds: 2),
           );
-          final st = await b.batteryState.timeout(
-            const Duration(seconds: 2),
-          );
+          final st = await b.batteryState.timeout(const Duration(seconds: 2));
           batteryState = st.name;
         } catch (_) {}
 
@@ -1591,8 +1632,7 @@ class McpClientInstance {
           'content': [
             'Device: $deviceModel',
             'Hardware: $hw',
-            if (batteryLevel != null)
-              'Battery: $batteryLevel% ($batteryState)',
+            if (batteryLevel != null) 'Battery: $batteryLevel% ($batteryState)',
             'Execution Mode: ${runtime.useNativeRootMode ? 'Native Root Kernel (su)' : 'Ubuntu 24.04 PRoot Sandbox'}',
             'Shizuku: binder=${ShizukuBridge.instance.isBinderAlive}, permission=${ShizukuBridge.instance.hasPermission}, uid=${ShizukuBridge.instance.uid}',
           ].join('\n'),
@@ -1605,8 +1645,10 @@ class McpClientInstance {
           final found = <String>[];
           final rootDir = Directory(workspace);
           if (await rootDir.exists()) {
-            await for (final entity
-                in rootDir.list(recursive: true, followLinks: false)) {
+            await for (final entity in rootDir.list(
+              recursive: true,
+              followLinks: false,
+            )) {
               if (entity is! File) continue;
               final ext = p.extension(entity.path).toLowerCase();
               if (const {'.db', '.sqlite', '.sqlite3'}.contains(ext)) {
@@ -1620,8 +1662,7 @@ class McpClientInstance {
                 : 'Found SQLite database files:\n${found.join('\n')}',
           };
         }
-        final fullPath =
-            p.isAbsolute(rawDb) ? rawDb : p.join(workspace, rawDb);
+        final fullPath = p.isAbsolute(rawDb) ? rawDb : p.join(workspace, rawDb);
         if (!await File(fullPath).exists()) {
           return {'isError': true, 'content': 'Database not found: $rawDb'};
         }
@@ -1633,12 +1674,15 @@ class McpClientInstance {
           final tables = await db.rawQuery(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
           );
-          final buf = StringBuffer('Database: $rawDb (${tables.length} tables)\n');
+          final buf = StringBuffer(
+            'Database: $rawDb (${tables.length} tables)\n',
+          );
           for (final t in tables) {
             final tName = t['name']?.toString() ?? '';
             final cols = await db.rawQuery('PRAGMA table_info("$tName")');
-            final cntRes =
-                await db.rawQuery('SELECT COUNT(*) as cnt FROM "$tName"');
+            final cntRes = await db.rawQuery(
+              'SELECT COUNT(*) as cnt FROM "$tName"',
+            );
             final cnt = cntRes.isNotEmpty ? cntRes.first['cnt'] : 0;
             final colSummary = cols
                 .map(
@@ -1663,8 +1707,7 @@ class McpClientInstance {
             'content': 'Both dbPath and sql are required.',
           };
         }
-        final fullPath =
-            p.isAbsolute(rawDb) ? rawDb : p.join(workspace, rawDb);
+        final fullPath = p.isAbsolute(rawDb) ? rawDb : p.join(workspace, rawDb);
         if (!await File(fullPath).exists()) {
           return {'isError': true, 'content': 'Database not found: $rawDb'};
         }
@@ -1683,8 +1726,9 @@ class McpClientInstance {
 
       if (toolName == 'inspect_network_and_logs') {
         final limit = ((args['limit'] as num?)?.toInt() ?? 20).clamp(1, 60);
-        final reqs =
-            NetworkInspectorService.requestsNotifier.value.take(limit).toList();
+        final reqs = NetworkInspectorService.requestsNotifier.value
+            .take(limit)
+            .toList();
         final logs = TalkerService.talker.history.reversed.take(limit).toList();
         final buf = StringBuffer();
         buf.writeln('Captured HTTP Requests (${reqs.length}):');
@@ -1706,7 +1750,9 @@ class McpClientInstance {
       if (builtinId == 'builtin:filesystem') {
         if (toolName == 'read_file') {
           final path = args['path']?.toString() ?? '';
-          final file = File(p.isAbsolute(path) ? path : p.join(workspace, path));
+          final file = File(
+            p.isAbsolute(path) ? path : p.join(workspace, path),
+          );
           if (!await file.exists()) {
             return {'isError': true, 'content': 'File not found: $path'};
           }
@@ -1716,7 +1762,9 @@ class McpClientInstance {
         if (toolName == 'write_file') {
           final path = args['path']?.toString() ?? '';
           final content = args['content']?.toString() ?? '';
-          final file = File(p.isAbsolute(path) ? path : p.join(workspace, path));
+          final file = File(
+            p.isAbsolute(path) ? path : p.join(workspace, path),
+          );
           await file.parent.create(recursive: true);
           await file.writeAsString(content);
           return {'content': 'Written ${content.length} bytes to $path'};
@@ -1728,26 +1776,37 @@ class McpClientInstance {
             p.isAbsolute(dirPath) ? dirPath : p.join(workspace, dirPath),
           );
           if (!await dir.exists()) {
-            return {'isError': true, 'content': 'Directory not found: $dirPath'};
+            return {
+              'isError': true,
+              'content': 'Directory not found: $dirPath',
+            };
           }
           final buf = StringBuffer();
-          await for (final entity
-              in dir.list(recursive: recursive, followLinks: false)) {
-            buf.writeln('${entity.path} (${entity.runtimeType == File ? 'file' : 'dir'})');
+          await for (final entity in dir.list(
+            recursive: recursive,
+            followLinks: false,
+          )) {
+            buf.writeln(
+              '${entity.path} (${entity.runtimeType == File ? 'file' : 'dir'})',
+            );
           }
           return {'content': buf.toString().trim()};
         }
         if (toolName == 'file_exists') {
           final path = args['path']?.toString() ?? '';
-          final f = FileSystemEntity.type(
+          final f = await FileSystemEntity.type(
             p.isAbsolute(path) ? path : p.join(workspace, path),
           );
-          return {'content': f != FileSystemEntityType.notFound ? 'exists' : 'not found'};
+          return {
+            'content': f != FileSystemEntityType.notFound
+                ? 'exists'
+                : 'not found',
+          };
         }
         if (toolName == 'delete_file') {
           final path = args['path']?.toString() ?? '';
           final target = p.isAbsolute(path) ? path : p.join(workspace, path);
-          final type = FileSystemEntity.type(target);
+          final type = await FileSystemEntity.type(target);
           if (type != FileSystemEntityType.notFound) {
             if (type == FileSystemEntityType.file) {
               await File(target).delete();
@@ -1768,7 +1827,7 @@ class McpClientInstance {
               'sh',
               ['-c', command],
               workingDirectory: workspace,
-            );
+            ).timeout(Duration(seconds: timeoutSec));
             return {
               'content':
                   'EXIT CODE: ${result.exitCode}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}',
@@ -1784,7 +1843,10 @@ class McpClientInstance {
             if (result.exitCode == 0) {
               return {'content': result.stdout.trim()};
             }
-            return {'isError': true, 'content': 'Executable not found: $executable'};
+            return {
+              'isError': true,
+              'content': 'Executable not found: $executable',
+            };
           } catch (e) {
             return {'isError': true, 'content': 'which failed: $e'};
           }
@@ -1799,14 +1861,18 @@ class McpClientInstance {
   static String _cleanHtmlToMarkdown(String html) {
     var t = html
         .replaceAll(
-          RegExp(r'<(script|style|noscript|svg)[\s\S]*?</\1>',
-              caseSensitive: false),
+          RegExp(
+            r'<(script|style|noscript|svg)[\s\S]*?</\1>',
+            caseSensitive: false,
+          ),
           ' ',
         )
         .replaceAll(RegExp(r'<!--[\s\S]*?-->'), ' ')
         .replaceAll(
-          RegExp(r'<(br|/p|/div|/li|/h[1-6]|/tr|/pre)[^>]*>',
-              caseSensitive: false),
+          RegExp(
+            r'<(br|/p|/div|/li|/h[1-6]|/tr|/pre)[^>]*>',
+            caseSensitive: false,
+          ),
           '\n',
         )
         .replaceAll(RegExp(r'<[^>]+>'), ' ');
@@ -1846,57 +1912,69 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
   final Ref _ref;
   final Map<String, McpClientInstance> _clients = {};
   bool _internetAccess = true;
+  late final Future<void> _ready;
 
   McpService(this._ref) : super([]) {
-    _loadConfigs();
+    _ready = _loadConfigs();
   }
 
   bool get internetAccess => _internetAccess;
 
+  static McpCategory categoryForServer(String name) => switch (name) {
+    'quantum-codegraph' => McpCategory.architecture,
+    'quantum-token-saver' => McpCategory.diagnostics,
+    'quantum-build-doctor' => McpCategory.build,
+    'quantum-device-qa' => McpCategory.devices,
+    'quantum-memory' => McpCategory.memory,
+    'quantum-web-fetch' => McpCategory.web,
+    'quantum-sqlite-telemetry' => McpCategory.data,
+    _ => McpCategory.architecture,
+  };
+
   static List<McpServerConfig> defaultBuiltinServers() => [
-        McpServerConfig(
-          name: 'quantum-codegraph',
-          type: McpServerType.stdio,
-          command: 'builtin:codegraph',
-          isEnabled: true,
-        ),
-        McpServerConfig(
-          name: 'quantum-token-saver',
-          type: McpServerType.stdio,
-          command: 'builtin:token_saver',
-          isEnabled: true,
-        ),
-        McpServerConfig(
-          name: 'quantum-memory',
-          type: McpServerType.stdio,
-          command: 'builtin:memory',
-          isEnabled: true,
-        ),
-        McpServerConfig(
-          name: 'quantum-web-fetch',
-          type: McpServerType.stdio,
-          command: 'builtin:web_fetch',
-          isEnabled: true,
-        ),
-        McpServerConfig(
-          name: 'quantum-build-doctor',
-          type: McpServerType.stdio,
-          command: 'builtin:build_doctor',
-          isEnabled: true,
-        ),
-        McpServerConfig(
-          name: 'quantum-device-qa',
-          type: McpServerType.stdio,
-          command: 'builtin:device_qa',
-          isEnabled: true,
-        ),
-        McpServerConfig(
-          name: 'quantum-sqlite-telemetry',
-          type: McpServerType.stdio,
-          command: 'builtin:sqlite_telemetry',
-          isEnabled: true,
-        ),
-      ];
+    McpServerConfig(
+      name: 'quantum-codegraph',
+      type: McpServerType.stdio,
+      command: 'builtin:codegraph',
+      isEnabled: true,
+    ),
+    McpServerConfig(
+      name: 'quantum-token-saver',
+      type: McpServerType.stdio,
+      command: 'builtin:token_saver',
+      isEnabled: true,
+    ),
+    McpServerConfig(
+      name: 'quantum-memory',
+      type: McpServerType.stdio,
+      command: 'builtin:memory',
+      isEnabled: true,
+    ),
+    McpServerConfig(
+      name: 'quantum-web-fetch',
+      type: McpServerType.stdio,
+      command: 'builtin:web_fetch',
+      isEnabled: true,
+    ),
+    McpServerConfig(
+      name: 'quantum-build-doctor',
+      type: McpServerType.stdio,
+      command: 'builtin:build_doctor',
+      isEnabled: true,
+    ),
+    McpServerConfig(
+      name: 'quantum-device-qa',
+      type: McpServerType.stdio,
+      command: 'builtin:device_qa',
+      isEnabled: true,
+    ),
+    McpServerConfig(
+      name: 'quantum-sqlite-telemetry',
+      type: McpServerType.stdio,
+      command: 'builtin:sqlite_telemetry',
+      isEnabled: true,
+    ),
+  ];
 
   Future<void> _loadConfigs() async {
     final prefs = await SharedPreferences.getInstance();
@@ -1906,7 +1984,9 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
       try {
         final loaded = list
             .map((s) => McpServerConfig.fromJson(jsonDecode(s)))
-            .where((s) => s.command != 'uvx') // Remove broken legacy uvx servers
+            .where(
+              (s) => s.command != 'uvx',
+            ) // Remove broken legacy uvx servers
             .toList();
         final existingNames = loaded.map((s) => s.name).toSet();
         for (final builtin in defaultBuiltinServers()) {
@@ -1914,6 +1994,7 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
             loaded.add(builtin);
           }
         }
+        if (!mounted) return;
         state = loaded;
         for (final server in state) {
           if (server.isEnabled) {
@@ -1928,6 +2009,7 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
       }
     }
     // Initialize with fast built-in native MCP servers on first run
+    if (!mounted) return;
     state = defaultBuiltinServers();
     await saveConfigs();
   }
@@ -1947,7 +2029,9 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
   }
 
   Future<void> saveConfigs() async {
+    if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     final list = state.map((s) => jsonEncode(s.toJson())).toList();
     await prefs.setStringList('mcp_servers', list);
   }
@@ -1962,98 +2046,98 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
   }
 
   static List<({String title, String description, McpServerConfig config})>
-      topPresets({String workspacePath = '.'}) => [
-            (
-              title: '⚡ Quantum CodeGraph (AST, BM25 Поиск & Символы)',
-              description:
-                  'Встроенный индекс классов, функций, виджетов, поиск связей и BM25 семантический поиск кода',
-              config: McpServerConfig(
-                name: 'quantum-codegraph',
-                type: McpServerType.stdio,
-                command: 'builtin:codegraph',
-              ),
-            ),
-            (
-              title: '🛡️ Quantum Smart Analyzer & Test Runner',
-              description:
-                  'Сжатая диагностика ошибок (analyze/tsc/cargo), запуск тестов (run_tests) и поиск TODO/FIXME/BUG',
-              config: McpServerConfig(
-                name: 'quantum-token-saver',
-                type: McpServerType.stdio,
-                command: 'builtin:token_saver',
-              ),
-            ),
-            (
-              title: '🩺 Quantum Build Doctor & APK Installer',
-              description:
-                  'Анализ логов сборки Gradle/AAPT2/NDK, расчёт оптимальных флагов под CPU/RAM/батарею и установка APK',
-              config: McpServerConfig(
-                name: 'quantum-build-doctor',
-                type: McpServerType.stdio,
-                command: 'builtin:build_doctor',
-              ),
-            ),
-            (
-              title: '📱 Quantum Device QA, ADB & Shizuku Telemetry',
-              description:
-                  'Инспекция ADB/USB-OTG устройств, Logcat ошибок, статуса Shizuku, батареи и RenderFlex ошибок UI',
-              config: McpServerConfig(
-                name: 'quantum-device-qa',
-                type: McpServerType.stdio,
-                command: 'builtin:device_qa',
-              ),
-            ),
-            (
-              title: '🗄️ Quantum SQLite & Network Inspector',
-              description:
-                  'Прямой просмотр таблиц и SQL-запросы к базам SQLite проекта + перехват HTTP-запросов и логов Talker',
-              config: McpServerConfig(
-                name: 'quantum-sqlite-telemetry',
-                type: McpServerType.stdio,
-                command: 'builtin:sqlite_telemetry',
-              ),
-            ),
-            (
-              title: '🧠 Quantum Project Memory (Долгосрочная память проекта)',
-              description:
-                  'Запоминает архитектуру проекта, пути к SDK и решённые баги между сессиями',
-              config: McpServerConfig(
-                name: 'quantum-memory',
-                type: McpServerType.stdio,
-                command: 'builtin:memory',
-              ),
-            ),
-            (
-              title: '🌐 Quantum Web Fetch & Search (Документация и Поиск)',
-              description:
-                  'Поиск в интернете и быстрая загрузка документации в чистом текстовом виде без лишних токенов',
-              config: McpServerConfig(
-                name: 'quantum-web-fetch',
-                type: McpServerType.stdio,
-                command: 'builtin:web_fetch',
-              ),
-            ),
-            (
-              title: '📂 Quantum Filesystem (Builtin, без npm)',
-              description:
-                  'Безопасная работа с файлами и каталогами проекта через встроенный Dart IO (не требует npm/npx)',
-              config: McpServerConfig(
-                name: 'quantum-filesystem',
-                type: McpServerType.stdio,
-                command: 'builtin:filesystem',
-              ),
-            ),
-            (
-              title: '🐚 Quantum Shell/Terminal (Builtin, без npm)',
-              description:
-                  'Выполнение команд оболочки и терминала через встроенный Process API (не требует npm/npx)',
-              config: McpServerConfig(
-                name: 'quantum-shell',
-                type: McpServerType.stdio,
-                command: 'builtin:shell',
-              ),
-            ),
-          ];
+  topPresets({String workspacePath = '.'}) => [
+    (
+      title: '⚡ Quantum CodeGraph (AST, BM25 Поиск & Символы)',
+      description:
+          'Встроенный индекс классов, функций, виджетов, поиск связей и BM25 семантический поиск кода',
+      config: McpServerConfig(
+        name: 'quantum-codegraph',
+        type: McpServerType.stdio,
+        command: 'builtin:codegraph',
+      ),
+    ),
+    (
+      title: '🛡️ Quantum Smart Analyzer & Test Runner',
+      description:
+          'Сжатая диагностика ошибок (analyze/tsc/cargo), запуск тестов (run_tests) и поиск TODO/FIXME/BUG',
+      config: McpServerConfig(
+        name: 'quantum-token-saver',
+        type: McpServerType.stdio,
+        command: 'builtin:token_saver',
+      ),
+    ),
+    (
+      title: '🩺 Quantum Build Doctor & APK Installer',
+      description:
+          'Анализ логов сборки Gradle/AAPT2/NDK, расчёт оптимальных флагов под CPU/RAM/батарею и установка APK',
+      config: McpServerConfig(
+        name: 'quantum-build-doctor',
+        type: McpServerType.stdio,
+        command: 'builtin:build_doctor',
+      ),
+    ),
+    (
+      title: '📱 Quantum Device QA, ADB & Shizuku Telemetry',
+      description:
+          'Инспекция ADB/USB-OTG устройств, Logcat ошибок, статуса Shizuku, батареи и RenderFlex ошибок UI',
+      config: McpServerConfig(
+        name: 'quantum-device-qa',
+        type: McpServerType.stdio,
+        command: 'builtin:device_qa',
+      ),
+    ),
+    (
+      title: '🗄️ Quantum SQLite & Network Inspector',
+      description:
+          'Прямой просмотр таблиц и SQL-запросы к базам SQLite проекта + перехват HTTP-запросов и логов Talker',
+      config: McpServerConfig(
+        name: 'quantum-sqlite-telemetry',
+        type: McpServerType.stdio,
+        command: 'builtin:sqlite_telemetry',
+      ),
+    ),
+    (
+      title: '🧠 Quantum Project Memory (Долгосрочная память проекта)',
+      description:
+          'Запоминает архитектуру проекта, пути к SDK и решённые баги между сессиями',
+      config: McpServerConfig(
+        name: 'quantum-memory',
+        type: McpServerType.stdio,
+        command: 'builtin:memory',
+      ),
+    ),
+    (
+      title: '🌐 Quantum Web Fetch & Search (Документация и Поиск)',
+      description:
+          'Поиск в интернете и быстрая загрузка документации в чистом текстовом виде без лишних токенов',
+      config: McpServerConfig(
+        name: 'quantum-web-fetch',
+        type: McpServerType.stdio,
+        command: 'builtin:web_fetch',
+      ),
+    ),
+    (
+      title: '📂 Quantum Filesystem (Builtin, без npm)',
+      description:
+          'Безопасная работа с файлами и каталогами проекта через встроенный Dart IO (не требует npm/npx)',
+      config: McpServerConfig(
+        name: 'quantum-filesystem',
+        type: McpServerType.stdio,
+        command: 'builtin:filesystem',
+      ),
+    ),
+    (
+      title: '🐚 Quantum Shell/Terminal (Builtin, без npm)',
+      description:
+          'Выполнение команд оболочки и терминала через встроенный Process API (не требует npm/npx)',
+      config: McpServerConfig(
+        name: 'quantum-shell',
+        type: McpServerType.stdio,
+        command: 'builtin:shell',
+      ),
+    ),
+  ];
 
   Future<void> removeServer(String name) async {
     final client = _clients.remove(name);
@@ -2083,6 +2167,8 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
   Future<List<Map<String, dynamic>>> getAvailableMcpTools({
     bool forceRefresh = false,
   }) async {
+    await _ready;
+    if (!mounted) return const [];
     final enabledServers = state.where((s) => s.isEnabled).toList();
     if (enabledServers.isEmpty) return const [];
 
@@ -2121,6 +2207,10 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
     String toolName,
     Map<String, dynamic> arguments,
   ) async {
+    await _ready;
+    if (!mounted) {
+      throw StateError('MCP service is disposed');
+    }
     final server = state.firstWhere(
       (s) => s.name == serverName,
       orElse: () =>
@@ -2143,5 +2233,5 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
 
 final mcpServiceProvider =
     StateNotifierProvider<McpService, List<McpServerConfig>>((ref) {
-  return McpService(ref);
-});
+      return McpService(ref);
+    });

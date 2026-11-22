@@ -16,7 +16,9 @@ void main() {
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-      tempWorkspace = await Directory.systemTemp.createTemp('quantum_mcp_test_');
+      tempWorkspace = await Directory.systemTemp.createTemp(
+        'quantum_mcp_test_',
+      );
       final sampleFile = File('${tempWorkspace.path}/sample.dart');
       await sampleFile.writeAsString('''
 import 'dart:async';
@@ -38,10 +40,9 @@ class Calculator {
 ''');
 
       container = ProviderContainer();
-      container.read(workspaceProvider.notifier).setWorkspace(
-            tempWorkspace.path,
-            'test_project',
-          );
+      await container
+          .read(workspaceProvider.notifier)
+          .setWorkspace(tempWorkspace.path);
     });
 
     tearDown(() async {
@@ -73,104 +74,126 @@ class Calculator {
       expect(toolNames, contains('quantum-build-doctor/install_built_apk'));
       expect(toolNames, contains('quantum-device-qa/qa_get_runtime_errors'));
       expect(toolNames, contains('quantum-device-qa/adb_devices_and_logcat'));
-      expect(toolNames, contains('quantum-device-qa/device_hardware_telemetry'));
-      expect(toolNames, contains('quantum-sqlite-telemetry/sqlite_inspect_schema'));
+      expect(
+        toolNames,
+        contains('quantum-device-qa/device_hardware_telemetry'),
+      );
+      expect(
+        toolNames,
+        contains('quantum-sqlite-telemetry/sqlite_inspect_schema'),
+      );
       expect(toolNames, contains('quantum-sqlite-telemetry/sqlite_query'));
-      expect(toolNames, contains('quantum-sqlite-telemetry/inspect_network_and_logs'));
+      expect(
+        toolNames,
+        contains('quantum-sqlite-telemetry/inspect_network_and_logs'),
+      );
     });
 
-    test('quantum-codegraph: project_symbols, read_symbol, and find_symbol_usages', () async {
-      final mcpNotifier = container.read(mcpServiceProvider.notifier);
+    test(
+      'quantum-codegraph: project_symbols, read_symbol, and find_symbol_usages',
+      () async {
+        final mcpNotifier = container.read(mcpServiceProvider.notifier);
 
-      final symbolsRes = await mcpNotifier.executeMcpTool(
-        'quantum-codegraph',
-        'project_symbols',
-        {},
-      );
-      expect(symbolsRes['content'].toString(), contains('Calculator'));
-      expect(symbolsRes['content'].toString(), contains('Helper'));
+        final symbolsRes = await mcpNotifier.executeMcpTool(
+          'quantum-codegraph',
+          'project_symbols',
+          {},
+        );
+        expect(symbolsRes['content'].toString(), contains('Calculator'));
+        expect(symbolsRes['content'].toString(), contains('Helper'));
 
-      // read_symbol should skip comment/field reference and locate actual class declaration
-      final readRes = await mcpNotifier.executeMcpTool(
-        'quantum-codegraph',
-        'read_symbol',
-        {
-          'filePath': 'sample.dart',
-          'symbolName': 'Calculator',
-        },
-      );
-      expect(readRes['isError'], isNot(true));
-      expect(readRes['range'], equals('#L8-16'));
-      expect(readRes['content'].toString(), contains('class Calculator {'));
-      expect(readRes['content'].toString(), contains('int multiply(int a, int b)'));
+        // read_symbol should skip comment/field reference and locate actual class declaration
+        final readRes = await mcpNotifier.executeMcpTool(
+          'quantum-codegraph',
+          'read_symbol',
+          {'filePath': 'sample.dart', 'symbolName': 'Calculator'},
+        );
+        expect(readRes['isError'], isNot(true));
+        expect(readRes['range'], equals('#L8-16'));
+        expect(readRes['content'].toString(), contains('class Calculator {'));
+        expect(
+          readRes['content'].toString(),
+          contains('int multiply(int a, int b)'),
+        );
 
-      final usagesRes = await mcpNotifier.executeMcpTool(
-        'quantum-codegraph',
-        'find_symbol_usages',
-        {'symbolName': 'Calculator'},
-      );
-      expect(usagesRes['content'].toString(), contains('sample.dart:5:'));
-      expect(usagesRes['content'].toString(), contains('sample.dart:8:'));
-    });
+        final usagesRes = await mcpNotifier.executeMcpTool(
+          'quantum-codegraph',
+          'find_symbol_usages',
+          {'symbolName': 'Calculator'},
+        );
+        expect(usagesRes['content'].toString(), contains('sample.dart:5:'));
+        expect(usagesRes['content'].toString(), contains('sample.dart:8:'));
+      },
+    );
 
-    test('quantum-memory: save_memory, read_memory, and delete_memory', () async {
-      final mcpNotifier = container.read(mcpServiceProvider.notifier);
+    test(
+      'quantum-memory: save_memory, read_memory, and delete_memory',
+      () async {
+        final mcpNotifier = container.read(mcpServiceProvider.notifier);
 
-      final saveRes = await mcpNotifier.executeMcpTool(
-        'quantum-memory',
-        'save_memory',
-        {'key': 'architecture', 'fact': 'Riverpod + GoRouter'},
-      );
-      expect(saveRes['content'].toString(), contains('Saved [architecture]'));
+        final saveRes = await mcpNotifier.executeMcpTool(
+          'quantum-memory',
+          'save_memory',
+          {'key': 'architecture', 'fact': 'Riverpod + GoRouter'},
+        );
+        expect(saveRes['content'].toString(), contains('Saved [architecture]'));
 
-      final readRes = await mcpNotifier.executeMcpTool(
-        'quantum-memory',
-        'read_memory',
-        {'key': 'architecture'},
-      );
-      expect(readRes['content'].toString(), contains('Riverpod + GoRouter'));
+        final readRes = await mcpNotifier.executeMcpTool(
+          'quantum-memory',
+          'read_memory',
+          {'key': 'architecture'},
+        );
+        expect(readRes['content'].toString(), contains('Riverpod + GoRouter'));
 
-      final delRes = await mcpNotifier.executeMcpTool(
-        'quantum-memory',
-        'delete_memory',
-        {'key': 'architecture'},
-      );
-      expect(delRes['content'].toString(), contains('Deleted [architecture]'));
-    });
+        final delRes = await mcpNotifier.executeMcpTool(
+          'quantum-memory',
+          'delete_memory',
+          {'key': 'architecture'},
+        );
+        expect(
+          delRes['content'].toString(),
+          contains('Deleted [architecture]'),
+        );
+      },
+    );
   });
 
   group('RoxumAgenticTools & AgentToolbox MCP Parsing', () {
-    test('RoxumAgenticTools caps MCP function names at <= 64 chars and formats output cleanly', () {
-      final rawTools = [
-        {
-          'server': 'very_long_custom_enterprise_mcp_server_name_identifier',
-          'name': 'extremely_long_tool_function_name_that_exceeds_sixty_four_characters',
-          'description': 'Test long MCP tool name',
-          'inputSchema': {
-            'type': 'object',
-            'properties': {
-              'query': {'type': 'string'},
+    test(
+      'RoxumAgenticTools caps MCP function names at <= 64 chars and formats output cleanly',
+      () {
+        final rawTools = [
+          {
+            'server': 'very_long_custom_enterprise_mcp_server_name_identifier',
+            'name':
+                'extremely_long_tool_function_name_that_exceeds_sixty_four_characters',
+            'description': 'Test long MCP tool name',
+            'inputSchema': {
+              'type': 'object',
+              'properties': {
+                'query': {'type': 'string'},
+              },
+              'required': ['query'],
             },
-            'required': ['query'],
           },
-        },
-      ];
+        ];
 
-      final built = RoxumAgenticTools.buildMcpOpenAiTools(rawTools);
-      expect(built, hasLength(1));
-      final fn = built.first['function'] as Map<String, dynamic>;
-      final safeName = fn['name'] as String;
-      expect(safeName.length, lessThanOrEqualTo(64));
-      expect(safeName, startsWith('mcp__'));
+        final built = RoxumAgenticTools.buildMcpOpenAiTools(rawTools);
+        expect(built, hasLength(1));
+        final fn = built.first['function'] as Map<String, dynamic>;
+        final safeName = fn['name'] as String;
+        expect(safeName.length, lessThanOrEqualTo(64));
+        expect(safeName, startsWith('mcp__'));
 
-      final formatted = RoxumAgenticTools.formatMcpResult({
-        'content': [
-          {'type': 'text', 'text': 'Line 1'},
-          {'type': 'text', 'text': 'Line 2'},
-        ],
-      });
-      expect(formatted, equals('Line 1\nLine 2'));
-    });
+        final formatted = RoxumAgenticTools.formatMcpResult({
+          'content': [
+            {'type': 'text', 'text': 'Line 1'},
+            {'type': 'text', 'text': 'Line 2'},
+          ],
+        });
+        expect(formatted, equals('Line 1\nLine 2'));
+      },
+    );
 
     test('AgentToolbox.parse supports single/double quotes and MCP calls', () {
       const sampleOutput = '''

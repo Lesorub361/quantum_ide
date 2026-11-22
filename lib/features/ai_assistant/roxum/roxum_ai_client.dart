@@ -6,6 +6,7 @@ import 'package:dio_smart_retry/dio_smart_retry.dart';
 import 'package:http/http.dart' as http;
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
+import 'package:quantum_ide/core/services/token_counter_service.dart';
 
 enum RoxumToolCallingMethod {
   openAiCompatible,
@@ -117,10 +118,7 @@ class RoxumModelOption {
       }
     }
     if (settings.anthropicApiKey.trim().isNotEmpty) {
-      for (final m in [
-        'claude-sonnet-4-20250514',
-        'claude-3-5-haiku-latest',
-      ]) {
+      for (final m in ['claude-sonnet-4-20250514', 'claude-3-5-haiku-latest']) {
         list.add(
           RoxumModelOption(
             id: 'anthropic:$m',
@@ -348,10 +346,7 @@ class RoxumAiClient {
       RetryInterceptor(
         dio: dio,
         retries: 2,
-        retryDelays: const [
-          Duration(milliseconds: 450),
-          Duration(seconds: 1),
-        ],
+        retryDelays: const [Duration(milliseconds: 450), Duration(seconds: 1)],
       ),
     );
     return dio;
@@ -372,8 +367,8 @@ class RoxumAiClient {
     final rawClean = raw.endsWith('/models')
         ? raw
         : (raw.endsWith('/chat/completions')
-            ? '${raw.substring(0, raw.length - '/chat/completions'.length)}/models'
-            : '$raw/models');
+              ? '${raw.substring(0, raw.length - '/chat/completions'.length)}/models'
+              : '$raw/models');
     final rootBase = normalized.endsWith('/v1')
         ? normalized.substring(0, normalized.length - 3)
         : normalized;
@@ -401,7 +396,9 @@ class RoxumAiClient {
           lastError = Exception('HTTP $status ($url)');
           continue;
         }
-        final decoded = res.data is String ? jsonDecode(res.data as String) : res.data;
+        final decoded = res.data is String
+            ? jsonDecode(res.data as String)
+            : res.data;
         final ids = <String>[];
         if (decoded is Map && decoded['data'] is List) {
           for (final item in decoded['data'] as List) {
@@ -450,7 +447,9 @@ class RoxumAiClient {
         );
         final status = res.statusCode ?? 0;
         if (status < 200 || status >= 300) return const [];
-        final decoded = res.data is String ? jsonDecode(res.data as String) : res.data;
+        final decoded = res.data is String
+            ? jsonDecode(res.data as String)
+            : res.data;
         if (decoded is! Map || decoded['data'] is! List) return const [];
         final out = <RoxumModelOption>[];
         for (final item in decoded['data'] as List) {
@@ -458,7 +457,8 @@ class RoxumAiClient {
           final id = item['id'].toString();
           if (filter != null && !filter(id)) continue;
           final pricing = item['pricing'];
-          final isFree = defaultFree ||
+          final isFree =
+              defaultFree ||
               id.contains(':free') ||
               (pricing is Map && pricing['prompt']?.toString() == '0');
           out.add(
@@ -548,7 +548,8 @@ class RoxumAiClient {
           final out = <RoxumModelOption>[];
           for (final m in decoded['models'] as List) {
             if (m is! Map) continue;
-            final methods = (m['supportedGenerationMethods'] as List?) ?? const [];
+            final methods =
+                (m['supportedGenerationMethods'] as List?) ?? const [];
             if (!methods.contains('generateContent')) continue;
             var id = m['name']?.toString() ?? '';
             if (id.startsWith('models/')) id = id.substring(7);
@@ -606,13 +607,12 @@ class RoxumAiClient {
       futures.add(() async {
         final key = settings.anthropicApiKey.trim();
         try {
-          final res = await http.get(
-            Uri.parse('https://api.anthropic.com/v1/models'),
-            headers: {
-              'x-api-key': key,
-              'anthropic-version': '2023-06-01',
-            },
-          ).timeout(const Duration(seconds: 7));
+          final res = await http
+              .get(
+                Uri.parse('https://api.anthropic.com/v1/models'),
+                headers: {'x-api-key': key, 'anthropic-version': '2023-06-01'},
+              )
+              .timeout(const Duration(seconds: 7));
           if (res.statusCode < 200 || res.statusCode >= 300) {
             return const <RoxumModelOption>[];
           }
@@ -686,9 +686,7 @@ class RoxumAiClient {
     final res = await http
         .get(
           Uri.parse('https://openrouter.ai/api/v1/key'),
-          headers: {
-            'Authorization': 'Bearer ${apiKey.trim()}',
-          },
+          headers: {'Authorization': 'Bearer ${apiKey.trim()}'},
         )
         .timeout(const Duration(seconds: 8));
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -696,8 +694,8 @@ class RoxumAiClient {
     }
     final decoded = jsonDecode(res.body) as Map<String, dynamic>;
     final data = (decoded['data'] as Map?)?.cast<String, dynamic>() ?? decoded;
-    final freeDaily =
-        (data['free_model_daily_requests'] as Map?)?.cast<String, dynamic>();
+    final freeDaily = (data['free_model_daily_requests'] as Map?)
+        ?.cast<String, dynamic>();
     return OpenRouterKeyLimits(
       label: data['label']?.toString() ?? 'OpenRouter Key',
       limitUsd: (data['limit'] as num?)?.toDouble(),
@@ -720,6 +718,7 @@ class RoxumAiClient {
     required void Function(RoxumToolCallRecord record) onToolEvent,
     required void Function(String partialText) onAssistantText,
     void Function(String reasoningText)? onReasoningText,
+    void Function(String status)? onRetryStatus,
     void Function(int step)? onStepStart,
     void Function(RoxumUsageStats usage)? onUsage,
     required bool Function() isCancelled,
@@ -756,6 +755,7 @@ class RoxumAiClient {
             onAssistantText: onAssistantText,
             onReasoningText: onReasoningText,
             isCancelled: isCancelled,
+            onRetryStatus: onRetryStatus,
           );
         } else {
           final res = await client
@@ -788,12 +788,16 @@ class RoxumAiClient {
 
         if (isCancelled()) return '';
 
-        if (turn.usage.totalTokens > 0 || turn.usage.costUsd > 0) {
-          onUsage?.call(turn.usage);
+        final effectiveTurn = turn.usage.totalTokens > 0
+            ? turn
+            : _withEstimatedUsage(turn, messages, tools);
+        if (effectiveTurn.usage.totalTokens > 0 ||
+            effectiveTurn.usage.costUsd > 0) {
+          onUsage?.call(effectiveTurn.usage);
         }
 
-        if (turn.toolCalls.isEmpty || agenticTools == null) {
-          final cleanAnswer = _splitThinkTags(turn.text).answer;
+        if (effectiveTurn.toolCalls.isEmpty || agenticTools == null) {
+          final cleanAnswer = _splitThinkTags(effectiveTurn.text).answer;
           if (agenticTools != null &&
               tools.isNotEmpty &&
               !executedAnyTool &&
@@ -805,7 +809,7 @@ class RoxumAiClient {
               'role': 'user',
               'content':
                   'СТОП! Ты не вызвал ни одного инструмента (readFile / editFile / writeFile / runCommand), поэтому в проекте НИЧЕГО не изменилось. '
-                      'Не пиши отчёт о несуществующих правках — прямо сейчас вызови инструменты и реально прочитай и отредактируй файлы.',
+                  'Не пиши отчёт о несуществующих правках — прямо сейчас вызови инструменты и реально прочитай и отредактируй файлы.',
             });
             continue;
           }
@@ -818,8 +822,8 @@ class RoxumAiClient {
                 'role': 'user',
                 'content':
                     'Ты остановился после выполнения инструментов и не написал ответ. '
-                        'Если задача не завершена — продолжи вызов инструментов. '
-                        'Если завершена или возникла ошибка — кратко напиши итог и результат.',
+                    'Если задача не завершена — продолжи вызов инструментов. '
+                    'Если завершена или возникла ошибка — кратко напиши итог и результат.',
               });
               continue;
             }
@@ -829,9 +833,9 @@ class RoxumAiClient {
         }
 
         executedAnyTool = true;
-        messages.add(turn.rawAssistantMessage);
+        messages.add(effectiveTurn.rawAssistantMessage);
 
-        for (final call in turn.toolCalls) {
+        for (final call in effectiveTurn.toolCalls) {
           if (isCancelled()) return _splitThinkTags(turn.text).answer;
 
           final runningRecord = RoxumToolCallRecord(
@@ -868,6 +872,30 @@ class RoxumAiClient {
     }
   }
 
+  _ParsedTurn _withEstimatedUsage(
+    _ParsedTurn turn,
+    List<Map<String, dynamic>> messages,
+    List<Map<String, dynamic>> tools,
+  ) {
+    final prompt = TokenCounterService.countTokens(
+      jsonEncode({'messages': messages, 'tools': tools}),
+    );
+    final completion = TokenCounterService.countTokens(
+      '${turn.text}\n${turn.reasoning}\n${jsonEncode(turn.toolCalls.map((e) => e.args).toList())}',
+    );
+    return _ParsedTurn(
+      text: turn.text,
+      reasoning: turn.reasoning,
+      toolCalls: turn.toolCalls,
+      rawAssistantMessage: turn.rawAssistantMessage,
+      usage: RoxumUsageStats(
+        promptTokens: prompt,
+        completionTokens: completion,
+        totalTokens: prompt + completion,
+      ),
+    );
+  }
+
   /// Compacts older tool outputs in-place so multi-step agent loops do not
   /// re-send huge file reads or command outputs on every subsequent turn.
   void _compactMessagesForTokenSavings(List<Map<String, dynamic>> messages) {
@@ -877,7 +905,8 @@ class RoxumAiClient {
       final msg = messages[i];
       if (msg['role'] == 'tool') {
         final content = msg['content']?.toString() ?? '';
-        if (content.length > 900 && !content.contains('[compacted tool output:')) {
+        if (content.length > 900 &&
+            !content.contains('[compacted tool output:')) {
           final head = content.substring(0, 420);
           final tail = content.substring(content.length - 220);
           messages[i] = {
@@ -915,9 +944,11 @@ class RoxumAiClient {
     required void Function(String partialText) onAssistantText,
     void Function(String reasoningText)? onReasoningText,
     required bool Function() isCancelled,
+    void Function(String status)? onRetryStatus,
   }) async {
     final uri = Uri.parse(model.url);
-    final isLocalEndpoint = uri.host == 'localhost' ||
+    final isLocalEndpoint =
+        uri.host == 'localhost' ||
         uri.host == '127.0.0.1' ||
         uri.host.startsWith('192.168.') ||
         uri.host.startsWith('10.');
@@ -931,11 +962,37 @@ class RoxumAiClient {
               },
       );
 
-    final req = http.Request('POST', uri);
-    req.headers.addAll(model.headers);
-    req.body = jsonEncode(streamPayload);
-
-    final streamed = await client.send(req).timeout(const Duration(seconds: 90));
+    http.StreamedResponse streamed;
+    for (var attempt = 0; ; attempt++) {
+      final req = http.Request('POST', uri)
+        ..headers.addAll(model.headers)
+        ..body = jsonEncode(streamPayload);
+      streamed = await client.send(req).timeout(const Duration(seconds: 90));
+      final retryable = const {
+        429,
+        500,
+        502,
+        503,
+        504,
+      }.contains(streamed.statusCode);
+      if (!retryable || attempt >= 4) break;
+      final retryBody = await streamed.stream.bytesToString();
+      final wait = _retryDelay(streamed.headers, attempt);
+      onRetryStatus?.call('Лимит API, повтор через ${wait.inSeconds} сек...');
+      for (var left = wait.inMilliseconds; left > 0 && !isCancelled();) {
+        final slice = left < 250 ? left : 250;
+        await Future<void>.delayed(Duration(milliseconds: slice));
+        left -= slice;
+      }
+      if (isCancelled()) {
+        return const _ParsedTurn(
+          text: '',
+          toolCalls: [],
+          rawAssistantMessage: {},
+        );
+      }
+      if (retryBody.isEmpty) continue;
+    }
     if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
       final errBody = await streamed.stream.bytesToString();
       // Retry once without stream if endpoint rejects stream_options
@@ -951,7 +1008,9 @@ class RoxumAiClient {
           final decoded = jsonDecode(fallbackRes.body) as Map<String, dynamic>;
           final parsed = _parseResponse(model.method, decoded);
           final split = _splitThinkTags(parsed.text);
-          if (split.reasoning.isNotEmpty) onReasoningText?.call(split.reasoning);
+          if (split.reasoning.isNotEmpty) {
+            onReasoningText?.call(split.reasoning);
+          }
           if (split.answer.isNotEmpty) onAssistantText(split.answer);
           return parsed;
         }
@@ -972,7 +1031,8 @@ class RoxumAiClient {
 
     final contentBuf = StringBuffer();
     final reasoningBuf = StringBuffer();
-    final toolBuffers = <int, ({StringBuffer id, StringBuffer name, StringBuffer args})>{};
+    final toolBuffers =
+        <int, ({StringBuffer id, StringBuffer name, StringBuffer args})>{};
     RoxumUsageStats usage = const RoxumUsageStats();
 
     var lineCarry = '';
@@ -1006,22 +1066,28 @@ class RoxumAiClient {
 
           final choices = (json['choices'] as List?) ?? const [];
           if (choices.isEmpty) continue;
-          final delta = (choices.first['delta'] as Map?)?.cast<String, dynamic>();
+          final delta = (choices.first['delta'] as Map?)
+              ?.cast<String, dynamic>();
           if (delta == null) continue;
 
-          final rDelta = delta['reasoning_content']?.toString() ??
-              delta['reasoning']?.toString() ??
-              delta['thought']?.toString();
+          final reasoning = delta['reasoning']?.toString();
+          final reasoningContent = delta['reasoning_content']?.toString();
+          final rDelta = (reasoning != null && reasoning.isNotEmpty)
+              ? reasoning
+              : ((reasoningContent != null && reasoningContent.isNotEmpty)
+                    ? reasoningContent
+                    : delta['thought']?.toString());
           if (rDelta != null && rDelta.isNotEmpty) {
             reasoningBuf.write(rDelta);
             onReasoningText?.call(reasoningBuf.toString());
           }
           final rDetails = delta['reasoning_details'];
-          if (rDetails is List) {
+          if ((rDelta == null || rDelta.isEmpty) && rDetails is List) {
             final buf = StringBuffer();
             for (final item in rDetails) {
               if (item is Map) {
-                final t = item['text']?.toString() ?? item['summary']?.toString();
+                final t =
+                    item['text']?.toString() ?? item['summary']?.toString();
                 if (t != null && t.isNotEmpty) buf.write(t);
               }
             }
@@ -1054,10 +1120,12 @@ class RoxumAiClient {
                     .where((e) => e.value.id.toString() == rawId)
                     .map((e) => e.key)
                     .firstOrNull;
-                idx = existingIdx ??
+                idx =
+                    existingIdx ??
                     (toolBuffers.isEmpty
                         ? 0
-                        : (toolBuffers.keys.reduce((a, b) => a > b ? a : b) + 1));
+                        : (toolBuffers.keys.reduce((a, b) => a > b ? a : b) +
+                              1));
               } else {
                 idx = toolBuffers.isEmpty
                     ? 0
@@ -1126,6 +1194,23 @@ class RoxumAiClient {
     );
   }
 
+  Duration _retryDelay(Map<String, String> headers, int attempt) {
+    final retryAfter = headers['retry-after'];
+    final reset = headers['x-ratelimit-reset'];
+    var seconds = double.tryParse(retryAfter ?? '') ?? 0;
+    if (seconds <= 0 && reset != null) {
+      final value = double.tryParse(reset);
+      if (value != null) {
+        final millis = value > 1e12 ? value : value * 1000;
+        seconds = (millis - DateTime.now().millisecondsSinceEpoch) / 1000;
+      }
+    }
+    if (seconds <= 0) {
+      seconds = [3, 6, 12, 24, 45][attempt.clamp(0, 4)].toDouble();
+    }
+    return Duration(seconds: seconds.ceil().clamp(2, 65));
+  }
+
   Map<String, dynamic> _buildPayload({
     required RoxumModelOption model,
     required List<Map<String, dynamic>> messages,
@@ -1192,9 +1277,11 @@ class RoxumAiClient {
   ) {
     switch (method) {
       case RoxumToolCallingMethod.openAiCompatible:
-        final msg = (json['choices'] as List).first['message'] as Map<String, dynamic>;
+        final msg =
+            (json['choices'] as List).first['message'] as Map<String, dynamic>;
         final text = msg['content']?.toString() ?? '';
-        var reasoning = msg['reasoning_content']?.toString() ??
+        var reasoning =
+            msg['reasoning_content']?.toString() ??
             msg['reasoning']?.toString() ??
             '';
         if (reasoning.isEmpty && msg['reasoning_details'] is List) {
@@ -1230,7 +1317,9 @@ class RoxumAiClient {
         final openAiUsage = (json['usage'] as Map?)?.cast<String, dynamic>();
         final oPrompt = (openAiUsage?['prompt_tokens'] as num?)?.toInt() ?? 0;
         final oComp = (openAiUsage?['completion_tokens'] as num?)?.toInt() ?? 0;
-        final oTotal = (openAiUsage?['total_tokens'] as num?)?.toInt() ?? (oPrompt + oComp);
+        final oTotal =
+            (openAiUsage?['total_tokens'] as num?)?.toInt() ??
+            (oPrompt + oComp);
         final oCost = (openAiUsage?['cost'] as num?)?.toDouble() ?? 0.0;
         return _ParsedTurn(
           text: text,
@@ -1271,10 +1360,7 @@ class RoxumAiClient {
             rawToolCalls.add({
               'id': id,
               'type': 'function',
-              'function': {
-                'name': name,
-                'arguments': jsonEncode(input),
-              },
+              'function': {'name': name, 'arguments': jsonEncode(input)},
             });
           }
         }
@@ -1306,7 +1392,8 @@ class RoxumAiClient {
             rawAssistantMessage: {'role': 'assistant', 'content': ''},
           );
         }
-        final parts = (candidates.first['content']?['parts'] as List?) ?? const [];
+        final parts =
+            (candidates.first['content']?['parts'] as List?) ?? const [];
         final textBuf = StringBuffer();
         final reasonBuf = StringBuffer();
         final calls = <({String id, String name, Map<String, dynamic> args})>[];
@@ -1326,17 +1413,16 @@ class RoxumAiClient {
             rawToolCalls.add({
               'id': id,
               'type': 'function',
-              'function': {
-                'name': name,
-                'arguments': jsonEncode(args),
-              },
+              'function': {'name': name, 'arguments': jsonEncode(args)},
             });
           }
         }
-        final gemUsage = (json['usageMetadata'] as Map?)?.cast<String, dynamic>();
+        final gemUsage = (json['usageMetadata'] as Map?)
+            ?.cast<String, dynamic>();
         final gIn = (gemUsage?['promptTokenCount'] as num?)?.toInt() ?? 0;
         final gOut = (gemUsage?['candidatesTokenCount'] as num?)?.toInt() ?? 0;
-        final gTotal = (gemUsage?['totalTokenCount'] as num?)?.toInt() ?? (gIn + gOut);
+        final gTotal =
+            (gemUsage?['totalTokenCount'] as num?)?.toInt() ?? (gIn + gOut);
         return _ParsedTurn(
           text: textBuf.toString(),
           reasoning: reasonBuf.toString(),
@@ -1355,7 +1441,9 @@ class RoxumAiClient {
     }
   }
 
-  List<Map<String, dynamic>> _toAnthropicTools(List<Map<String, dynamic>> tools) {
+  List<Map<String, dynamic>> _toAnthropicTools(
+    List<Map<String, dynamic>> tools,
+  ) {
     return tools.map((t) {
       final fn = t['function'] as Map<String, dynamic>;
       return {
@@ -1366,7 +1454,9 @@ class RoxumAiClient {
     }).toList();
   }
 
-  List<Map<String, dynamic>> _toAnthropicMessages(List<Map<String, dynamic>> msgs) {
+  List<Map<String, dynamic>> _toAnthropicMessages(
+    List<Map<String, dynamic>> msgs,
+  ) {
     final out = <Map<String, dynamic>>[];
     for (final m in msgs) {
       final role = m['role']?.toString() ?? 'user';
@@ -1389,7 +1479,8 @@ class RoxumAiClient {
           final fn = tc['function'] as Map;
           Map<String, dynamic> args = {};
           try {
-            args = jsonDecode(fn['arguments'].toString()) as Map<String, dynamic>;
+            args =
+                jsonDecode(fn['arguments'].toString()) as Map<String, dynamic>;
           } catch (_) {}
           blocks.add({
             'type': 'tool_use',
@@ -1406,10 +1497,15 @@ class RoxumAiClient {
           for (final item in rawContent) {
             if (item is! Map) continue;
             if (item['type'] == 'text') {
-              blocks.add({'type': 'text', 'text': item['text']?.toString() ?? ''});
+              blocks.add({
+                'type': 'text',
+                'text': item['text']?.toString() ?? '',
+              });
             } else if (item['type'] == 'image_url') {
               final url = (item['image_url'] as Map?)?['url']?.toString() ?? '';
-              final match = RegExp(r'^data:([^;]+);base64,(.+)$').firstMatch(url);
+              final match = RegExp(
+                r'^data:([^;]+);base64,(.+)$',
+              ).firstMatch(url);
               if (match != null) {
                 blocks.add({
                   'type': 'image',
@@ -1473,21 +1569,22 @@ class RoxumAiClient {
       return {
         'name': fn['name'],
         'description': fn['description'],
-        if (sanitizedParams != null) 'parameters': sanitizedParams,
+        ...?sanitizedParams == null ? null : {'parameters': sanitizedParams},
       };
     }).toList();
   }
 
   Map<String, dynamic> _sanitizeGeminiSchemaNode(Map<String, dynamic> node) {
     final rawType = (node['type']?.toString() ?? 'string').toUpperCase();
-    final type = const {
-      'STRING',
-      'NUMBER',
-      'INTEGER',
-      'BOOLEAN',
-      'ARRAY',
-      'OBJECT',
-    }.contains(rawType)
+    final type =
+        const {
+          'STRING',
+          'NUMBER',
+          'INTEGER',
+          'BOOLEAN',
+          'ARRAY',
+          'OBJECT',
+        }.contains(rawType)
         ? rawType
         : 'STRING';
     final out = <String, dynamic>{
@@ -1518,7 +1615,9 @@ class RoxumAiClient {
     return out;
   }
 
-  List<Map<String, dynamic>> _toGeminiContents(List<Map<String, dynamic>> msgs) {
+  List<Map<String, dynamic>> _toGeminiContents(
+    List<Map<String, dynamic>> msgs,
+  ) {
     final out = <Map<String, dynamic>>[];
     for (final m in msgs) {
       final role = m['role']?.toString() ?? 'user';
@@ -1547,7 +1646,8 @@ class RoxumAiClient {
           final fn = tc['function'] as Map;
           Map<String, dynamic> args = {};
           try {
-            args = jsonDecode(fn['arguments'].toString()) as Map<String, dynamic>;
+            args =
+                jsonDecode(fn['arguments'].toString()) as Map<String, dynamic>;
           } catch (_) {}
           parts.add({
             'functionCall': {'name': fn['name'], 'args': args},
@@ -1564,7 +1664,9 @@ class RoxumAiClient {
               parts.add({'text': item['text']?.toString() ?? ''});
             } else if (item['type'] == 'image_url') {
               final url = (item['image_url'] as Map?)?['url']?.toString() ?? '';
-              final match = RegExp(r'^data:([^;]+);base64,(.+)$').firstMatch(url);
+              final match = RegExp(
+                r'^data:([^;]+);base64,(.+)$',
+              ).firstMatch(url);
               if (match != null) {
                 parts.add({
                   'inlineData': {

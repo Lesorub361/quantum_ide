@@ -1,7 +1,7 @@
 {
-  "versionCode": 310,
-  "versionName": "1.2.294",
-  "notes": "## 🚀 QuantumIDE v1.2.294\n\n### Что исправлено\n- **Wi-Fi отладка ADB (`AdbDeviceService`, `DeviceMirrorPanel`)**:\n  - Предварительный запуск `adb start-server` и очистка служебных строк `* daemon ...` из вывода, чтобы таймаут или ошибка сопряжения не скрывались за `* daemon started successfully`.\n  - Исправлена проверка успешного сопряжения/подключения (`✅`) в диалоге, чтобы он автоматически переключался к вводу основного порта.\n  - Добавлены понятные сообщения при таймауте или изоляции клиентов (AP Isolation) в Wi-Fi сети.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB",
+  "versionCode": 311,
+  "versionName": "1.2.295",
+  "notes": "## 🚀 QuantumIDE v1.2.295\n\n### Что исправлено\n- Стабилизирован roxum-агент и MCP-инструменты.\n- Добавлено отображение оценочных токенов для локальных OpenAI-compatible моделей, которые не возвращают usage.\n- Добавлены категории MCP для архитектуры, диагностики, сборки, устройств, памяти, веба и телеметрии.\n- Исправлены retry/backoff, пути workspace, массовые правки и CodeGraph.\n\n### Проверки\n- flutter analyze для изменённых файлов: без ошибок.\n- MCP unit-тесты: все проходят.",
   "artifacts": {
     "online": {
       "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.294/app-arm64-v8a-release.apk",
@@ -9,8 +9,8 @@
       "sizeBytes": 0
     }
   },
-  "version": "1.2.294",
-  "buildNumber": 310,
-  "tag_name": "v1.2.294",
-  "releaseNotes": "Исправлены сообщения и авто-переключение после сопряжения Wi-Fi ADB (убрано перекрытие вывода строками запуска adb-демона)."
+  "version": "1.2.295",
+  "buildNumber": 311,
+  "tag_name": "v1.2.295",
+  "releaseNotes": "Стабилизирован roxum-агент: retry/backoff 429/5xx, единые пути, массовое редактирование, MCP-категории и отображение токенов для локальных моделей."
 }
