@@ -176,7 +176,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
       );
       return false;
     } catch (e) {
-      talker.error('OpenCodeService.installOpenCode failed', e);
+      TalkerService.error('OpenCodeService.installOpenCode failed', e);
       state = state.copyWith(
         status: OpenCodeServerStatus.error,
         statusMessage: 'Ошибка установки: $e',
@@ -346,7 +346,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
       );
       return false;
     } catch (e) {
-      talker.error('OpenCodeService.startServer failed', e);
+      TalkerService.error('OpenCodeService.startServer failed', e);
       state = state.copyWith(
         status: OpenCodeServerStatus.error,
         statusMessage: 'Ошибка запуска OpenCode: $e',
@@ -442,7 +442,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
         }
       }
     } catch (e) {
-      talker.error('OpenCodeService.createSession error', e);
+      TalkerService.error('OpenCodeService.createSession error', e);
     }
     return null;
   }

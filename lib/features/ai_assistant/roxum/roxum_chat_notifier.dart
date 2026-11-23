@@ -1151,7 +1151,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       );
       if (resp.usage.totalTokens > 0 || resp.usage.costUsd > 0) {
         state = state.copyWith(
-          sessionUsage: state.sessionUsage.add(resp.usage),
+          sessionUsage: state.sessionUsage + resp.usage,
         );
       }
 
