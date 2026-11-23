@@ -535,6 +535,48 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                     ),
                   ),
 
+                  if (chatState.chatMode == RoxumChatMode.agent &&
+                      selectedModelId != null &&
+                      (selectedModelId.endsWith(':free') ||
+                          selectedModelId.endsWith('/free')))
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              size: 14,
+                              color: Colors.amberAccent,
+                            ),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Бесплатная модель (:free) — на больших проектах возможны ошибки и циклы. Для сложного кода лучше DeepSeek / Qwen / Gemini / Claude.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.amberAccent,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
                   // ── Unified Modern Composer ──
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),

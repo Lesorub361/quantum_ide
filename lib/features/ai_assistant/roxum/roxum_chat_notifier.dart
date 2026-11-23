@@ -686,15 +686,54 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           final fnName = (t['function'] as Map?)?['name']?.toString() ?? '';
           return fnName == 'readFile' || fnName == 'writeFile';
         });
-        final filteredMcp = hasNativeFs
-            ? rawMcp
-                .where(
-                  (t) =>
-                      (t['server']?.toString() ?? '').toLowerCase() !=
-                      'local filesystem access',
-                )
-                .toList()
-            : rawMcp;
+        final hasNativeShell = baseTools.any((t) {
+          final fnName = (t['function'] as Map?)?['name']?.toString() ?? '';
+          return fnName == 'runCommand';
+        });
+        final q = trimmed.toLowerCase();
+        bool isMcpServerRelevant(String serverName) {
+          final s = serverName.toLowerCase();
+          if (s == 'local filesystem access') return !hasNativeFs;
+          if (s == 'quantum-filesystem') return !hasNativeFs;
+          if (s == 'quantum-shell') return !hasNativeShell;
+          // Core coding/verification MCP servers are always included
+          if (s == 'quantum-codegraph' ||
+              s == 'quantum-token-saver' ||
+              s == 'dart-flutter-mcp') {
+            return true;
+          }
+          if (s == 'quantum-build-doctor') {
+            return RegExp(
+              r'apk|aab|gradle|build|сборк|собери|установ|sdk|ndk|aapt',
+            ).hasMatch(q);
+          }
+          if (s == 'quantum-device-qa') {
+            return RegExp(
+              r'adb|logcat|usb|otg|устройств|телефон|экран|runtime|краш|crash|вылет',
+            ).hasMatch(q);
+          }
+          if (s == 'quantum-sqlite-telemetry') {
+            return RegExp(
+              r'sql|sqlite|база|таблиц|database|schema|query|network|сеть|лог',
+            ).hasMatch(q);
+          }
+          if (s == 'quantum-web-fetch') {
+            return RegExp(
+              r'http|https|url|сайт|ссылк|интернет|поиск|search|docs|документ|новост|pub\.dev|github',
+            ).hasMatch(q);
+          }
+          if (s == 'quantum-memory') {
+            return RegExp(
+              r'память|запомни|вспомни|memory|правил|предпочтен',
+            ).hasMatch(q);
+          }
+          // Keep user-configured external MCP servers enabled
+          return true;
+        }
+
+        final filteredMcp = rawMcp
+            .where((t) => isMcpServerRelevant(t['server']?.toString() ?? ''))
+            .toList();
         mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(filteredMcp);
       } catch (_) {}
     }

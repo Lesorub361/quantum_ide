@@ -165,7 +165,7 @@ class McpClientInstance {
         'capabilities': {
           'roots': {'listChanged': false},
         },
-        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.298'},
+        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.299'},
       }, timeout: const Duration(seconds: 12));
       await _sendNotification('notifications/initialized', const {});
       _isHandshakeDone = true;
