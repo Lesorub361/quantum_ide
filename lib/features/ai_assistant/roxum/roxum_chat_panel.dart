@@ -3069,6 +3069,42 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                         const Divider(height: 1),
                         if (Platform.isAndroid) ...[
                           SwitchListTile(
+                            value: runtime.useNativeUserspaceMode,
+                            onChanged: (val) async {
+                              if (val && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Включение Native ARM64 Linux (без PRoot). При первом запуске скачается bootstrap (~44 МБ)...',
+                                    ),
+                                  ),
+                                );
+                              }
+                              await runtime.setUseNativeUserspaceMode(val);
+                              if (!context.mounted) return;
+                              setSheetState(() {});
+                            },
+                            secondary: const Icon(
+                              Icons.rocket_launch_rounded,
+                              color: Color(0xFF38BDF8),
+                            ),
+                            title: const Text(
+                              'Native ARM64 Linux (без PRoot и без Ubuntu)',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              runtime.useNativeUserspaceMode
+                                  ? 'Активно: быстрый нативный userspace (pkg, libloader, без PRoot)'
+                                  : 'Выключено: нажмите для быстрого режима без Ubuntu (~44 МБ)',
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                            dense: true,
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
                             value: runtime.useNativeRootMode,
                             onChanged: (val) async {
                               if (val) {

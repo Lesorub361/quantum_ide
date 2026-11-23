@@ -57,14 +57,23 @@ class RuntimeService extends ChangeNotifier {
     'https://github.com/techjarves/Mobile-Harness/releases/download/runtime-2026.09.4/pocketdev-core-arm64-2026.09.5.tar.zst',
   ];
 
+  static const String nativeUserspaceBootstrapUrl =
+      'https://raw.githubusercontent.com/Leostrange/Leostryx/main/app/assets/env/bootstrap/bootstrap.tar.gz';
+
   bool _isInitializing = false;
   bool _useNativeRootMode = false;
   bool get useNativeRootMode => _useNativeRootMode;
+  bool _useNativeUserspaceMode = false;
+  bool get useNativeUserspaceMode => _useNativeUserspaceMode;
+  bool get isDirectHostMode => _useNativeRootMode || _useNativeUserspaceMode;
   bool? _hasRootAccessCache;
   bool? get hasRootAccessCached => _hasRootAccessCache;
 
   String get _nativeRootFlagPath =>
       p.join(_filesDir, 'config', 'native_root_mode.flag');
+  String get _nativeUserspaceFlagPath =>
+      p.join(_filesDir, 'config', 'native_userspace_mode.flag');
+  String get nativeUserspacePrefix => p.join(_filesDir, 'usr');
 
   /// Checks whether the device has working root access (`su -c id` -> `uid=0`).
   Future<bool> checkRootAccess({bool forceRefresh = false}) async {
@@ -104,6 +113,9 @@ class RuntimeService extends ChangeNotifier {
   /// without downloading or using the Ubuntu PRoot container.
   Future<void> setUseNativeRootMode(bool enabled) async {
     _useNativeRootMode = enabled;
+    if (enabled) {
+      _useNativeUserspaceMode = false;
+    }
     try {
       if (Platform.isAndroid && _filesDir.contains('quantum_ide')) {
         // Ensure config dir exists
@@ -117,6 +129,8 @@ class RuntimeService extends ChangeNotifier {
       await flagFile.parent.create(recursive: true);
       if (enabled) {
         await flagFile.writeAsString('1\n', flush: true);
+        final uFlag = File(_nativeUserspaceFlagPath);
+        if (await uFlag.exists()) await uFlag.delete();
       } else if (await flagFile.exists()) {
         await flagFile.delete();
       }
@@ -132,6 +146,176 @@ class RuntimeService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Enables or disables Native ARM64 Userspace mode (Leostryx-style `$filesDir/usr`
+  /// with `libquantum_loader.so`, `libtermux-exec.so`, `liblse_compat.so`, and `pkg`,
+  /// without PRoot and without downloading Ubuntu 24.04).
+  Future<void> setUseNativeUserspaceMode(
+    bool enabled, {
+    bool installIfMissing = true,
+  }) async {
+    _useNativeUserspaceMode = enabled;
+    if (enabled) {
+      _useNativeRootMode = false;
+    }
+    try {
+      if (Platform.isAndroid && !_filesDir.startsWith('/data')) {
+        try {
+          _filesDir = await _channel.invokeMethod('getFilesDir');
+          _nativeLibDir = await _channel.invokeMethod('getNativeLibDir');
+        } catch (_) {}
+      }
+      final flagFile = File(_nativeUserspaceFlagPath);
+      await flagFile.parent.create(recursive: true);
+      if (enabled) {
+        await flagFile.writeAsString('1\n', flush: true);
+        final rFlag = File(_nativeRootFlagPath);
+        if (await rFlag.exists()) await rFlag.delete();
+        if (installIfMissing) {
+          await installNativeUserspaceBootstrap();
+        } else {
+          await _ensureNativeUserspacePkgAssets();
+        }
+      } else if (await flagFile.exists()) {
+        await flagFile.delete();
+      }
+      await _ensureBinaries();
+      if (enabled) {
+        _isInitialized = true;
+        _status = 'Ready (Native ARM64 Userspace)';
+        _progress = 1.0;
+      }
+    } catch (e) {
+      debugPrint('RuntimeService: Failed to toggle native userspace mode: $e');
+    }
+    notifyListeners();
+  }
+
+  /// Extracts bundled `pkg` manager scripts and `repo.conf` into `$filesDir/usr`.
+  Future<void> _ensureNativeUserspacePkgAssets() async {
+    if (_filesDir.isEmpty) return;
+    final usrDir = Directory(nativeUserspacePrefix);
+    await Directory(p.join(usrDir.path, 'bin')).create(recursive: true);
+    await Directory(p.join(usrDir.path, 'lib', 'pkg')).create(recursive: true);
+    await Directory(p.join(usrDir.path, 'etc', 'pkg')).create(recursive: true);
+
+    Future<void> copyAsset(String assetPath, String destPath, {bool exec = false}) async {
+      try {
+        final data = await rootBundle.load(assetPath);
+        final outFile = File(destPath);
+        await outFile.parent.create(recursive: true);
+        await outFile.writeAsBytes(
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+          flush: true,
+        );
+        if (exec && !Platform.isWindows) {
+          await Process.run('chmod', ['755', destPath]);
+        }
+      } catch (e) {
+        debugPrint('RuntimeService: Failed copying asset $assetPath: $e');
+      }
+    }
+
+    await copyAsset(
+      'assets/native_env/pkg/pkg',
+      p.join(usrDir.path, 'bin', 'pkg'),
+      exec: true,
+    );
+    await copyAsset(
+      'assets/native_env/etc/pkg/repo.conf',
+      p.join(usrDir.path, 'etc', 'pkg', 'repo.conf'),
+    );
+    for (final name in const [
+      'db.sh',
+      'deb.sh',
+      'fetch.sh',
+      'index.awk',
+      'index.sh',
+      'resolver.sh',
+      'util.sh',
+      'vercmp.awk',
+      'version.sh',
+    ]) {
+      await copyAsset(
+        'assets/native_env/pkg/lib/$name',
+        p.join(usrDir.path, 'lib', 'pkg', name),
+      );
+    }
+  }
+
+  /// Downloads and extracts the lightweight ARM64 userspace bootstrap (~44 MB)
+  /// into `$filesDir/usr` if not already installed.
+  Future<void> installNativeUserspaceBootstrap() async {
+    if (!Platform.isAndroid) return;
+    final bashFile = File(p.join(nativeUserspacePrefix, 'bin', 'bash'));
+    if (await bashFile.exists()) {
+      await _ensureNativeUserspacePkgAssets();
+      return;
+    }
+
+    final tmpDir = Directory(p.join(_filesDir, 'tmp'));
+    await tmpDir.create(recursive: true);
+    final archiveFile = File(p.join(tmpDir.path, 'native_bootstrap.tar.gz'));
+
+    _status = 'Downloading Native ARM64 Linux (~44 MB)...';
+    _progress = 0.05;
+    notifyListeners();
+
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(minutes: 5),
+      ),
+    );
+    await dio.download(
+      nativeUserspaceBootstrapUrl,
+      archiveFile.path,
+      onReceiveProgress: (received, total) {
+        if (total > 0) {
+          _progress = 0.05 + (received / total) * 0.65;
+          notifyListeners();
+        }
+      },
+    );
+
+    _status = 'Extracting Native ARM64 Linux...';
+    _progress = 0.75;
+    notifyListeners();
+
+    final usrDir = Directory(nativeUserspacePrefix);
+    await usrDir.create(recursive: true);
+    final tarRes = await Process.run('tar', [
+      '-xzf',
+      archiveFile.path,
+      '-C',
+      usrDir.path,
+    ]);
+    if (tarRes.exitCode != 0) {
+      final gzBytes = await archiveFile.readAsBytes();
+      final tarBytes = gzip.decode(gzBytes);
+      final archive = TarDecoder().decodeBytes(tarBytes);
+      for (final entry in archive) {
+        final outPath = p.join(usrDir.path, entry.name);
+        if (entry.isFile) {
+          final f = File(outPath);
+          await f.parent.create(recursive: true);
+          await f.writeAsBytes(entry.content as List<int>);
+        } else {
+          await Directory(outPath).create(recursive: true);
+        }
+      }
+    }
+    try {
+      await archiveFile.delete();
+    } catch (_) {}
+
+    await Process.run('chmod', ['-R', '755', p.join(usrDir.path, 'bin')]);
+    await _ensureNativeUserspacePkgAssets();
+
+    _status = 'Ready (Native ARM64 Userspace)';
+    _progress = 1.0;
+    notifyListeners();
+  }
+
   Future<bool> isBootstrapComplete() async {
     if (Platform.isAndroid || Platform.isIOS) {
       try {
@@ -140,6 +324,10 @@ class RuntimeService extends ChangeNotifier {
         }
         if (File(_nativeRootFlagPath).existsSync()) {
           _useNativeRootMode = true;
+          return true;
+        }
+        if (File(_nativeUserspaceFlagPath).existsSync()) {
+          _useNativeUserspaceMode = true;
           return true;
         }
         final bool? complete = await _channel.invokeMethod('isBootstrapComplete');
@@ -447,6 +635,16 @@ class RuntimeService extends ChangeNotifier {
           return;
         }
 
+        if (File(_nativeUserspaceFlagPath).existsSync()) {
+          _useNativeUserspaceMode = true;
+          await installNativeUserspaceBootstrap();
+          _isInitialized = true;
+          _status = 'Ready (Native ARM64 Userspace)';
+          _progress = 1.0;
+          notifyListeners();
+          return;
+        }
+
         // 3. Self-heal a rootfs whose arm64 glibc / ELF interpreter was destroyed
         //    (e.g. an interrupted apt libc6 upgrade). Without it every PRoot start fails with
         //    `execve("/usr/bin/env"): Function not implemented`.
@@ -519,7 +717,7 @@ class RuntimeService extends ChangeNotifier {
   /// Translates an Android host path to its PRoot guest path (`/root/projects/...`),
   /// or returns [hostPath] unchanged on Desktop or Native Root Kernel mode.
   String toProotPath(String hostPath) {
-    if (!Platform.isAndroid || _useNativeRootMode || _filesDir.isEmpty) {
+    if (!Platform.isAndroid || isDirectHostMode || _filesDir.isEmpty) {
       return hostPath;
     }
     return PathMapper.mapToGuest(hostPath, _filesDir);
@@ -529,7 +727,7 @@ class RuntimeService extends ChangeNotifier {
   /// (e.g. `/data/user/0/com.../files/projects/foo`) to their guest equivalents
   /// (`/root/projects/foo`) when running in PRoot mode.
   String translateCommandPaths(String command) {
-    if (!Platform.isAndroid || _useNativeRootMode || _filesDir.isEmpty) {
+    if (!Platform.isAndroid || isDirectHostMode || _filesDir.isEmpty) {
       return command;
     }
     return command
@@ -554,10 +752,10 @@ class RuntimeService extends ChangeNotifier {
           final initHost = p.join(_filesDir, 'bin', 'init-host');
           if (await File(initHost).exists()) {
             final guestCwd = workingDirectory != null
-                ? (_useNativeRootMode
+                ? (isDirectHostMode
                     ? workingDirectory
                     : PathMapper.mapToGuest(workingDirectory, _filesDir))
-                : (_useNativeRootMode ? _filesDir : '/root');
+                : (isDirectHostMode ? _filesDir : '/root');
             final translatedCmd = translateCommandPaths(command);
             final result = await Process.run(
               'sh',
@@ -840,10 +1038,12 @@ class RuntimeService extends ChangeNotifier {
         }
       }
       final guestCwd = workingDirectory != null
-          ? (_useNativeRootMode
+          ? (isDirectHostMode
               ? workingDirectory
               : PathMapper.mapToGuest(workingDirectory, _filesDir))
-          : (_useNativeRootMode ? p.join(_filesDir, 'home') : '/root');
+          : (_useNativeUserspaceMode
+              ? _filesDir
+              : (_useNativeRootMode ? p.join(_filesDir, 'home') : '/root'));
       final translatedCmd = translateCommandPaths(command);
       process = await Process.start(
         'sh',
@@ -2808,6 +3008,76 @@ ROOTFS="\$FILES_DIR/rootfs/ubuntu"
 TMPDIR="\$FILES_DIR/tmp"
 CONFIG="\$FILES_DIR/config"
 
+# ── Native ARM64 Userspace Mode (Leostryx-style: no PRoot, no Root, uses libquantum_loader.so + pkg) ──
+if [ -f "\$CONFIG/native_userspace_mode.flag" ]; then
+    export PREFIX="\$FILES_DIR/usr"
+    export HOME="\$FILES_DIR"
+    export TMPDIR="\$FILES_DIR/tmp"
+    export TEMP="\$FILES_DIR/tmp"
+    export TERM="xterm-256color"
+    export COLORTERM="truecolor"
+    export LANG="C.UTF-8"
+    export LC_ALL="C.UTF-8"
+    export ANDROID_HOME="\$HOME/android-sdk"
+    export ANDROID_SDK_ROOT="\$HOME/android-sdk"
+    export FLUTTER_ROOT="\$HOME/flutter"
+    export PATH="\$PREFIX/bin:\$FILES_DIR/bin:\$HOME/flutter/bin:\$HOME/android-sdk/cmdline-tools/latest/bin:\$HOME/android-sdk/platform-tools:/system/bin:/vendor/bin"
+    export LD_LIBRARY_PATH="\$PREFIX/lib:\$PROOT_LIB_DIR"
+    export GIT_CONFIG_NOSYSTEM=1
+    if [ -f "\$PREFIX/etc/tls/cert.pem" ]; then
+        export SSL_CERT_FILE="\$PREFIX/etc/tls/cert.pem"
+        export CURL_CA_BUNDLE="\$PREFIX/etc/tls/cert.pem"
+        export GIT_SSL_CAINFO="\$PREFIX/etc/tls/cert.pem"
+    fi
+    PRELOAD_LIBS=""
+    [ -f "\$PROOT_LIB_DIR/libtermux-exec.so" ] && PRELOAD_LIBS="\$PROOT_LIB_DIR/libtermux-exec.so"
+    [ -f "\$PROOT_LIB_DIR/liblse_compat.so" ] && PRELOAD_LIBS="\${PRELOAD_LIBS:+\$PRELOAD_LIBS:}\$PROOT_LIB_DIR/liblse_compat.so"
+    [ -n "\$PRELOAD_LIBS" ] && export LD_PRELOAD="\$PRELOAD_LIBS"
+    mkdir -p "\$PREFIX/bin" "\$PREFIX/lib" "\$FILES_DIR/projects" "\$TMPDIR" 2>/dev/null || true
+    case "\$GUEST_CWD" in
+        /root/projects/*)
+            REL_P="\${GUEST_CWD#/root/projects/}"
+            NATIVE_CWD="\$FILES_DIR/projects/\$REL_P"
+            mkdir -p "\$NATIVE_CWD" 2>/dev/null || true
+            ;;
+        /root/projects)
+            NATIVE_CWD="\$FILES_DIR/projects"
+            ;;
+        /root)
+            NATIVE_CWD="\$HOME"
+            ;;
+        /sdcard/*)
+            REL_S="\${GUEST_CWD#/sdcard/}"
+            NATIVE_CWD="/storage/emulated/0/\$REL_S"
+            ;;
+        *)
+            NATIVE_CWD="\$GUEST_CWD"
+            ;;
+    esac
+    [ ! -d "\$NATIVE_CWD" ] && NATIVE_CWD="\$HOME"
+    cd "\$NATIVE_CWD" 2>/dev/null || cd "\$HOME" 2>/dev/null || true
+    LOADER="\$PROOT_LIB_DIR/libquantum_loader.so"
+    BASH_BIN="\$PREFIX/bin/bash"
+    [ ! -f "\$BASH_BIN" ] && BASH_BIN="/system/bin/sh"
+    shift 2 2>/dev/null || true
+    if [ "\$1" = "/bin/bash" ] || [ "\$1" = "bash" ]; then
+        shift 2>/dev/null || true
+    fi
+    if [ -x "\$LOADER" ] && [ "\$BASH_BIN" != "/system/bin/sh" ]; then
+        if [ "\$#" -gt 0 ]; then
+            exec "\$LOADER" "\$BASH_BIN" "\$@"
+        else
+            exec "\$LOADER" "\$BASH_BIN" -i
+        fi
+    else
+        if [ "\$#" -gt 0 ]; then
+            exec "\$BASH_BIN" "\$@"
+        else
+            exec "\$BASH_BIN" -i
+        fi
+    fi
+fi
+
 # ── Native Root Kernel Mode (Direct execution on device kernel without Ubuntu PRoot) ──
 if [ -f "\$CONFIG/native_root_mode.flag" ]; then
     NATIVE_HOME="\$FILES_DIR/home"
@@ -3428,6 +3698,33 @@ fi
     // Desktop: return desktopEnv with all discovered SDKs and user binary paths (agy, flutter, etc.)
     if (!Platform.isAndroid && !Platform.isIOS) {
       return desktopEnv;
+    }
+    if (Platform.isAndroid && _useNativeUserspaceMode) {
+      final prefix = nativeUserspacePrefix;
+      final nativeTmp = p.join(_filesDir, 'tmp');
+      final nativeBin = p.join(_filesDir, 'bin');
+      final preload = <String>[
+        if (_nativeLibDir.isNotEmpty) '$_nativeLibDir/libtermux-exec.so',
+        if (_nativeLibDir.isNotEmpty) '$_nativeLibDir/liblse_compat.so',
+      ].join(':');
+      return {
+        'HOME': _filesDir,
+        'PREFIX': prefix,
+        'TMPDIR': nativeTmp,
+        'TEMP': nativeTmp,
+        'TERM': 'xterm-256color',
+        'COLORTERM': 'truecolor',
+        'ANDROID_HOME': p.join(_filesDir, 'android-sdk'),
+        'ANDROID_SDK_ROOT': p.join(_filesDir, 'android-sdk'),
+        'FLUTTER_ROOT': p.join(_filesDir, 'flutter'),
+        'PATH':
+            '$prefix/bin:$nativeBin:$_filesDir/flutter/bin:$_filesDir/android-sdk/cmdline-tools/latest/bin:$_filesDir/android-sdk/platform-tools:/system/bin:/vendor/bin',
+        'LD_LIBRARY_PATH': '$prefix/lib:$_nativeLibDir',
+        if (preload.isNotEmpty) 'LD_PRELOAD': preload,
+        'GIT_CONFIG_NOSYSTEM': '1',
+        'LANG': 'C.UTF-8',
+        'LC_ALL': 'C.UTF-8',
+      };
     }
     if (Platform.isAndroid && _useNativeRootMode) {
       final nativeHome = p.join(_filesDir, 'home');

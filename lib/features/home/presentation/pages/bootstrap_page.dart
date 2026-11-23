@@ -125,7 +125,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     final isComplete = await runtime.isBootstrapComplete();
     if (isComplete) {
       await runtime.init();
-      if ((Platform.isAndroid || Platform.isIOS) && !runtime.useNativeRootMode) {
+      if ((Platform.isAndroid || Platform.isIOS) && !runtime.isDirectHostMode) {
         final env = await runtime.inspectEnvironment();
         if (env['needsUpgrade'] == 'true' && mounted) {
           setState(() {
