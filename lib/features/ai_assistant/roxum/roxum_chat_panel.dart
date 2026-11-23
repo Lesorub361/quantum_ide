@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/mcp_service.dart';
+import 'package:quantum_ide/core/services/opencode_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/token_counter_service.dart';
@@ -54,6 +55,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
   bool _hasPromptText = false;
   bool _showScrollToBottom = false;
   String? _dismissedActiveFilePath;
+  String? _slashQuery;
 
   @override
   void initState() {
@@ -82,9 +84,19 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
   }
 
   void _handlePromptTextChange() {
-    final hasText = _promptController.text.trim().isNotEmpty;
-    if (_hasPromptText != hasText) {
-      setState(() => _hasPromptText = hasText);
+    final raw = _promptController.text;
+    final hasText = raw.trim().isNotEmpty;
+    final trimmedLeft = raw.trimLeft();
+    final nextSlash = trimmedLeft.startsWith('/') &&
+            !trimmedLeft.contains('\n') &&
+            !trimmedLeft.contains(' ')
+        ? trimmedLeft.substring(1).toLowerCase()
+        : null;
+    if (_hasPromptText != hasText || _slashQuery != nextSlash) {
+      setState(() {
+        _hasPromptText = hasText;
+        _slashQuery = nextSlash;
+      });
     }
   }
 
@@ -276,6 +288,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     setState(() {
       _attachments.clear();
       _hasPromptText = false;
+      _slashQuery = null;
     });
     ref.read(roxumChatProvider.notifier).sendPrompt(
           text,
@@ -283,6 +296,23 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
           attachments: attached,
         );
     _scrollToBottom();
+  }
+
+  Future<void> _openOpenCodeConfig() async {
+    final workspace = ref.read(workspaceProvider).currentPath ?? '';
+    final settings = ref.read(settingsProvider);
+    final mcpServers = ref.read(mcpServiceProvider);
+    final path = await ref.read(openCodeServiceProvider.notifier).syncConfig(
+          workspace: workspace,
+          settings: settings,
+          mcpServers: mcpServers,
+        );
+    if (!mounted) return;
+    await ref.read(editorProvider.notifier).openFile(path);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Открыт конфиг: ${p.basename(path)}')),
+    );
   }
 
   void _clearCurrentChat(RoxumChatState chatState) {
@@ -305,6 +335,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
   @override
   Widget build(BuildContext context) {
     final chatState = ref.watch(roxumChatProvider);
+    final openCodeState = ref.watch(openCodeServiceProvider);
     final settings = ref.watch(settingsProvider);
     final editorState = ref.watch(editorProvider);
     final mcpServers = ref.watch(mcpServiceProvider);
@@ -577,6 +608,37 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                       ),
                     ),
 
+                  // ── Engine Switcher & OpenCode Control Strip ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+                    child: wrapExpanded(
+                      _buildOpenCodeBar(
+                        chatState: chatState,
+                        openCodeState: openCodeState,
+                        surfaceColor: surfaceColor,
+                        textColor: textColor,
+                        mutedColor: mutedColor,
+                        accentColor: accentColor,
+                      ),
+                    ),
+                  ),
+
+                  // ── OpenCode Slash Command (/) Popup ──
+                  if (chatState.useOpenCodeEngine && _slashQuery != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+                      child: wrapExpanded(
+                        _buildSlashCommandPopup(
+                          query: _slashQuery!,
+                          openCodeState: openCodeState,
+                          surfaceColor: surfaceColor,
+                          textColor: textColor,
+                          mutedColor: mutedColor,
+                          accentColor: accentColor,
+                        ),
+                      ),
+                    ),
+
                   // ── Unified Modern Composer ──
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
@@ -602,6 +664,314 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildOpenCodeBar({
+    required RoxumChatState chatState,
+    required OpenCodeState openCodeState,
+    required Color surfaceColor,
+    required Color textColor,
+    required Color mutedColor,
+    required Color accentColor,
+  }) {
+    final isOpenCode = chatState.useOpenCodeEngine;
+    final statusColor = switch (openCodeState.status) {
+      OpenCodeServerStatus.running => const Color(0xFF22C55E),
+      OpenCodeServerStatus.installing ||
+      OpenCodeServerStatus.starting =>
+        Colors.amberAccent,
+      OpenCodeServerStatus.error => Colors.redAccent,
+      OpenCodeServerStatus.stopped => mutedColor,
+    };
+
+    Widget chip({
+      required String label,
+      IconData? icon,
+      Color? dotColor,
+      bool active = false,
+      required VoidCallback onTap,
+    }) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: active
+                ? accentColor.withValues(alpha: 0.16)
+                : surfaceColor.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: active
+                  ? accentColor.withValues(alpha: 0.55)
+                  : textColor.withValues(alpha: 0.12),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (dotColor != null) ...[
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 5),
+              ],
+              if (icon != null) ...[
+                Icon(icon, size: 12, color: active ? accentColor : mutedColor),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                  color: active ? accentColor : textColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              chip(
+                label: 'Roxum',
+                active: !isOpenCode,
+                onTap: () => ref
+                    .read(roxumChatProvider.notifier)
+                    .setUseOpenCodeEngine(false),
+              ),
+              const SizedBox(width: 6),
+              chip(
+                label: 'OpenCode',
+                dotColor: isOpenCode ? statusColor : null,
+                active: isOpenCode,
+                onTap: () => ref
+                    .read(roxumChatProvider.notifier)
+                    .setUseOpenCodeEngine(true),
+              ),
+              if (isOpenCode) ...[
+                const SizedBox(width: 8),
+                chip(
+                  label: chatState.openCodeAgentMode == 'plan' ? 'Plan' : 'Build',
+                  icon: chatState.openCodeAgentMode == 'plan'
+                      ? LucideIcons.map
+                      : LucideIcons.hammer,
+                  active: chatState.openCodeAgentMode == 'plan',
+                  onTap: () {
+                    final next =
+                        chatState.openCodeAgentMode == 'plan' ? 'build' : 'plan';
+                    ref
+                        .read(roxumChatProvider.notifier)
+                        .setOpenCodeAgentMode(next);
+                  },
+                ),
+                const SizedBox(width: 6),
+                chip(
+                  label: '/compact',
+                  onTap: () {
+                    if (!chatState.isGenerating) {
+                      ref
+                          .read(roxumChatProvider.notifier)
+                          .sendPrompt('/compact');
+                    }
+                  },
+                ),
+                const SizedBox(width: 6),
+                chip(
+                  label: '/undo',
+                  onTap: () {
+                    if (!chatState.isGenerating) {
+                      ref.read(roxumChatProvider.notifier).sendPrompt('/undo');
+                    }
+                  },
+                ),
+                const SizedBox(width: 6),
+                chip(
+                  label: 'opencode.json',
+                  icon: LucideIcons.file_code,
+                  onTap: _openOpenCodeConfig,
+                ),
+                if (openCodeState.mcpStatuses.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  chip(
+                    label: 'MCP: ${openCodeState.mcpStatuses.length}',
+                    dotColor: const Color(0xFF22C55E),
+                    onTap: () => ref
+                        .read(openCodeServiceProvider.notifier)
+                        .refreshCapabilities(),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+        if (isOpenCode &&
+            (openCodeState.isBusy ||
+                openCodeState.status == OpenCodeServerStatus.error))
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(
+              children: [
+                if (openCodeState.isBusy)
+                  const SizedBox(
+                    width: 11,
+                    height: 11,
+                    child: CircularProgressIndicator(strokeWidth: 1.6),
+                  )
+                else
+                  const Icon(
+                    Icons.error_outline,
+                    size: 13,
+                    color: Colors.redAccent,
+                  ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    openCodeState.statusMessage,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: openCodeState.status == OpenCodeServerStatus.error
+                          ? Colors.redAccent
+                          : mutedColor,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (openCodeState.status == OpenCodeServerStatus.error)
+                  InkWell(
+                    onTap: () {
+                      final ws = ref.read(workspaceProvider).currentPath ?? '';
+                      ref
+                          .read(openCodeServiceProvider.notifier)
+                          .startServer(workspace: ws);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        'Повторить',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: accentColor,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSlashCommandPopup({
+    required String query,
+    required OpenCodeState openCodeState,
+    required Color surfaceColor,
+    required Color textColor,
+    required Color mutedColor,
+    required Color accentColor,
+  }) {
+    final matches = openCodeState.commands
+        .where((c) => query.isEmpty || c.name.toLowerCase().contains(query))
+        .toList();
+    if (matches.isEmpty) return const SizedBox.shrink();
+
+    const immediateCmds = {'compact', 'undo', 'redo', 'diff', 'init', 'new'};
+
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 200),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accentColor.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: matches.length,
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          color: textColor.withValues(alpha: 0.08),
+        ),
+        itemBuilder: (context, idx) {
+          final cmd = matches[idx];
+          return InkWell(
+            onTap: () {
+              if (immediateCmds.contains(cmd.name.toLowerCase())) {
+                _promptController.clear();
+                setState(() {
+                  _hasPromptText = false;
+                  _slashQuery = null;
+                });
+                ref
+                    .read(roxumChatProvider.notifier)
+                    .sendPrompt('/${cmd.name}');
+                _scrollToBottom();
+              } else {
+                final text = '/${cmd.name} ';
+                _promptController.value = TextEditingValue(
+                  text: text,
+                  selection: TextSelection.collapsed(offset: text.length),
+                );
+                setState(() {
+                  _hasPromptText = true;
+                  _slashQuery = null;
+                });
+                _promptFocusNode.requestFocus();
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Text(
+                    '/${cmd.name}',
+                    style: TextStyle(
+                      fontFamily: 'JetBrains Mono',
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: accentColor,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      cmd.description,
+                      style: TextStyle(fontSize: 11.5, color: mutedColor),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -3095,6 +3465,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 return Consumer(
                   builder: (context, innerRef, _) {
                     final liveState = innerRef.watch(roxumChatProvider);
+                    final liveOpenCode = innerRef.watch(openCodeServiceProvider);
                     final runtime = innerRef.read(runtimeServiceProvider);
                     return Column(
                       children: [
@@ -3108,6 +3479,57 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                             ),
                           ),
                         ),
+                        const Divider(height: 1),
+                        SwitchListTile(
+                          value: liveState.useOpenCodeEngine,
+                          onChanged: (val) {
+                            innerRef
+                                .read(roxumChatProvider.notifier)
+                                .setUseOpenCodeEngine(val);
+                          },
+                          secondary: Icon(
+                            LucideIcons.cpu,
+                            color: liveOpenCode.isRunning
+                                ? const Color(0xFF22C55E)
+                                : const Color(0xFF38BDF8),
+                          ),
+                          title: const Text(
+                            'OpenCode Engine (opencode serve)',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            liveState.useOpenCodeEngine
+                                ? 'Статус: ${liveOpenCode.statusMessage}'
+                                : 'Выключено: используется встроенный агент Roxum',
+                            style: const TextStyle(fontSize: 11.5),
+                          ),
+                          dense: true,
+                        ),
+                        if (liveState.useOpenCodeEngine)
+                          ListTile(
+                            dense: true,
+                            leading: const Icon(
+                              LucideIcons.file_code,
+                              size: 18,
+                              color: Color(0xFF38BDF8),
+                            ),
+                            title: const Text(
+                              'Открыть opencode.json в редакторе',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                            subtitle: Text(
+                              'MCP подключено: ${liveOpenCode.mcpStatuses.length} • Команд: ${liveOpenCode.commands.length}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            trailing: const Icon(LucideIcons.chevron_right, size: 16),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _openOpenCodeConfig();
+                            },
+                          ),
                         const Divider(height: 1),
                         if (Platform.isAndroid) ...[
                           SwitchListTile(

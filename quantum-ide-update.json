@@ -1,16 +1,16 @@
 {
-  "versionCode": 315,
-  "versionName": "1.2.299",
-  "notes": "## 🚀 QuantumIDE v1.2.299\n\n### Оптимизация Roxum AI Agent (анти-спам токенов и защита от циклов)\n- **Smart MCP Routing**:\n  - Даже если включены все MCP-серверы, в модель отправляются только релевантные под запрос (core `codegraph`/`token-saver`/`dart-flutter-mcp` + узкие категории по ключевым словам), что экономит 8–12k токенов на каждом шаге.\n- **Немедленное сжатие повторных `readFile` и `analyze`**:\n  - Старые чтения одного и того же файла и прошлые выводы анализатора сворачиваются сразу при появлении новых.\n- **Stall Detector (защита от зацикливания)**:\n  - Лимит снижен до 28 шагов; если 3 проверки анализатора подряд не уменьшают число ошибок, агент останавливается с понятным отчётом вместо сжигания миллионов токенов.\n- **Предупреждение для `:free` моделей**:\n  - В шапке композера Agent Mode добавлено предупреждение при выборе бесплатных слабых моделей.",
+  "versionCode": 316,
+  "versionName": "1.2.300",
+  "notes": "## 🚀 QuantumIDE v1.2.300\n\n### Интеграция OpenCode Engine прямо в чат QuantumIDE\n- **Переключатель движка `Roxum | OpenCode`** прямо над полем ввода с живым индикатором статуса сервера (`opencode serve`), автоустановкой и автозапуском.\n- **Slash-команды `/` прямо в чате**: при вводе `/` открывается интерактивное меню (`/compact`, `/undo`, `/redo`, `/diff`, `/init`, `/new` + команды с сервера).\n- **Режимы `Build` и `Plan`**, быстрые кнопки `/compact`, `/undo` и кнопка **`opencode.json`**, открывающая конфиг в редакторе в 1 клик (с автосинхронизацией MCP-серверов).\n- **Единая история чатов**: каждая сессия в QuantumIDE автоматически привязывается к серверной сессии OpenCode (`openCodeSessionId`) и синхронно удаляется на сервере при удалении в IDE.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.299/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.300/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.299",
-  "buildNumber": 315,
-  "tag_name": "v1.2.299",
-  "releaseNotes": "Добавлен Smart MCP Routing (экономия токенов при всех включённых MCP), немедленное сжатие повторных readFile/analyze, детектор зацикливания (Stall Detector) и предупреждение для :free моделей."
+  "version": "1.2.300",
+  "buildNumber": 316,
+  "tag_name": "v1.2.300",
+  "releaseNotes": "Интегрирован OpenCode Engine прямо в чат QuantumIDE: переключатель Roxum/OpenCode, автозапуск opencode serve, живое меню slash-команд (/compact, /undo, /redo, /diff, /init, /new), режимы Plan/Build, открытие opencode.json в 1 клик и единая история чатов."
 }
