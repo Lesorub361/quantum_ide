@@ -1156,6 +1156,94 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                       },
                                     ),
                                   ],
+                                  if (activeFile != null &&
+                                      activeFile.name
+                                          .toLowerCase()
+                                          .endsWith('.dart')) ...[
+                                    const SizedBox(width: 6),
+                                    Builder(
+                                      builder: (ctx) {
+                                        final hasPreviewAnnotation = activeFile
+                                            .controller
+                                            .text
+                                            .contains('@Preview');
+                                        return ActionIconButton(
+                                          icon: LucideIcons.layout_template,
+                                          color: hasPreviewAnnotation
+                                              ? const Color(0xFF22D3EE)
+                                              : const Color(0xFF94A3B8),
+                                          backgroundColor: hasPreviewAnnotation
+                                              ? const Color(
+                                                  0xFF06B6D4,
+                                                ).withValues(alpha: 0.15)
+                                              : null,
+                                          borderColor: hasPreviewAnnotation
+                                              ? const Color(
+                                                  0xFF06B6D4,
+                                                ).withValues(alpha: 0.35)
+                                              : null,
+                                          tooltip: hasPreviewAnnotation
+                                              ? 'Запустить Flutter Widget Preview (@Preview)'
+                                              : 'Flutter Widget Preview (@Preview)',
+                                          onTap: () {
+                                            ref
+                                                .read(editorProvider.notifier)
+                                                .saveFile(safeActiveIndex);
+                                            ref
+                                                .read(
+                                                  dedicatedTerminalProvider
+                                                      .notifier,
+                                                )
+                                                .sendCommand(
+                                                  DedicatedTerminalType.run,
+                                                  'flutter widget-preview start --no-web-browser --web-port=5175',
+                                                  interrupt: true,
+                                                  clear: false,
+                                                );
+                                            ref
+                                                .read(
+                                                  floatingPreviewUrlProvider
+                                                      .notifier,
+                                                )
+                                                .state = 'http://127.0.0.1:5175';
+                                            ref
+                                                .read(
+                                                  floatingPreviewVisibleProvider
+                                                      .notifier,
+                                                )
+                                                .state = true;
+                                            ref
+                                                .read(
+                                                  floatingPreviewMinimizedProvider
+                                                      .notifier,
+                                                )
+                                                .state = false;
+                                            ref
+                                                .read(
+                                                  floatingPreviewReloadTokenProvider
+                                                      .notifier,
+                                                )
+                                                .state++;
+                                            ref
+                                                .read(panelProvider.notifier)
+                                                .selectTab(PanelTab.run);
+                                            if (!hasPreviewAnnotation &&
+                                                ctx.mounted) {
+                                              ScaffoldMessenger.maybeOf(
+                                                ctx,
+                                              )?.showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Widget Preview запускается на :5175. Добавьте @Preview из package:flutter/widget_previews.dart для отображения виджета.',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          },
+                                        );
+                                      },
+                                    ),
+                                  ],
                                   const SizedBox(width: 6),
                                   // Открыть / скрыть терминал
                                   ActionIconButton(

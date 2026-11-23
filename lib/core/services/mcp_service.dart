@@ -165,7 +165,7 @@ class McpClientInstance {
         'capabilities': {
           'roots': {'listChanged': false},
         },
-        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.296'},
+        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.297'},
       }, timeout: const Duration(seconds: 12));
       await _sendNotification('notifications/initialized', const {});
       _isHandshakeDone = true;
@@ -2140,6 +2140,17 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
         name: 'quantum-filesystem',
         type: McpServerType.stdio,
         command: 'builtin:filesystem',
+      ),
+    ),
+    (
+      title: '🎯 Dart & Flutter Official MCP (dart mcp-server)',
+      description:
+          'Официальный MCP-сервер Dart SDK: Dart Analysis Server, DTD, pub.dev, безопасный pubspec.yaml, тесты и Agentic Hot Reload',
+      config: McpServerConfig(
+        name: 'dart-flutter-mcp',
+        type: McpServerType.stdio,
+        command: 'dart',
+        args: ['mcp-server'],
       ),
     ),
     (

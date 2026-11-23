@@ -12,6 +12,7 @@ import 'package:quantum_ide/core/services/talker_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_skill_loader.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 
@@ -704,6 +705,11 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         : '\nACTIVE MCP TOOLS (${mcpTools.length} available — use them proactively!):\n'
               '${mcpTools.map((t) => '- ${(t['function'] as Map)['name']}: ${(t['function'] as Map)['description']}').join('\n')}\n';
     final projectBlocks = _loadProjectContextBlocks(workspace);
+    final matchedSkillsBlock = RoxumSkillLoader.buildMatchedSkillsBlock(
+      workspace: workspace,
+      userPrompt: trimmed,
+      activeFilePath: activeFilePath,
+    );
 
     final systemPrompt = state.chatMode == RoxumChatMode.agent
         ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace, the device/system filesystem (/root, /storage/emulated/0, SDK directories, host paths), shell (including ADB / Shizuku `rish` when available), and MCP servers via tool calls '
@@ -721,11 +727,13 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
               '7) PROJECT MEMORY & WEB DOCS: Save important project facts with `mcp__quantum_memory__save_memory`; use `mcp__quantum_web_fetch__web_search_docs` / `fetch_url_markdown` for external docs.\n'
               '8) HONESTY & ANTI-HALLUCINATION: NEVER invent file names, packages, or tool runs in your final report — mention ONLY files you actually created/edited via tools in this turn.\n'
               '$mcpSummary'
-              '$projectBlocks\n'
+              '$projectBlocks'
+              '$matchedSkillsBlock\n'
               'Respond in the user\'s language.'
         : 'You are a helpful coding assistant inside QuantumIDE. '
               '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
-              '$projectBlocks\n'
+              '$projectBlocks'
+              '$matchedSkillsBlock\n'
               'Respond concisely in the user\'s language.';
 
     final textBuffer = StringBuffer(trimmed);

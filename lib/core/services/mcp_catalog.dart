@@ -71,6 +71,17 @@ class McpCatalog {
   static const List<McpCatalogItem> items = [
     // ── 1. Разработка & Код ──────────────────────────────────────────────────
     McpCatalogItem(
+      id: 'dart-flutter-mcp',
+      name: 'Dart & Flutter Official MCP',
+      description: 'Официальный MCP-сервер из Dart SDK (dart mcp-server): Dart Analysis Server, DTD, поиск пакетов на pub.dev, безопасное редактирование pubspec.yaml, тесты и Agentic Hot Reload.',
+      category: '💻 Разработка',
+      icon: LucideIcons.code,
+      command: 'dart',
+      args: ['mcp-server'],
+      isPopular: true,
+      tags: ['dart', 'flutter', 'official', 'dtd', 'pub', 'hot-reload', 'analyzer'],
+    ),
+    McpCatalogItem(
       id: 'github',
       name: 'GitHub',
       description: 'Управление репозиториями, чтение кода, создание Pull Request, просмотр issues и коммитов.',

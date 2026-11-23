@@ -3,10 +3,12 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:quantum_ide/core/services/agent_toolbox.dart';
+import 'package:quantum_ide/core/services/mcp_catalog.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_skill_loader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -317,5 +319,51 @@ And with single quotes:
       expect(res.success, isFalse);
       expect(res.output, equals('Not a git repository.'));
     });
+
+    test('Official Dart & Flutter MCP (dart mcp-server) preset is registered', () {
+      final catalogItem = McpCatalog.items.where(
+        (i) => i.id == 'dart-flutter-mcp',
+      );
+      expect(catalogItem, isNotEmpty);
+      expect(catalogItem.first.command, equals('dart'));
+      expect(catalogItem.first.args, equals(['mcp-server']));
+
+      final preset = McpService.topPresets().where(
+        (p) => p.config.name == 'dart-flutter-mcp',
+      );
+      expect(preset, isNotEmpty);
+      expect(preset.first.config.command, equals('dart'));
+      expect(preset.first.config.args, equals(['mcp-server']));
+    });
+
+    test(
+      'RoxumSkillLoader loads workspace SKILL.md and matches built-in Flutter/Genkit skills on demand',
+      () async {
+        final skillDir = Directory('${tempWorkspace.path}/.agents/skills/custom-game');
+        await skillDir.create(recursive: true);
+        await File('${skillDir.path}/SKILL.md').writeAsString('''
+---
+name: Custom Game Loop
+description: Rules for 60fps Flame game loop
+---
+Always use fixed timestep for physics updates.
+''');
+
+        final matchedCustom = RoxumSkillLoader.buildMatchedSkillsBlock(
+          workspace: tempWorkspace.path,
+          userPrompt: 'Помоги оптимизировать custom game loop',
+        );
+        expect(matchedCustom, contains('Custom Game Loop'));
+        expect(matchedCustom, contains('fixed timestep'));
+
+        final matchedPreview = RoxumSkillLoader.buildMatchedSkillsBlock(
+          workspace: tempWorkspace.path,
+          userPrompt: 'Добавь @Preview для моей кнопки',
+          activeFilePath: 'lib/widgets/my_button.dart',
+        );
+        expect(matchedPreview, contains('Flutter Widget Previews (@Preview)'));
+        expect(matchedPreview, contains('package:flutter/widget_previews.dart'));
+      },
+    );
   });
 }

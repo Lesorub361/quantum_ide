@@ -1,16 +1,16 @@
 {
-  "versionCode": 312,
-  "versionName": "1.2.296",
-  "notes": "## 🚀 QuantumIDE v1.2.296\n\n### Что исправлено в Roxum AI Agent\n- **Экономия 70–85% токенов (`RoxumAiClient`)**:\n  - Сжатие `writeFile`/`createFile` `arguments.content` в старых и перезаписанных сообщениях `assistant` (не трогая UI/диффы).\n- **Verification Gate**:\n  - Агент больше не сдаёт код с ошибками компиляции: при наличии ошибок после `smart_analyze_errors` запускается до 3 раундов авто-исправления через `editFile`.\n- **Группировка ошибок (`smart_analyze_errors`)**:\n  - Одинаковые `(file, error_code)` сворачиваются в одну компактную строку `[Nx] code (lines ...)` + сводка `Summary: X error(s)`.\n- **Защита `writeFile` vs `editFile` и `pubspec.yaml`**:\n  - Предупреждение при перезаписи существующих файлов >40 строк, напоминание `flutter pub get` при правке `pubspec.yaml`, запрет ручной перезаписи `pubspec.yaml` в промпте (использовать `flutter pub add`).\n- **Чистый `gitDiff` и MCP `roots/list`**:\n  - `gitDiff`/`gitStatus`/`gitLog` вне `.git` возвращают `Not a git repository.` вместо справки Git.\n  - Убран сломанный дублирующий `npx Local Filesystem Access`, добавлен ответ на `roots/list` для внешних MCP.\n- **Unit-тесты**: добавлены тесты в `test/ai_agent_mcp_test.dart`.",
+  "versionCode": 313,
+  "versionName": "1.2.297",
+  "notes": "## 🚀 QuantumIDE v1.2.297\n\n### Новое из экосистемы Flutter 2026\n- **Официальный Dart & Flutter MCP Server (`dart mcp-server`)**:\n  - Добавлен пресет `Dart & Flutter Official MCP` в MCP-каталог и Top Presets (включение в 1 клик: Dart Analysis Server, DTD, поиск на `pub.dev`, безопасный `pubspec.yaml`, тесты и Agentic Hot Reload).\n- **Flutter Widget Previews (`@Preview`)**:\n  - В тулбар редактора для `.dart`-файлов добавлена кнопка **`@Preview`**, запускающая `flutter widget-preview start --no-web-browser --web-port=5175` и сразу открывающая предпросмотр в WebView Preview.\n- **Agent Skills (`RoxumSkillLoader`)**:\n  - Модульные рецепты (`.agents/skills/*/SKILL.md`, `.quantum/skills/*/SKILL.md` + встроенные Flutter/Dart/Genkit Dart скиллы), которые подгружаются агенту динамически только под текущий запрос, экономя токены.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.296/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.297/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.296",
-  "buildNumber": 312,
-  "tag_name": "v1.2.296",
-  "releaseNotes": "Сжатие writeFile аргументов (экономия 70–85% токенов), Verification Gate против сдачи сломанного кода, группировка ошибок в smart_analyze_errors, фикс gitDiff вне .git и MCP roots/list."
+  "version": "1.2.297",
+  "buildNumber": 313,
+  "tag_name": "v1.2.297",
+  "releaseNotes": "Добавлен официальный Dart & Flutter MCP (dart mcp-server), кнопка Flutter @Preview Widget Preview в редакторе и модульная система Agent Skills (SKILL.md + Genkit Dart)."
 }
