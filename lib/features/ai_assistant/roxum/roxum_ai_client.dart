@@ -729,7 +729,12 @@ class RoxumAiClient {
 
     final messages = List<Map<String, dynamic>>.from(historyMessages);
     const maxIterations = 48;
+    const maxVerificationFixRounds = 3;
     var executedAnyTool = false;
+    var editedAnyFile = false;
+    var hasUnresolvedErrors = false;
+    var lastErrorCount = 0;
+    var verificationFixRounds = 0;
     var nudgedHallucination = false;
     var nudgedEmptyAfterTools = false;
 
@@ -814,6 +819,28 @@ class RoxumAiClient {
             continue;
           }
           if (agenticTools != null &&
+              editedAnyFile &&
+              hasUnresolvedErrors &&
+              verificationFixRounds < maxVerificationFixRounds) {
+            verificationFixRounds++;
+            final editedFiles = agenticTools.pendingEdits.keys
+                .map((p) => p.split(RegExp(r'[/\\]')).last)
+                .toList();
+            final filesHint = editedFiles.isEmpty
+                ? ''
+                : ' Actually edited files so far: ${editedFiles.join(', ')}.';
+            messages.add({'role': 'assistant', 'content': cleanAnswer});
+            messages.add({
+              'role': 'user',
+              'content':
+                  'VERIFICATION GATE ($verificationFixRounds/$maxVerificationFixRounds): '
+                  'The project still has $lastErrorCount unresolved compilation/analyzer error(s). '
+                  'Do NOT stop yet. Fix the errors using `editFile` (do NOT rewrite whole files with `writeFile`) '
+                  'and re-run `mcp__quantum_token_saver__smart_analyze_errors` to confirm 0 errors before giving your final answer.$filesHint',
+            });
+            continue;
+          }
+          if (agenticTools != null &&
               cleanAnswer.trim().isEmpty &&
               executedAnyTool) {
             if (!nudgedEmptyAfterTools) {
@@ -854,6 +881,37 @@ class RoxumAiClient {
               output: result.output,
             ),
           );
+
+          const editToolNames = {
+            'writeFile',
+            'createFile',
+            'editFile',
+            'replaceAllInFile',
+            'multiFileReplace',
+          };
+          if (editToolNames.contains(call.name) && result.success) {
+            editedAnyFile = true;
+          }
+
+          final isAnalyzerCall =
+              call.name == 'mcp__quantum_token_saver__smart_analyze_errors' ||
+              call.name == 'getLspDiagnostics' ||
+              (call.name == 'runCommand' &&
+                  (call.args['command']?.toString().contains('analyze') ??
+                      false));
+          if (isAnalyzerCall) {
+            final errCount = _countAnalyzerErrors(result.output);
+            if (errCount > 0) {
+              hasUnresolvedErrors = true;
+              lastErrorCount = errCount;
+            } else if (result.success &&
+                (result.output.contains('No issues found') ||
+                    result.output.contains('0 error(s)') ||
+                    result.output.contains('No errors'))) {
+              hasUnresolvedErrors = false;
+              lastErrorCount = 0;
+            }
+          }
 
           messages.add({
             'role': 'tool',
@@ -896,9 +954,104 @@ class RoxumAiClient {
     );
   }
 
-  /// Compacts older tool outputs in-place so multi-step agent loops do not
-  /// re-send huge file reads or command outputs on every subsequent turn.
+  /// Compacts older tool outputs and superseded/older `writeFile` arguments in
+  /// assistant messages so multi-step agent loops do not re-send huge file
+  /// contents on every subsequent turn.
   void _compactMessagesForTokenSavings(List<Map<String, dynamic>> messages) {
+    compactMessagesForTokenSavings(messages);
+  }
+
+  /// Public testable compactor that replaces old `tool` outputs and old or
+  /// superseded `writeFile`/`createFile` `arguments.content` fields inside
+  /// `assistant` messages without mutating caller-owned nested maps.
+  static void compactMessagesForTokenSavings(
+    List<Map<String, dynamic>> messages,
+  ) {
+    // 1. Track latest writeFile/createFile index per filePath so superseded
+    // writes are compacted immediately even within the recent window.
+    final latestWriteByPath = <String, int>{};
+    for (int i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      if (msg['role'] != 'assistant') continue;
+      final toolCalls = msg['tool_calls'];
+      if (toolCalls is! List) continue;
+      for (final tc in toolCalls) {
+        if (tc is! Map) continue;
+        final fn = tc['function'];
+        if (fn is! Map) continue;
+        final name = fn['name']?.toString() ?? '';
+        if (name != 'writeFile' && name != 'createFile') continue;
+        final parsed = _tryDecodeArgsMap(fn['arguments']);
+        final path = parsed?['filePath']?.toString().trim() ?? '';
+        if (path.isNotEmpty) {
+          latestWriteByPath[path] = i;
+        }
+      }
+    }
+
+    // Compact assistant writeFile arguments older than the last 2 agent steps
+    // (roughly 4 messages) OR already superseded by a later write to the same file.
+    final assistantCutoff = messages.length - 4;
+    for (int i = 1; i < messages.length; i++) {
+      final msg = messages[i];
+      if (msg['role'] != 'assistant') continue;
+      final toolCalls = msg['tool_calls'];
+      if (toolCalls is! List || toolCalls.isEmpty) continue;
+
+      var changed = false;
+      final newToolCalls = <dynamic>[];
+      for (final tc in toolCalls) {
+        if (tc is! Map) {
+          newToolCalls.add(tc);
+          continue;
+        }
+        final fn = tc['function'];
+        if (fn is! Map) {
+          newToolCalls.add(tc);
+          continue;
+        }
+        final name = fn['name']?.toString() ?? '';
+        if (name != 'writeFile' && name != 'createFile') {
+          newToolCalls.add(tc);
+          continue;
+        }
+        final parsed = _tryDecodeArgsMap(fn['arguments']);
+        if (parsed == null) {
+          newToolCalls.add(tc);
+          continue;
+        }
+        final content = parsed['content']?.toString() ?? '';
+        final path = parsed['filePath']?.toString().trim() ?? '';
+        final isSuperseded =
+            path.isNotEmpty && (latestWriteByPath[path] ?? i) > i;
+        final isOld = i < assistantCutoff;
+        if ((isOld || isSuperseded) &&
+            content.length > 200 &&
+            !content.startsWith('[compacted writeFile content:')) {
+          final lineCount = content.split('\n').length;
+          final reason = isSuperseded
+              ? 'superseded by later edit'
+              : 'already on disk';
+          final compactedArgs = Map<String, dynamic>.from(parsed)
+            ..['content'] =
+                '[compacted writeFile content: $lineCount lines — $reason]';
+          final newFn = Map<String, dynamic>.from(fn)
+            ..['arguments'] = fn['arguments'] is String
+                ? jsonEncode(compactedArgs)
+                : compactedArgs;
+          final newTc = Map<String, dynamic>.from(tc)..['function'] = newFn;
+          newToolCalls.add(newTc);
+          changed = true;
+        } else {
+          newToolCalls.add(tc);
+        }
+      }
+      if (changed) {
+        messages[i] = {...msg, 'tool_calls': newToolCalls};
+      }
+    }
+
+    // 2. Compact older `role: tool` outputs beyond the most recent 6 messages.
     if (messages.length <= 8) return;
     final cutoff = messages.length - 6;
     for (int i = 1; i < cutoff; i++) {
@@ -917,6 +1070,41 @@ class RoxumAiClient {
         }
       }
     }
+  }
+
+  static Map<String, dynamic>? _tryDecodeArgsMap(dynamic rawArgs) {
+    if (rawArgs is Map<String, dynamic>) return rawArgs;
+    if (rawArgs is Map) return Map<String, dynamic>.from(rawArgs);
+    if (rawArgs is String && rawArgs.trim().startsWith('{')) {
+      try {
+        final decoded = jsonDecode(rawArgs);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static int _countAnalyzerErrors(String output) {
+    if (output.trim().isEmpty) return 0;
+    final summaryMatch = RegExp(
+      r'Summary:\s*(\d+)\s+error\(s\)',
+      caseSensitive: false,
+    ).firstMatch(output);
+    if (summaryMatch != null) {
+      return int.tryParse(summaryMatch.group(1) ?? '0') ?? 0;
+    }
+    var count = 0;
+    for (final line in output.split('\n')) {
+      final t = line.trim();
+      if (t.startsWith('error •') ||
+          t.contains(' error • ') ||
+          t.startsWith('Error:') ||
+          t.contains('error TS')) {
+        final multi = RegExp(r'\[(\d+)x\]').firstMatch(t);
+        count += multi != null ? (int.tryParse(multi.group(1)!) ?? 1) : 1;
+      }
+    }
+    return count;
   }
 
   ({String reasoning, String answer}) _splitThinkTags(String raw) {

@@ -165,7 +165,7 @@ class McpClientInstance {
         'capabilities': {
           'roots': {'listChanged': false},
         },
-        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.294'},
+        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.296'},
       }, timeout: const Duration(seconds: 12));
       await _sendNotification('notifications/initialized', const {});
       _isHandshakeDone = true;
@@ -344,7 +344,33 @@ class McpClientInstance {
     if (!trimmed.startsWith('{')) return;
     try {
       final json = jsonDecode(trimmed);
-      if (json is Map<String, dynamic> && json.containsKey('id')) {
+      if (json is! Map<String, dynamic>) return;
+      if (json.containsKey('method') && json.containsKey('id')) {
+        final method = json['method']?.toString() ?? '';
+        final rawId = json['id'];
+        if (method == 'roots/list') {
+          final workspace = _ref.read(workspaceProvider).currentPath ?? '';
+          final runtime = _ref.read(runtimeServiceProvider);
+          final effectivePath = workspace.isNotEmpty
+              ? (Platform.isAndroid ? runtime.toProotPath(workspace) : workspace)
+              : '/root';
+          final rootUri = Uri.file(effectivePath).toString();
+          final resp = jsonEncode({
+            'jsonrpc': '2.0',
+            'id': rawId,
+            'result': {
+              'roots': [
+                {'uri': rootUri, 'name': 'workspace'},
+              ],
+            },
+          });
+          if (config.type == McpServerType.stdio) {
+            _process?.stdin.writeln(resp);
+          }
+          return;
+        }
+      }
+      if (json.containsKey('id')) {
         final rawId = json['id'];
         final id = rawId is int ? rawId : int.tryParse('$rawId');
         if (id != null && _pendingRequests.containsKey(id)) {
@@ -1165,20 +1191,9 @@ class McpClientInstance {
           workingDirectory: workspace,
           timeout: const Duration(seconds: 90),
         );
-        final filtered = res.combined
-            .split('\n')
-            .where(
-              (l) =>
-                  l.contains('error •') ||
-                  l.contains('warning •') ||
-                  l.contains('info •') ||
-                  l.contains('Error:') ||
-                  l.contains('error TS') ||
-                  l.contains('No issues found'),
-            )
-            .take(80)
-            .join('\n');
-        final diagText = filtered.isEmpty ? res.combined : filtered;
+        final diagText = McpService.formatCompactAnalyzerDiagnostics(
+          res.combined,
+        );
         return {
           'exitCode': res.exitCode,
           'diagnostics': diagText,
@@ -2219,6 +2234,148 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
     final client = _getOrCreateClient(server);
     await client.connect();
     return await client.callTool(toolName, arguments);
+  }
+
+  /// Aggregates repetitive analyzer output (e.g. `dart analyze` / `flutter analyze` / `tsc`)
+  /// by `(severity, filePath, errorCode)` so the AI agent receives compact, actionable
+  /// diagnostics instead of dozens of duplicated lines.
+  static String formatCompactAnalyzerDiagnostics(String rawOutput) {
+    final trimmedRaw = rawOutput.trim();
+    if (trimmedRaw.isEmpty) return 'No issues found.';
+    if (trimmedRaw.contains('No issues found')) {
+      return 'Summary: 0 error(s), 0 warning(s), 0 info(s).\nNo issues found.';
+    }
+
+    final bulletRe = RegExp(
+      r'^\s*(error|warning|info)\s+[•\-]\s+(.+?)\s+[•\-]\s+([^:\s]+):(\d+):(\d+)\s+[•\-]\s+([a-zA-Z0-9_]+)\s*$',
+    );
+    final dartDashRe = RegExp(
+      r'^\s*(error|warning|info)\s+-\s+([^:\s]+):(\d+):(\d+)\s+-\s+(.+?)\s+-\s+([a-zA-Z0-9_]+)\s*$',
+    );
+
+    final groups =
+        <
+          String,
+          ({
+            String severity,
+            String file,
+            String code,
+            String message,
+            List<int> lines,
+          })
+        >{};
+    final otherLines = <String>[];
+    var errorCount = 0;
+    var warningCount = 0;
+    var infoCount = 0;
+
+    for (final rawLine in trimmedRaw.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      String? severity;
+      String? file;
+      int? lineNum;
+      String? message;
+      String? code;
+
+      final mBullet = bulletRe.firstMatch(rawLine);
+      if (mBullet != null) {
+        severity = mBullet.group(1)!.toLowerCase();
+        message = mBullet.group(2)!.trim();
+        file = mBullet.group(3)!.trim();
+        lineNum = int.tryParse(mBullet.group(4)!) ?? 0;
+        code = mBullet.group(6)!.trim();
+      } else {
+        final mDash = dartDashRe.firstMatch(rawLine);
+        if (mDash != null) {
+          severity = mDash.group(1)!.toLowerCase();
+          file = mDash.group(2)!.trim();
+          lineNum = int.tryParse(mDash.group(3)!) ?? 0;
+          message = mDash.group(5)!.trim();
+          code = mDash.group(6)!.trim();
+        }
+      }
+
+      if (severity != null &&
+          file != null &&
+          code != null &&
+          message != null) {
+        if (severity == 'error') {
+          errorCount++;
+        } else if (severity == 'warning') {
+          warningCount++;
+        } else {
+          infoCount++;
+        }
+        final key = '$severity|$file|$code';
+        final existing = groups[key];
+        if (existing != null) {
+          existing.lines.add(lineNum ?? 0);
+        } else {
+          groups[key] = (
+            severity: severity,
+            file: file,
+            code: code,
+            message: message,
+            lines: [lineNum ?? 0],
+          );
+        }
+      } else if (line.startsWith('Error:') ||
+          line.contains('error TS') ||
+          line.contains('error •') ||
+          line.contains('warning •')) {
+        if (line.startsWith('Error:') ||
+            line.contains('error TS') ||
+            line.contains('error •')) {
+          errorCount++;
+        } else {
+          warningCount++;
+        }
+        otherLines.add(line);
+      }
+    }
+
+    if (groups.isEmpty && otherLines.isEmpty) {
+      return trimmedRaw;
+    }
+
+    int severityRank(String s) => s == 'error' ? 0 : (s == 'warning' ? 1 : 2);
+    final sorted = groups.values.toList()
+      ..sort((a, b) {
+        final r = severityRank(a.severity).compareTo(severityRank(b.severity));
+        if (r != 0) return r;
+        return b.lines.length.compareTo(a.lines.length);
+      });
+
+    final totalRaw = errorCount + warningCount + infoCount;
+    final out = StringBuffer()
+      ..writeln(
+        'Summary: $errorCount error(s), $warningCount warning(s), $infoCount info(s) '
+        '(grouped from $totalRaw raw issues).',
+      );
+
+    for (final g in sorted.take(40)) {
+      final uniqueLines = g.lines.where((l) => l > 0).toSet().toList()..sort();
+      final count = g.lines.length;
+      if (count == 1) {
+        final loc = uniqueLines.isNotEmpty ? ':${uniqueLines.first}' : '';
+        out.writeln('${g.severity} • ${g.file}$loc: ${g.code} — ${g.message}');
+      } else {
+        final lineDesc = uniqueLines.length <= 4
+            ? uniqueLines.join(', ')
+            : '${uniqueLines.take(3).join(', ')}..${uniqueLines.last}';
+        out.writeln(
+          '${g.severity} • ${g.file}: [${count}x] ${g.code} (lines $lineDesc) — ${g.message}',
+        );
+      }
+    }
+
+    for (final extra in otherLines.take(20)) {
+      out.writeln(extra);
+    }
+
+    return out.toString().trim();
   }
 
   @override

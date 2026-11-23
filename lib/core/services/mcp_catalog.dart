@@ -425,18 +425,6 @@ class McpCatalog {
     // ── 5. Файлы & Система ──────────────────────────────────────────────────
     McpCatalogItem(
       id: 'filesystem',
-      name: 'Local Filesystem Access',
-      description: 'Безопасное чтение и запись локальных файлов с настраиваемым списком разрешенных директорий.',
-      category: '📁 Файлы & Система',
-      icon: LucideIcons.folder,
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem'],
-      requiredArgLabels: ['Разрешенные пути (через пробел, например: .)'],
-      isPopular: true,
-      tags: ['fs', 'filesystem', 'files', 'local'],
-    ),
-    McpCatalogItem(
-      id: 'filesystem',
       name: 'Filesystem (Builtin)',
       description: 'Безопасная работа с файлами и каталогами проекта (не требует npm).',
       category: '📁 Файлы & Система',

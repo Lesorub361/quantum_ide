@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +6,7 @@ import 'package:quantum_ide/core/services/agent_toolbox.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -210,6 +212,110 @@ And with single quotes:
       expect(calls[0].args['_body'], equals('{"directory":"lib"}'));
       expect(calls[1].name, equals('read_file'));
       expect(calls[1].args['path'], equals('lib/main.dart'));
+    });
+
+    test(
+      'RoxumAiClient.compactMessagesForTokenSavings compacts old/superseded writeFile args',
+      () {
+        final bigCode1 = List.generate(
+          60,
+          (i) => 'final v$i = $i; // line',
+        ).join('\n');
+        final bigCode2 = List.generate(
+          65,
+          (i) => 'final u$i = $i; // updated',
+        ).join('\n');
+        final messages = <Map<String, dynamic>>[
+          {'role': 'system', 'content': 'sys'},
+          {'role': 'user', 'content': 'build game'},
+          {
+            'role': 'assistant',
+            'content': null,
+            'tool_calls': [
+              {
+                'id': 'call_1',
+                'type': 'function',
+                'function': {
+                  'name': 'writeFile',
+                  'arguments': jsonEncode({
+                    'filePath': 'lib/main.dart',
+                    'content': bigCode1,
+                  }),
+                },
+              },
+            ],
+          },
+          {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'Wrote lib/main.dart'},
+          {
+            'role': 'assistant',
+            'content': null,
+            'tool_calls': [
+              {
+                'id': 'call_2',
+                'type': 'function',
+                'function': {
+                  'name': 'writeFile',
+                  'arguments': jsonEncode({
+                    'filePath': 'lib/main.dart',
+                    'content': bigCode2,
+                  }),
+                },
+              },
+            ],
+          },
+          {'role': 'tool', 'tool_call_id': 'call_2', 'content': 'Wrote lib/main.dart'},
+        ];
+
+        RoxumAiClient.compactMessagesForTokenSavings(messages);
+
+        final firstCallArgs = jsonDecode(
+          ((messages[2]['tool_calls'] as List).first as Map)['function']['arguments']
+              as String,
+        ) as Map<String, dynamic>;
+        final latestCallArgs = jsonDecode(
+          ((messages[4]['tool_calls'] as List).first as Map)['function']['arguments']
+              as String,
+        ) as Map<String, dynamic>;
+
+        expect(
+          firstCallArgs['content'].toString(),
+          startsWith('[compacted writeFile content: 60 lines'),
+        );
+        expect(latestCallArgs['content'], equals(bigCode2));
+      },
+    );
+
+    test(
+      'McpService.formatCompactAnalyzerDiagnostics groups repeated (file, code) errors',
+      () {
+        final lines = <String>[
+          for (var i = 0; i < 12; i++)
+            "  error • The name 'Colors' is defined in the libraries 'package:flutter/material.dart' and 'package:vector_math/vector_math_64.dart' • lib/main.dart:${100 + i * 10}:5 • ambiguous_import",
+          for (var i = 0; i < 6; i++)
+            '  error • Evaluation of this constant expression throws an exception • lib/world.dart:${20 + i}:3 • const_with_non_const',
+          '  warning • Unused import • lib/world.dart:2:8 • unused_import',
+        ];
+        final formatted = McpService.formatCompactAnalyzerDiagnostics(
+          lines.join('\n'),
+        );
+
+        expect(formatted, contains('Summary: 18 error(s), 1 warning(s), 0 info(s)'));
+        expect(formatted, contains('[12x] ambiguous_import'));
+        expect(formatted, contains('[6x] const_with_non_const'));
+        expect(formatted, contains('lib/world.dart:2: unused_import'));
+        expect(formatted.split('\n').length, lessThanOrEqualTo(6));
+      },
+    );
+
+    test('gitDiff returns concise message outside a git repository', () async {
+      final toolsProvider = Provider<RoxumAgenticTools>(
+        (ref) => RoxumAgenticTools(ref, pendingEdits: {}),
+      );
+      final tools = container.read(toolsProvider);
+      final res = await tools.execute('gitDiff', {'filePath': 'sample.dart'});
+
+      expect(res.success, isFalse);
+      expect(res.output, equals('Not a git repository.'));
     });
   });
 }

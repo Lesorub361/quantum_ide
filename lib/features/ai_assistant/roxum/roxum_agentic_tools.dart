@@ -552,15 +552,15 @@ class RoxumAgenticTools {
         case 'getPendingEditsForFile':
           return _getPendingEdits(args['filePath']?.toString());
         case 'gitStatus':
-          return await _runShell('git status --short');
+          return await _runGitCommand('git status --short');
         case 'gitDiff':
           final fp = args['filePath']?.toString();
-          return await _runShell(
+          return await _runGitCommand(
             fp != null && fp.isNotEmpty ? 'git diff -- "$fp"' : 'git diff',
           );
         case 'gitLog':
           final limit = ((args['limit'] as num?)?.toInt() ?? 10).clamp(1, 50);
-          return await _runShell('git log -n $limit --oneline');
+          return await _runGitCommand('git log -n $limit --oneline');
         case 'codeOutline':
           return await _codeOutline(args['path']?.toString() ?? '');
         case 'checkEnvironment':
@@ -817,6 +817,36 @@ class RoxumAgenticTools {
     return (added: added, removed: removed);
   }
 
+  Future<RoxumToolExecutionResult> _runGitCommand(String command) async {
+    final ws = workspacePath.trim();
+    if (ws.isEmpty) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'Not a git repository.',
+      );
+    }
+    var dir = Directory(ws);
+    var hasGit = false;
+    for (int depth = 0; depth < 6; depth++) {
+      final dotGitDir = Directory('${dir.path}${Platform.pathSeparator}.git');
+      final dotGitFile = File('${dir.path}${Platform.pathSeparator}.git');
+      if (await dotGitDir.exists() || await dotGitFile.exists()) {
+        hasGit = true;
+        break;
+      }
+      final parent = dir.parent;
+      if (parent.path == dir.path) break;
+      dir = parent;
+    }
+    if (!hasGit) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'Not a git repository.',
+      );
+    }
+    return await _runShell(command);
+  }
+
   Future<RoxumToolExecutionResult> _writeFile(
     String rawPath,
     String content,
@@ -825,16 +855,30 @@ class RoxumAgenticTools {
     final file = File(path);
     final existed = await file.exists();
     final original = existed ? await file.readAsString() : '';
+    final originalLines = original.isEmpty ? 0 : original.split('\n').length;
     final syntaxWarn = await _recordAndWrite(
       path,
       content,
       existedBefore: existed,
       originalContent: original,
     );
+    final rel = _relativePath(path);
+    final extraNotes = StringBuffer();
+    if (existed && originalLines > 40) {
+      extraNotes.write(
+        '\n[EFFICIENCY WARNING: "$rel" already existed with $originalLines lines. '
+        'For targeted fixes or import updates, ALWAYS use `editFile` instead of rewriting the whole file with `writeFile` to save tokens.]',
+      );
+    }
+    if (rel == 'pubspec.yaml' || rel.endsWith('/pubspec.yaml')) {
+      extraNotes.write(
+        '\n[ACTION REQUIRED: pubspec.yaml changed — run `flutter pub get` (or prefer `flutter pub add <package>` when adding packages) to verify dependencies.]',
+      );
+    }
     return RoxumToolExecutionResult(
       success: true,
       output:
-          'Wrote ${_relativePath(path)} (${content.split('\n').length} lines).$syntaxWarn',
+          'Wrote $rel (${content.split('\n').length} lines).$syntaxWarn${extraNotes.toString()}',
     );
   }
 
@@ -866,9 +910,13 @@ class RoxumAgenticTools {
       existedBefore: true,
       originalContent: original,
     );
+    final rel = _relativePath(path);
+    final pubNote = (rel == 'pubspec.yaml' || rel.endsWith('/pubspec.yaml'))
+        ? '\n[ACTION REQUIRED: pubspec.yaml changed — run `flutter pub get` to verify dependencies.]'
+        : '';
     return RoxumToolExecutionResult(
       success: true,
-      output: 'Updated ${_relativePath(path)}.$syntaxWarn',
+      output: 'Updated $rel.$syntaxWarn$pubNote',
     );
   }
 

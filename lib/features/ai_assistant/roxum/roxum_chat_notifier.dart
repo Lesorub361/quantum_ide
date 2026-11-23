@@ -681,7 +681,20 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
             .read(mcpServiceProvider.notifier)
             .getAvailableMcpTools()
             .timeout(const Duration(seconds: 12));
-        mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
+        final hasNativeFs = baseTools.any((t) {
+          final fnName = (t['function'] as Map?)?['name']?.toString() ?? '';
+          return fnName == 'readFile' || fnName == 'writeFile';
+        });
+        final filteredMcp = hasNativeFs
+            ? rawMcp
+                .where(
+                  (t) =>
+                      (t['server']?.toString() ?? '').toLowerCase() !=
+                      'local filesystem access',
+                )
+                .toList()
+            : rawMcp;
+        mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(filteredMcp);
       } catch (_) {}
     }
     final toolsSchema = <Map<String, dynamic>>[...baseTools, ...mcpTools];
@@ -699,14 +712,14 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
               '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}\n'
               'CRITICAL RULES FOR HIGH EFFICIENCY & ACCURACY:\n'
               '0) ACT, DO NOT DESCRIBE: perform the task with REAL tool calls (writeFile/editFile/runCommand...). NEVER write text like "[Executed tools...]", never claim an edit/build succeeded unless a real tool result confirmed it, and never finish with only a plan or description.\n'
-              '1) TOKEN SAVING & CODEGRAPH MCP: For unfamiliar or large files/projects, call `mcp__quantum_codegraph__project_symbols` or `codeOutline` first, use `mcp__quantum_codegraph__read_symbol` to read a specific class/method body with brace balancing, `mcp__quantum_codegraph__find_symbol_usages` to find references across the project, or `readFile` with `startLine` and `endLine`.\n'
-              '2) ENVIRONMENT & SDKS: NEVER assume `flutter`, `dart`, `node`, `python`, `java`, or `git` is missing and NEVER try to manually download huge SDK tarballs via curl unless `checkEnvironment` proves it is absent. Always call `checkEnvironment` first to see exact installed SDK paths and versions.\n'
-              '3) INSTALLING PACKAGES: If a project or system dependency is missing, install it directly using `installPackages` (supports apt, npm, pip, pub, cargo) or `runCommand`.\n'
-              '4) REAL VERIFICATION & SMART ANALYZER MCP: After creating or editing files, ALWAYS call `getLspDiagnostics` or `mcp__quantum_token_saver__smart_analyze_errors` to see all real compiler/analyzer errors and fix them before finishing.\n'
-              '5) MCP CATEGORIES: Architecture/navigation=quantum-codegraph; diagnostics/quality=quantum-token-saver; build/dependencies=quantum-build-doctor; devices/runtime=quantum-device-qa; project memory=quantum-memory; docs/web=quantum-web-fetch; data/telemetry=quantum-sqlite-telemetry. Choose the narrowest relevant category instead of calling every MCP.\n'
-              '6) PROJECT MEMORY MCP: When you discover important architectural facts, SDK paths, or user preferences, save them using `mcp__quantum_memory__save_memory` so they persist across sessions.\n'
-              '7) WEB & DOCS MCP: When you need external documentation, package versions, or web search, use `mcp__quantum_web_fetch__web_search_docs` and `mcp__quantum_web_fetch__fetch_url_markdown` (or `mcp__context7__*` if enabled).\n'
-              '8) HONESTY: NEVER claim you ran a command, installed an SDK, or edited a file unless you actually invoked the corresponding tool call in this turn.\n'
+              '1) TARGETED EDITS & RELATIVE PATHS: Use SHORT workspace-relative paths (e.g. `lib/main.dart`, NOT `/data/user/0/.../lib/main.dart`). For existing files over 40 lines, NEVER rewrite the entire file with `writeFile` to fix imports or bugs — ALWAYS use `editFile` or `replaceAllInFile`!\n'
+              '2) TOKEN SAVING & CODEGRAPH MCP: For unfamiliar or large files/projects, call `mcp__quantum_codegraph__project_symbols` or `codeOutline` first, use `mcp__quantum_codegraph__read_symbol` to read a specific class/method body with brace balancing, `mcp__quantum_codegraph__find_symbol_usages` to find references across the project, or `readFile` with `startLine` and `endLine`.\n'
+              '3) PACKAGES & PUBSPEC: NEVER add Flutter/Dart packages by manually rewriting `pubspec.yaml` (and never invent package versions). ALWAYS run `flutter pub add <package>` (or `dart pub add <package>`) via `runCommand` so compatible versions are resolved and fetched automatically. If you edit `pubspec.yaml` directly, immediately run `flutter pub get`.\n'
+              '4) ENVIRONMENT & SDKS: NEVER assume `flutter`, `dart`, `node`, `python`, `java`, or `git` is missing and NEVER try to manually download huge SDK tarballs via curl unless `checkEnvironment` proves it is absent. Always call `checkEnvironment` first to see exact installed SDK paths and versions.\n'
+              '5) REAL VERIFICATION & SMART ANALYZER MCP: After creating or editing files, ALWAYS call `mcp__quantum_token_saver__smart_analyze_errors` (or `getLspDiagnostics`) and fix ALL compiler errors using `editFile` before finishing.\n'
+              '6) MCP CATEGORIES: Architecture/navigation=quantum-codegraph; diagnostics/quality=quantum-token-saver; build/dependencies=quantum-build-doctor; devices/runtime=quantum-device-qa; project memory=quantum-memory; docs/web=quantum-web-fetch; data/telemetry=quantum-sqlite-telemetry. Choose the narrowest relevant category instead of calling every MCP.\n'
+              '7) PROJECT MEMORY & WEB DOCS: Save important project facts with `mcp__quantum_memory__save_memory`; use `mcp__quantum_web_fetch__web_search_docs` / `fetch_url_markdown` for external docs.\n'
+              '8) HONESTY & ANTI-HALLUCINATION: NEVER invent file names, packages, or tool runs in your final report — mention ONLY files you actually created/edited via tools in this turn.\n'
               '$mcpSummary'
               '$projectBlocks\n'
               'Respond in the user\'s language.'
