@@ -51,7 +51,7 @@ class OpenCodeState {
   const OpenCodeState({
     this.status = OpenCodeServerStatus.stopped,
     this.isInstalled = false,
-    this.baseUrl = 'http://127.0.0.1:4096',
+    this.baseUrl = 'http://127.0.0.1:4097',
     this.statusMessage = 'Остановлен',
     this.commands = defaultSlashCommands,
     this.mcpStatuses = const {},
@@ -122,7 +122,7 @@ class OpenCodeState {
 /// directly inside QuantumIDE's Flutter chat UI.
 class OpenCodeService extends StateNotifier<OpenCodeState> {
   final Ref _ref;
-  static const int defaultPort = 4096;
+  static const int defaultPort = 4097;
   static const String _extraPath =
       r'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.npm-global/bin:${PREFIX:-/usr}/bin:/usr/local/bin:$PATH"; ';
 
@@ -258,9 +258,15 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
   Future<bool> _isHealthy() async {
     try {
       final res = await http
-          .get(Uri.parse('${state.baseUrl}/config'))
+          .get(
+            Uri.parse('${state.baseUrl}/config'),
+            headers: const {'Accept': 'application/json'},
+          )
           .timeout(const Duration(seconds: 2));
-      return res.statusCode >= 200 && res.statusCode < 500;
+      if (res.statusCode != 200) return false;
+      final ct = (res.headers['content-type'] ?? '').toLowerCase();
+      final body = res.body.trimLeft();
+      return ct.contains('application/json') && body.startsWith('{');
     } catch (_) {
       return false;
     }
