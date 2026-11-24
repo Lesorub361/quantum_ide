@@ -381,6 +381,7 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
       }
 
       int lastSampleTime = DateTime.now().millisecondsSinceEpoch;
+      int lastUiEmitTime = 0;
       int lastSampleBytes = 0;
 
       await _dio.download(
@@ -388,8 +389,14 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
         partFile.path,
         onReceiveProgress: (received, total) {
           final effectiveTotal = total > 0 ? total : info.sizeBytes;
-          final fraction = effectiveTotal > 0 ? (received / effectiveTotal).clamp(0.0, 1.0) : 0.0;
           final now = DateTime.now().millisecondsSinceEpoch;
+          final isDone = effectiveTotal > 0 && received >= effectiveTotal;
+          // Throttle Riverpod state emissions to ~4 Hz (250ms) so high-speed
+          // downloads don't flood the Flutter UI thread with hundreds of rebuilds/sec.
+          if (!isDone && now - lastUiEmitTime < 250) return;
+          lastUiEmitTime = now;
+
+          final fraction = effectiveTotal > 0 ? (received / effectiveTotal).clamp(0.0, 1.0) : 0.0;
           final elapsed = now - lastSampleTime;
 
           int speed = state.speedBytesPerSec;
@@ -410,11 +417,11 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
         },
       );
 
-      // Verify SHA256 if provided
+      // Verify SHA256 if provided (streamed to avoid blocking UI / spiking RAM)
       if (info.sha256.isNotEmpty) {
         state = state.copyWith(statusMessage: 'Проверка целостности SHA-256...');
-        final bytes = await partFile.readAsBytes();
-        final actualSha = sha256.convert(bytes).toString().toLowerCase();
+        final digest = await sha256.bind(partFile.openRead()).first;
+        final actualSha = digest.toString().toLowerCase();
         if (actualSha != info.sha256.toLowerCase()) {
           await partFile.delete();
           throw Exception('Ошибка проверки SHA-256 (ожидалось: ${info.sha256}, получено: $actualSha)');

@@ -2011,80 +2011,84 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     );
   }
 
-  Widget _buildQuickUpdatePill(WidgetRef ref) {
-    final updateState = ref.watch(appUpdateServiceProvider);
-    if (!updateState.hasUpdate && !updateState.isDownloading) {
-      return const SizedBox.shrink();
-    }
+  Widget _buildQuickUpdatePill(WidgetRef _) {
+    return Consumer(
+      builder: (context, pillRef, __) {
+        final updateState = pillRef.watch(appUpdateServiceProvider);
+        if (!updateState.hasUpdate && !updateState.isDownloading) {
+          return const SizedBox.shrink();
+        }
 
-    if (updateState.isDownloading) {
-      final pct = (updateState.downloadProgress * 100).toInt();
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+        if (updateState.isDownloading) {
+          final pct = (updateState.downloadProgress * 100).toInt();
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 10,
+                  height: 10,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFA78BFA),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '$pct%',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFA78BFA),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final info = updateState.updateInfo!;
+        return InkWell(
+          onTap: () {
+            pillRef
+                .read(appUpdateServiceProvider.notifier)
+                .downloadAndInstallUpdate(info);
+          },
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.download, size: 12, color: Colors.white),
+                const SizedBox(width: 4),
+                Text(
+                  'v${info.versionName}',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 10,
-              height: 10,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Color(0xFFA78BFA),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              '$pct%',
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFA78BFA),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final info = updateState.updateInfo!;
-    return InkWell(
-      onTap: () {
-        ref
-            .read(appUpdateServiceProvider.notifier)
-            .downloadAndInstallUpdate(info);
+        );
       },
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xFF8B5CF6),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(LucideIcons.download, size: 12, color: Colors.white),
-            const SizedBox(width: 4),
-            Text(
-              'v${info.versionName}',
-              style: const TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
