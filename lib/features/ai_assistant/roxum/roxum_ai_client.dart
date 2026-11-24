@@ -728,14 +728,12 @@ class RoxumAiClient {
     _client = client;
 
     final messages = List<Map<String, dynamic>>.from(historyMessages);
-    const maxIterations = 28;
+    const maxIterations = 48;
     const maxVerificationFixRounds = 3;
     var executedAnyTool = false;
     var editedAnyFile = false;
     var hasUnresolvedErrors = false;
     var lastErrorCount = 0;
-    var prevAnalyzerErrorCount = -1;
-    var stalledErrorRounds = 0;
     var verificationFixRounds = 0;
     var nudgedHallucination = false;
     var nudgedEmptyAfterTools = false;
@@ -823,7 +821,6 @@ class RoxumAiClient {
           if (agenticTools != null &&
               editedAnyFile &&
               hasUnresolvedErrors &&
-              stalledErrorRounds < 3 &&
               verificationFixRounds < maxVerificationFixRounds) {
             verificationFixRounds++;
             final editedFiles = agenticTools.pendingEdits.keys
@@ -907,21 +904,12 @@ class RoxumAiClient {
             if (errCount > 0) {
               hasUnresolvedErrors = true;
               lastErrorCount = errCount;
-              if (prevAnalyzerErrorCount != -1 &&
-                  errCount >= prevAnalyzerErrorCount) {
-                stalledErrorRounds++;
-              } else {
-                stalledErrorRounds = 0;
-              }
-              prevAnalyzerErrorCount = errCount;
             } else if (result.success &&
                 (result.output.contains('No issues found') ||
                     result.output.contains('0 error(s)') ||
                     result.output.contains('No errors'))) {
               hasUnresolvedErrors = false;
               lastErrorCount = 0;
-              stalledErrorRounds = 0;
-              prevAnalyzerErrorCount = 0;
             }
           }
 
@@ -932,13 +920,8 @@ class RoxumAiClient {
             'content': result.toJsonString(),
           });
         }
-
-        if (stalledErrorRounds >= 3) {
-          return '⚠️ Агент остановлен защитой от зацикливания: за 3 проверки подряд число ошибок анализатора не уменьшилось (осталось $lastErrorCount). '
-              'Попробуйте выбрать более сильную кодинг-модель (DeepSeek / Qwen / Gemini / Claude) или уточнить конкретную ошибку.';
-        }
       }
-      return 'Достигнут лимит шагов агента ($maxIterations). Нажмите «Продолжить выполнение», чтобы завершить задачу.';
+      return 'Достигнут лимит шагов агента (48). Нажмите «Продолжить выполнение», чтобы завершить задачу.';
     } finally {
       if (_client == client) {
         _client?.close();
@@ -1068,55 +1051,23 @@ class RoxumAiClient {
       }
     }
 
-    // 2. Compact superseded readFile/analyzer outputs immediately and older
-    // `role: tool` outputs beyond the most recent 6 messages.
-    int? latestAnalyzeIdx;
-    final latestReadIdx = <String, int>{};
-    for (int i = 1; i < messages.length; i++) {
+    // 2. Compact older `role: tool` outputs beyond the most recent 6 messages.
+    if (messages.length <= 8) return;
+    final cutoff = messages.length - 6;
+    for (int i = 1; i < cutoff; i++) {
       final msg = messages[i];
-      if (msg['role'] != 'tool') continue;
-      final name = msg['name']?.toString() ?? '';
-      final content = msg['content']?.toString() ?? '';
-      if (name == 'getLspDiagnostics' ||
-          name == 'mcp__quantum_token_saver__smart_analyze_errors' ||
-          (name == 'runCommand' && content.contains('Analyzing '))) {
-        latestAnalyzeIdx = i;
-      } else if (name == 'readFile') {
-        final headerMatch = RegExp(r'\[File:\s*([^\s#]+)').firstMatch(content);
-        final key = headerMatch?.group(1) ?? 'readFile';
-        latestReadIdx[key] = i;
-      }
-    }
-
-    final cutoff = messages.length > 8 ? messages.length - 6 : 1;
-    for (int i = 1; i < messages.length; i++) {
-      final msg = messages[i];
-      if (msg['role'] != 'tool') continue;
-      final content = msg['content']?.toString() ?? '';
-      if (content.length <= 600 || content.contains('[compacted tool output:')) {
-        continue;
-      }
-      final name = msg['name']?.toString() ?? '';
-      final isSupersededAnalyze =
-          latestAnalyzeIdx != null &&
-          i < latestAnalyzeIdx &&
-          (name == 'getLspDiagnostics' ||
-              name == 'mcp__quantum_token_saver__smart_analyze_errors' ||
-              (name == 'runCommand' && content.contains('Analyzing ')));
-      var isSupersededRead = false;
-      if (name == 'readFile') {
-        final headerMatch = RegExp(r'\[File:\s*([^\s#]+)').firstMatch(content);
-        final key = headerMatch?.group(1) ?? 'readFile';
-        isSupersededRead = (latestReadIdx[key] ?? i) > i;
-      }
-      if (isSupersededAnalyze || isSupersededRead || (i < cutoff && content.length > 900)) {
-        final head = content.substring(0, isSupersededAnalyze || isSupersededRead ? 180 : 420);
-        final tail = content.substring(content.length - (isSupersededAnalyze || isSupersededRead ? 100 : 220));
-        messages[i] = {
-          ...msg,
-          'content':
-              '$head\n...[compacted tool output: ${content.length} chars total to save tokens]...\n$tail',
-        };
+      if (msg['role'] == 'tool') {
+        final content = msg['content']?.toString() ?? '';
+        if (content.length > 900 &&
+            !content.contains('[compacted tool output:')) {
+          final head = content.substring(0, 420);
+          final tail = content.substring(content.length - 220);
+          messages[i] = {
+            ...msg,
+            'content':
+                '$head\n...[compacted tool output: ${content.length} chars total to save tokens]...\n$tail',
+          };
+        }
       }
     }
   }

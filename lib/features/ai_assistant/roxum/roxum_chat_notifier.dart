@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
-import 'package:quantum_ide/core/services/opencode_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/talker_service.dart';
@@ -242,28 +241,24 @@ class RoxumChatSession {
   final String title;
   final List<RoxumConversationTurn> turns;
   final DateTime updatedAt;
-  final String? openCodeSessionId;
 
   const RoxumChatSession({
     required this.id,
     required this.title,
     required this.turns,
     required this.updatedAt,
-    this.openCodeSessionId,
   });
 
   RoxumChatSession copyWith({
     String? title,
     List<RoxumConversationTurn>? turns,
     DateTime? updatedAt,
-    String? openCodeSessionId,
   }) {
     return RoxumChatSession(
       id: id,
       title: title ?? this.title,
       turns: turns ?? this.turns,
       updatedAt: updatedAt ?? this.updatedAt,
-      openCodeSessionId: openCodeSessionId ?? this.openCodeSessionId,
     );
   }
 
@@ -272,7 +267,6 @@ class RoxumChatSession {
     'title': title,
     'turns': turns.map((t) => t.toJson()).toList(),
     'updatedAt': updatedAt.toIso8601String(),
-    if (openCodeSessionId != null) 'openCodeSessionId': openCodeSessionId,
   };
 
   factory RoxumChatSession.fromJson(Map<String, dynamic> json) {
@@ -287,7 +281,6 @@ class RoxumChatSession {
       updatedAt:
           DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
           DateTime.now(),
-      openCodeSessionId: json['openCodeSessionId']?.toString(),
     );
   }
 }
@@ -304,8 +297,6 @@ class RoxumChatState {
   final OpenRouterKeyLimits? openRouterLimits;
   final List<RoxumModelOption> discoveredCustomModels;
   final bool isRefreshingModels;
-  final bool useOpenCodeEngine;
-  final String openCodeAgentMode;
 
   const RoxumChatState({
     required this.sessions,
@@ -319,8 +310,6 @@ class RoxumChatState {
     this.openRouterLimits,
     this.discoveredCustomModels = const [],
     this.isRefreshingModels = false,
-    this.useOpenCodeEngine = false,
-    this.openCodeAgentMode = 'build',
   });
 
   RoxumChatSession get currentSession {
@@ -342,8 +331,6 @@ class RoxumChatState {
     OpenRouterKeyLimits? openRouterLimits,
     List<RoxumModelOption>? discoveredCustomModels,
     bool? isRefreshingModels,
-    bool? useOpenCodeEngine,
-    String? openCodeAgentMode,
   }) {
     return RoxumChatState(
       sessions: sessions ?? this.sessions,
@@ -358,8 +345,6 @@ class RoxumChatState {
       discoveredCustomModels:
           discoveredCustomModels ?? this.discoveredCustomModels,
       isRefreshingModels: isRefreshingModels ?? this.isRefreshingModels,
-      useOpenCodeEngine: useOpenCodeEngine ?? this.useOpenCodeEngine,
-      openCodeAgentMode: openCodeAgentMode ?? this.openCodeAgentMode,
     );
   }
 }
@@ -445,26 +430,6 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     state = state.copyWith(chatMode: mode);
   }
 
-  Future<bool> setUseOpenCodeEngine(bool enabled) async {
-    state = state.copyWith(useOpenCodeEngine: enabled);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('roxum_use_opencode_engine', enabled);
-    } catch (_) {}
-    final oc = ref.read(openCodeServiceProvider.notifier);
-    if (enabled) {
-      final workspace = ref.read(workspaceProvider).currentPath ?? '';
-      return await oc.startServer(workspace: workspace);
-    } else {
-      await oc.stopServer();
-      return true;
-    }
-  }
-
-  void setOpenCodeAgentMode(String mode) {
-    state = state.copyWith(openCodeAgentMode: mode == 'plan' ? 'plan' : 'build');
-  }
-
   void selectModel(String modelId) {
     state = state.copyWith(selectedModelId: modelId);
   }
@@ -498,12 +463,6 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
 
   void deleteSession(String id) {
     if (state.isGenerating) return;
-    final toDelete = state.sessions.where((s) => s.id == id).toList();
-    if (toDelete.isNotEmpty && toDelete.first.openCodeSessionId != null) {
-      ref
-          .read(openCodeServiceProvider.notifier)
-          .deleteSession(toDelete.first.openCodeSessionId!);
-    }
     final remaining = state.sessions.where((s) => s.id != id).toList();
     if (remaining.isEmpty) {
       createNewSession();
@@ -711,17 +670,6 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final guestWorkspace = runtime.toProotPath(workspace);
     final activeFilePath = ref.read(editorProvider).activeFilePath;
 
-    if (state.useOpenCodeEngine) {
-      await _sendViaOpenCode(
-        turnId: turnId,
-        runToken: runToken,
-        promptText: trimmed,
-        workspace: workspace,
-        modelId: model.id,
-      );
-      return;
-    }
-
     final baseTools = state.chatMode == RoxumChatMode.agent
         ? RoxumAgenticTools.buildOpenAiTools(state.toolSelections)
         : const <Map<String, dynamic>>[];
@@ -738,54 +686,15 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           final fnName = (t['function'] as Map?)?['name']?.toString() ?? '';
           return fnName == 'readFile' || fnName == 'writeFile';
         });
-        final hasNativeShell = baseTools.any((t) {
-          final fnName = (t['function'] as Map?)?['name']?.toString() ?? '';
-          return fnName == 'runCommand';
-        });
-        final q = trimmed.toLowerCase();
-        bool isMcpServerRelevant(String serverName) {
-          final s = serverName.toLowerCase();
-          if (s == 'local filesystem access') return !hasNativeFs;
-          if (s == 'quantum-filesystem') return !hasNativeFs;
-          if (s == 'quantum-shell') return !hasNativeShell;
-          // Core coding/verification MCP servers are always included
-          if (s == 'quantum-codegraph' ||
-              s == 'quantum-token-saver' ||
-              s == 'dart-flutter-mcp') {
-            return true;
-          }
-          if (s == 'quantum-build-doctor') {
-            return RegExp(
-              r'apk|aab|gradle|build|сборк|собери|установ|sdk|ndk|aapt',
-            ).hasMatch(q);
-          }
-          if (s == 'quantum-device-qa') {
-            return RegExp(
-              r'adb|logcat|usb|otg|устройств|телефон|экран|runtime|краш|crash|вылет',
-            ).hasMatch(q);
-          }
-          if (s == 'quantum-sqlite-telemetry') {
-            return RegExp(
-              r'sql|sqlite|база|таблиц|database|schema|query|network|сеть|лог',
-            ).hasMatch(q);
-          }
-          if (s == 'quantum-web-fetch') {
-            return RegExp(
-              r'http|https|url|сайт|ссылк|интернет|поиск|search|docs|документ|новост|pub\.dev|github',
-            ).hasMatch(q);
-          }
-          if (s == 'quantum-memory') {
-            return RegExp(
-              r'память|запомни|вспомни|memory|правил|предпочтен',
-            ).hasMatch(q);
-          }
-          // Keep user-configured external MCP servers enabled
-          return true;
-        }
-
-        final filteredMcp = rawMcp
-            .where((t) => isMcpServerRelevant(t['server']?.toString() ?? ''))
-            .toList();
+        final filteredMcp = hasNativeFs
+            ? rawMcp
+                .where(
+                  (t) =>
+                      (t['server']?.toString() ?? '').toLowerCase() !=
+                      'local filesystem access',
+                )
+                .toList()
+            : rawMcp;
         mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(filteredMcp);
       } catch (_) {}
     }
@@ -1047,134 +956,6 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     }
   }
 
-  Future<void> _sendViaOpenCode({
-    required String turnId,
-    required int runToken,
-    required String promptText,
-    required String workspace,
-    required String modelId,
-  }) async {
-    final oc = ref.read(openCodeServiceProvider.notifier);
-    final startedAt = DateTime.now();
-    try {
-      // Handle local /new slash command immediately
-      if (promptText.trim().toLowerCase() == '/new') {
-        state = state.copyWith(isGenerating: false);
-        createNewSession();
-        return;
-      }
-
-      final ready = await oc.startServer(workspace: workspace);
-      if (_cancelled || runToken != _activeRunToken) return;
-      if (!ready) {
-        final ocState = ref.read(openCodeServiceProvider);
-        _updateTurn(
-          turnId,
-          (t) => t.copyWith(
-            aiResponse:
-                'Не удалось запустить сервер OpenCode.\n${ocState.statusMessage}',
-            isError: true,
-          ),
-        );
-        return;
-      }
-
-      var ocSessionId = state.currentSession.openCodeSessionId;
-      if (ocSessionId == null || ocSessionId.isEmpty) {
-        ocSessionId = await oc.createSession(title: state.currentSession.title);
-        if (ocSessionId != null && ocSessionId.isNotEmpty) {
-          _updateCurrentSession(openCodeSessionId: ocSessionId);
-        }
-      }
-      if (ocSessionId == null || ocSessionId.isEmpty) {
-        throw Exception('OpenCode не вернул ID сессии (POST /session).');
-      }
-
-      final OpenCodeMessageResponse resp;
-      if (promptText.startsWith('/')) {
-        final parts = promptText.substring(1).trim().split(RegExp(r'\s+'));
-        final cmdName = parts.isNotEmpty ? parts.first : '';
-        final cmdArgs = parts.length > 1 ? parts.sublist(1).join(' ') : '';
-        resp = await oc.runSlashCommand(
-          sessionId: ocSessionId,
-          command: cmdName,
-          arguments: cmdArgs,
-          selectedModelId: modelId,
-          agentMode: state.openCodeAgentMode,
-        );
-      } else {
-        resp = await oc.sendMessage(
-          sessionId: ocSessionId,
-          text: promptText,
-          selectedModelId: modelId,
-          agentMode: state.openCodeAgentMode,
-        );
-      }
-
-      if (_cancelled || runToken != _activeRunToken) return;
-
-      final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
-      final timeline = <RoxumTimelineItem>[
-        if (resp.reasoning.isNotEmpty)
-          RoxumTimelineItem(
-            id: const Uuid().v4(),
-            kind: RoxumTimelineKind.reasoning,
-            text: resp.reasoning,
-            durationMs: elapsed,
-          ),
-        for (final tc in resp.toolCalls)
-          RoxumTimelineItem(
-            id: tc.id.isNotEmpty ? tc.id : const Uuid().v4(),
-            kind: RoxumTimelineKind.toolCall,
-            toolCall: tc,
-          ),
-        if (resp.text.isNotEmpty)
-          RoxumTimelineItem(
-            id: const Uuid().v4(),
-            kind: RoxumTimelineKind.text,
-            text: resp.text,
-          ),
-      ];
-
-      _updateTurn(
-        turnId,
-        (t) => t.copyWith(
-          aiResponse: resp.text.isNotEmpty
-              ? resp.text
-              : 'OpenCode завершил выполнение.',
-          reasoningText: resp.reasoning,
-          thinkingDurationMs: elapsed,
-          toolCalls: resp.toolCalls,
-          timeline: timeline,
-          usage: resp.usage,
-        ),
-      );
-      if (resp.usage.totalTokens > 0 || resp.usage.costUsd > 0) {
-        state = state.copyWith(
-          sessionUsage: state.sessionUsage + resp.usage,
-        );
-      }
-
-      // Reload open editor tabs so any files edited by OpenCode refresh immediately
-      final openFiles = ref.read(editorProvider).openFiles;
-      for (final f in openFiles) {
-        await ref.read(editorProvider.notifier).reloadFileFromDisk(f.path);
-      }
-    } catch (e) {
-      if (runToken != _activeRunToken) return;
-      TalkerService.error('[OpenCodeChat] Error: $e');
-      _updateTurn(
-        turnId,
-        (t) => t.copyWith(aiResponse: 'Ошибка OpenCode: $e', isError: true),
-      );
-    } finally {
-      if (runToken == _activeRunToken) {
-        state = state.copyWith(isGenerating: false);
-      }
-      _persistSessions();
-    }
-  }
-
   void _appendErrorTurn(String request, String errorText) {
     final turn = RoxumConversationTurn(
       id: const Uuid().v4(),
@@ -1200,14 +981,12 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
   void _updateCurrentSession({
     String? title,
     List<RoxumConversationTurn>? turns,
-    String? openCodeSessionId,
   }) {
     final nextSessions = state.sessions.map((s) {
       if (s.id != state.currentSessionId) return s;
       return s.copyWith(
         title: title ?? s.title,
         turns: turns ?? s.turns,
-        openCodeSessionId: openCodeSessionId ?? s.openCodeSessionId,
         updatedAt: DateTime.now(),
       );
     }).toList();

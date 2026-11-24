@@ -1460,8 +1460,7 @@ done
           await File(p.join(workspacePath, 'pyproject.toml')).exists()) {
         resolvedManager = 'pip';
       } else {
-        final runtime = _ref.read(runtimeServiceProvider);
-        resolvedManager = runtime.useNativeUserspaceMode ? 'pkg' : 'apt';
+        resolvedManager = 'apt';
       }
     }
 
@@ -1472,7 +1471,6 @@ done
       'pip' =>
         '(pip3 install --break-system-packages $pkgArgs 2>&1 || pip3 install $pkgArgs 2>&1)',
       'cargo' => 'cargo add $pkgArgs 2>&1',
-      'pkg' => '(pkg update >/dev/null 2>&1 || true) && pkg install $pkgArgs 2>&1',
       _ =>
         'export DEBIAN_FRONTEND=noninteractive; (apt-get update -y && apt-get install -y --no-install-recommends $pkgArgs) 2>&1 || (pkg install $pkgArgs) 2>&1',
     };

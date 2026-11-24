@@ -1,16 +1,16 @@
 {
-  "versionCode": 321,
-  "versionName": "1.2.305",
-  "notes": "## 🚀 QuantumIDE v1.2.305\n\n### Поддержка OpenCode v2 API (`/api/*` + HTTP Basic Auth)\n- **Автоматическая авторизация `OPENCODE_SERVER_PASSWORD`**: QuantumIDE передаёт пароль при запуске `opencode serve` и дополнительно перехватывает `server password ...` из вывода сервера, отправляя `Authorization: Basic` во все REST-запросы.\n- **Автоопределение префикса `/api`**: `_isHealthy()` автоматически определяет OpenCode v2 (`/api/config`, `/api/session`, `/api/command`, `/api/mcp`) и сохраняет совместимость с OpenCode v1.",
+  "versionCode": 322,
+  "versionName": "1.2.306",
+  "notes": "## 🔄 QuantumIDE v1.2.306 (откат к стабильной базе v1.2.297)\n\n- Код приложения полностью откачен к стабильной версии **v1.2.297** (`0a10dce`).\n- Удалены экспериментальные изменения из v1.2.298–v1.2.305 (Native ARM64 Userspace / Leostryx `.so`, интеграция OpenCode и промежуточные правки).\n- Номер сборки повышен до `1.2.306+322`, чтобы обновление установилось поверх текущей версии без переустановки приложения.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.305/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.306/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.305",
-  "buildNumber": 321,
-  "tag_name": "v1.2.305",
-  "releaseNotes": "Добавлена поддержка OpenCode v2 REST API (/api/*) и автоматической Basic Auth авторизации (OPENCODE_SERVER_PASSWORD + перехват server password из stdout)."
+  "version": "1.2.306",
+  "buildNumber": 322,
+  "tag_name": "v1.2.306",
+  "releaseNotes": "Полный откат кода к стабильной версии v1.2.297 с повышенным versionCode (322) для чистой установки поверх текущих сборок."
 }
