@@ -1,16 +1,16 @@
 {
-  "versionCode": 316,
-  "versionName": "1.2.300",
-  "notes": "## 🚀 QuantumIDE v1.2.300\n\n### Интеграция OpenCode Engine прямо в чат QuantumIDE\n- **Переключатель движка `Roxum | OpenCode`** прямо над полем ввода с живым индикатором статуса сервера (`opencode serve`), автоустановкой и автозапуском.\n- **Slash-команды `/` прямо в чате**: при вводе `/` открывается интерактивное меню (`/compact`, `/undo`, `/redo`, `/diff`, `/init`, `/new` + команды с сервера).\n- **Режимы `Build` и `Plan`**, быстрые кнопки `/compact`, `/undo` и кнопка **`opencode.json`**, открывающая конфиг в редакторе в 1 клик (с автосинхронизацией MCP-серверов).\n- **Единая история чатов**: каждая сессия в QuantumIDE автоматически привязывается к серверной сессии OpenCode (`openCodeSessionId`) и синхронно удаляется на сервере при удалении в IDE.",
+  "versionCode": 317,
+  "versionName": "1.2.301",
+  "notes": "## 🚀 QuantumIDE v1.2.301\n\n### Исправление запуска OpenCode Engine (`opencode serve`) на Android\n- **Постоянный процесс через `StreamingCommand`** вместо `nohup ... &`: в PRoot Ubuntu и Native ARM64 Userspace сервер больше не убивается сразу после завершения оболочки `bash -c` и не зависит от недоступной папки `/tmp`.\n- **Живой захват stdout/stderr и логов в Talker**: при любой ошибке запуска OpenCode точная причина и код выхода сразу показываются прямо в статусе чата.\n- **Расширенный `PATH`**: автоматический поиск бинарника `opencode` в `~/.opencode/bin`, `~/.local/bin`, `~/.npm-global/bin` и `$PREFIX/bin`.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.300/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.301/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.300",
-  "buildNumber": 316,
-  "tag_name": "v1.2.300",
-  "releaseNotes": "Интегрирован OpenCode Engine прямо в чат QuantumIDE: переключатель Roxum/OpenCode, автозапуск opencode serve, живое меню slash-команд (/compact, /undo, /redo, /diff, /init, /new), режимы Plan/Build, открытие opencode.json в 1 клик и единая история чатов."
+  "version": "1.2.301",
+  "buildNumber": 317,
+  "tag_name": "v1.2.301",
+  "releaseNotes": "Исправлен запуск opencode serve на Android: переход на постоянный процесс StreamingCommand (не убивается PRoot и не требует /tmp), живой вывод ошибок в чат и расширенный поиск PATH."
 }

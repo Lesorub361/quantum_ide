@@ -123,14 +123,19 @@ class OpenCodeState {
 class OpenCodeService extends StateNotifier<OpenCodeState> {
   final Ref _ref;
   static const int defaultPort = 4096;
+  static const String _extraPath =
+      r'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/.npm-global/bin:${PREFIX:-/usr}/bin:/usr/local/bin:$PATH"; ';
+
+  StreamingCommand? _serverHandle;
+  final List<String> _serverLogs = [];
 
   OpenCodeService(this._ref) : super(const OpenCodeState());
 
   Future<bool> checkInstalled() async {
     final runtime = _ref.read(runtimeServiceProvider);
     final res = await runtime.runCommandDetailed(
-      'export PATH="\$HOME/.opencode/bin:\$HOME/.local/bin:\$PATH"; '
-      'command -v opencode 2>/dev/null || [ -x "\$HOME/.opencode/bin/opencode" ] && echo ok || true',
+      '$_extraPath'
+      'command -v opencode 2>/dev/null || ([ -x "\$HOME/.opencode/bin/opencode" ] && echo "\$HOME/.opencode/bin/opencode") || true',
       timeout: const Duration(seconds: 8),
     );
     final found = res.stdout.trim().isNotEmpty;
@@ -147,7 +152,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     final runtime = _ref.read(runtimeServiceProvider);
     try {
       final res = await runtime.runCommandDetailed(
-        'export PATH="\$HOME/.opencode/bin:\$HOME/.local/bin:\$PATH"; '
+        '$_extraPath'
         'if command -v npm >/dev/null 2>&1; then '
         '  npm install -g opencode-ai@latest 2>&1; '
         'elif command -v curl >/dev/null 2>&1; then '
@@ -167,8 +172,8 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
         return true;
       }
       final tail = res.combined.trim();
-      final shortErr = tail.length > 220
-          ? tail.substring(tail.length - 220)
+      final shortErr = tail.length > 260
+          ? tail.substring(tail.length - 260)
           : tail;
       state = state.copyWith(
         status: OpenCodeServerStatus.error,
@@ -294,9 +299,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     );
 
     final runtime = _ref.read(runtimeServiceProvider);
-    final envExports = StringBuffer(
-      'export PATH="\$HOME/.opencode/bin:\$HOME/.local/bin:\$PATH"; ',
-    );
+    final envExports = StringBuffer(_extraPath);
     void addEnv(String key, String value) {
       final v = value.trim();
       if (v.isEmpty) return;
@@ -312,16 +315,48 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     addEnv('DEEPSEEK_API_KEY', settings.deepseekApiKey);
 
     try {
-      await runtime.runCommandDetailed(
+      await _serverHandle?.kill();
+      _serverHandle = null;
+      _serverLogs.clear();
+
+      var exitedEarly = false;
+      int? earlyCode;
+
+      final handle = runtime.runCommandStream(
         '${envExports.toString()}'
-        'pkill -f "opencode serve" 2>/dev/null || true; '
-        'nohup opencode serve --hostname 127.0.0.1 --port $defaultPort >/tmp/opencode_serve.log 2>&1 </dev/null &',
+        'exec opencode serve --hostname 127.0.0.1 --port $defaultPort',
         workingDirectory: workspace.isNotEmpty ? workspace : null,
-        timeout: const Duration(seconds: 10),
+        onLine: (line, {isError = false, replace = false}) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty) return;
+          _serverLogs.add(trimmed);
+          if (_serverLogs.length > 60) _serverLogs.removeAt(0);
+          if (isError) {
+            TalkerService.warning('[OpenCode] $trimmed');
+          } else {
+            TalkerService.info('[OpenCode] $trimmed');
+          }
+        },
+      );
+      _serverHandle = handle;
+
+      unawaited(
+        handle.exitCode.then((code) {
+          exitedEarly = true;
+          earlyCode = code;
+          if (_serverHandle == handle && mounted) {
+            if (state.status == OpenCodeServerStatus.running) {
+              state = state.copyWith(
+                status: OpenCodeServerStatus.stopped,
+                statusMessage: 'Сервер остановлен (код $code)',
+              );
+            }
+          }
+        }),
       );
 
-      for (int i = 0; i < 16; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 700));
+      for (int i = 0; i < 32; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 600));
         if (await _isHealthy()) {
           state = state.copyWith(
             status: OpenCodeServerStatus.running,
@@ -331,18 +366,18 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
           unawaited(refreshCapabilities());
           return true;
         }
+        if (exitedEarly) break;
       }
 
-      final logRes = await runtime.runCommandDetailed(
-        'tail -n 20 /tmp/opencode_serve.log 2>/dev/null || true',
-        timeout: const Duration(seconds: 4),
-      );
-      final errDetail = logRes.stdout.trim();
+      final recentLogs = _serverLogs.length > 5
+          ? _serverLogs.sublist(_serverLogs.length - 5).join('\n')
+          : _serverLogs.join('\n');
+      final errDetail = recentLogs.trim();
       state = state.copyWith(
         status: OpenCodeServerStatus.error,
         statusMessage: errDetail.isNotEmpty
-            ? 'OpenCode не ответил на :$defaultPort:\n$errDetail'
-            : 'OpenCode не запустился за 12 сек на 127.0.0.1:$defaultPort',
+            ? 'OpenCode (код ${earlyCode ?? 'timeout'}): $errDetail'
+            : 'OpenCode не запустился на 127.0.0.1:$defaultPort (код ${earlyCode ?? 'timeout'})',
       );
       return false;
     } catch (e) {
@@ -356,17 +391,26 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
   }
 
   Future<void> stopServer() async {
+    final handle = _serverHandle;
+    _serverHandle = null;
+    if (handle != null) {
+      try {
+        await handle.kill();
+      } catch (_) {}
+    }
     final runtime = _ref.read(runtimeServiceProvider);
     try {
       await runtime.runCommandDetailed(
         'pkill -f "opencode serve" 2>/dev/null || true',
-        timeout: const Duration(seconds: 5),
+        timeout: const Duration(seconds: 4),
       );
     } catch (_) {}
-    state = state.copyWith(
-      status: OpenCodeServerStatus.stopped,
-      statusMessage: 'Остановлен',
-    );
+    if (mounted) {
+      state = state.copyWith(
+        status: OpenCodeServerStatus.stopped,
+        statusMessage: 'Остановлен',
+      );
+    }
   }
 
   /// Refreshes slash commands (`GET /command`) and MCP server statuses (`GET /mcp`).
