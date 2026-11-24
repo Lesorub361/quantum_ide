@@ -128,8 +128,24 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
 
   StreamingCommand? _serverHandle;
   final List<String> _serverLogs = [];
+  String _serverPassword = '';
+  String _apiPrefix = '/api';
 
   OpenCodeService(this._ref) : super(const OpenCodeState());
+
+  Uri _apiUri(String path) => Uri.parse('${state.baseUrl}$_apiPrefix$path');
+
+  Map<String, String> _authHeaders({bool json = false}) {
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      if (json) 'Content-Type': 'application/json',
+    };
+    if (_serverPassword.isNotEmpty) {
+      final creds = base64Encode(utf8.encode('opencode:$_serverPassword'));
+      headers['Authorization'] = 'Basic $creds';
+    }
+    return headers;
+  }
 
   Future<bool> checkInstalled() async {
     final runtime = _ref.read(runtimeServiceProvider);
@@ -256,24 +272,28 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
   }
 
   Future<bool> _isHealthy() async {
-    try {
-      final res = await http
-          .get(
-            Uri.parse('${state.baseUrl}/config'),
-            headers: const {'Accept': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 2));
-      if (res.statusCode != 200) return false;
-      final ct = (res.headers['content-type'] ?? '').toLowerCase();
-      final body = res.body.trimLeft();
-      return ct.contains('application/json') && body.startsWith('{');
-    } catch (_) {
-      return false;
+    for (final prefix in const ['/api', '']) {
+      try {
+        final res = await http
+            .get(
+              Uri.parse('${state.baseUrl}$prefix/config'),
+              headers: _authHeaders(),
+            )
+            .timeout(const Duration(seconds: 2));
+        if (res.statusCode != 200) continue;
+        final ct = (res.headers['content-type'] ?? '').toLowerCase();
+        final body = res.body.trimLeft();
+        if (ct.contains('application/json') && body.startsWith('{')) {
+          _apiPrefix = prefix;
+          return true;
+        }
+      } catch (_) {}
     }
+    return false;
   }
 
-  /// Starts `opencode serve --hostname 127.0.0.1 --port 4096` in background
-  /// and loads available slash commands (`GET /command`) and MCP statuses (`GET /mcp`).
+  /// Starts `opencode serve --hostname 127.0.0.1 --port 4097` as a persistent
+  /// process and loads available slash commands and MCP statuses.
   Future<bool> startServer({required String workspace}) async {
     if (await _isHealthy()) {
       state = state.copyWith(
@@ -313,6 +333,9 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
       envExports.write("export $key='$safe'; ");
     }
 
+    _serverPassword = 'qide_${DateTime.now().microsecondsSinceEpoch}';
+    addEnv('OPENCODE_SERVER_USERNAME', 'opencode');
+    addEnv('OPENCODE_SERVER_PASSWORD', _serverPassword);
     addEnv('OPENROUTER_API_KEY', settings.openrouterApiKey);
     addEnv('GEMINI_API_KEY', settings.geminiApiKey);
     addEnv('GOOGLE_GENERATIVE_AI_API_KEY', settings.geminiApiKey);
@@ -327,6 +350,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
 
       var exitedEarly = false;
       int? earlyCode;
+      final pwdRegex = RegExp(r'server\s+password\s+(\S+)', caseSensitive: false);
 
       final handle = runtime.runCommandStream(
         '${envExports.toString()}'
@@ -335,6 +359,10 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
         onLine: (line, {isError = false, replace = false}) {
           final trimmed = line.trim();
           if (trimmed.isEmpty) return;
+          final m = pwdRegex.firstMatch(trimmed);
+          if (m != null && (m.group(1)?.isNotEmpty ?? false)) {
+            _serverPassword = m.group(1)!;
+          }
           _serverLogs.add(trimmed);
           if (_serverLogs.length > 60) _serverLogs.removeAt(0);
           if (isError) {
@@ -426,7 +454,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     };
     try {
       final res = await http
-          .get(Uri.parse('${state.baseUrl}/command'))
+          .get(_apiUri('/command'), headers: _authHeaders())
           .timeout(const Duration(seconds: 5));
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
@@ -450,7 +478,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     final mcpMap = <String, String>{};
     try {
       final res = await http
-          .get(Uri.parse('${state.baseUrl}/mcp'))
+          .get(_apiUri('/mcp'), headers: _authHeaders())
           .timeout(const Duration(seconds: 5));
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
@@ -478,8 +506,8 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     try {
       final res = await http
           .post(
-            Uri.parse('${state.baseUrl}/session'),
-            headers: {'Content-Type': 'application/json'},
+            _apiUri('/session'),
+            headers: _authHeaders(json: true),
             body: jsonEncode({
               if (title != null && title.trim().isNotEmpty) 'title': title.trim(),
             }),
@@ -490,6 +518,10 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
         if (decoded is Map) {
           return decoded['id']?.toString();
         }
+      } else {
+        TalkerService.warning(
+          'OpenCodeService.createSession HTTP ${res.statusCode}: ${res.body}',
+        );
       }
     } catch (e) {
       TalkerService.error('OpenCodeService.createSession error', e);
@@ -501,7 +533,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     if (sessionId.trim().isEmpty) return;
     try {
       await http
-          .delete(Uri.parse('${state.baseUrl}/session/$sessionId'))
+          .delete(_apiUri('/session/$sessionId'), headers: _authHeaders())
           .timeout(const Duration(seconds: 6));
     } catch (_) {}
   }
@@ -546,8 +578,8 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
 
     final res = await http
         .post(
-          Uri.parse('${state.baseUrl}/session/$sessionId/message'),
-          headers: {'Content-Type': 'application/json'},
+          _apiUri('/session/$sessionId/message'),
+          headers: _authHeaders(json: true),
           body: jsonEncode(body),
         )
         .timeout(const Duration(minutes: 6));
@@ -575,8 +607,8 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     if (cmd == 'compact') {
       final res = await http
           .post(
-            Uri.parse('${state.baseUrl}/session/$sessionId/summarize'),
-            headers: {'Content-Type': 'application/json'},
+            _apiUri('/session/$sessionId/summarize'),
+            headers: _authHeaders(json: true),
             body: jsonEncode({
               if (modelSpec != null) 'providerID': modelSpec.providerId,
               if (modelSpec != null) 'modelID': modelSpec.modelId,
@@ -594,8 +626,8 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     if (cmd == 'undo') {
       final res = await http
           .post(
-            Uri.parse('${state.baseUrl}/session/$sessionId/revert'),
-            headers: {'Content-Type': 'application/json'},
+            _apiUri('/session/$sessionId/revert'),
+            headers: _authHeaders(json: true),
             body: jsonEncode(const {}),
           )
           .timeout(const Duration(seconds: 20));
@@ -610,8 +642,8 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     if (cmd == 'redo') {
       final res = await http
           .post(
-            Uri.parse('${state.baseUrl}/session/$sessionId/unrevert'),
-            headers: {'Content-Type': 'application/json'},
+            _apiUri('/session/$sessionId/unrevert'),
+            headers: _authHeaders(json: true),
             body: jsonEncode(const {}),
           )
           .timeout(const Duration(seconds: 20));
@@ -625,7 +657,7 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
 
     if (cmd == 'diff') {
       final res = await http
-          .get(Uri.parse('${state.baseUrl}/session/$sessionId/diff'))
+          .get(_apiUri('/session/$sessionId/diff'), headers: _authHeaders())
           .timeout(const Duration(seconds: 15));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final bodyStr = res.body.trim();
@@ -641,8 +673,8 @@ class OpenCodeService extends StateNotifier<OpenCodeState> {
     // Standard OpenCode /command endpoint (/init, /review, custom .opencode/command/*.md)
     final res = await http
         .post(
-          Uri.parse('${state.baseUrl}/session/$sessionId/command'),
-          headers: {'Content-Type': 'application/json'},
+          _apiUri('/session/$sessionId/command'),
+          headers: _authHeaders(json: true),
           body: jsonEncode({
             'command': cmd,
             'arguments': arguments,
