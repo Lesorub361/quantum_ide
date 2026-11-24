@@ -807,7 +807,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
               '5) INLINE DIAGNOSTICS LOOP: `writeFile`, `editFile`, and `multiEditFile` automatically run static analysis and append `[Diagnostics for ...]` with exact line numbers and source snippets. Fix every `error •` immediately until `0 error(s)` before giving your final summary.\n'
               '6) MODERN FLUTTER / DART RULES:\n'
               '   - Keyboard events: NEVER use deprecated/removed `RawKeyEvent`, `RawKeyDownEvent`, `RawKeyboardListener`, or `Focus(onKey: ...)`. Always use `KeyboardListener` or `Focus(autofocus: true, onKeyEvent: (node, event) { if (event is KeyDownEvent) { ... } return KeyEventResult.handled; })` with `import \'package:flutter/services.dart\';`.\n'
-              '   - Colors & Const: `Color` has NO `*` operator — use `Color.lerp(...)` or `.withValues(alpha: ...)`. Never put `${...}` string interpolation or runtime getters inside `const` widgets (`const Text(...)`).\n'
+              '   - Colors & Const: `Color` has NO `*` operator — use `Color.lerp(...)` or `.withValues(alpha: ...)`. Never put `\${...}` string interpolation or runtime getters inside `const` widgets (`const Text(...)`).\n'
               '   - Packages: Add packages via `runCommand` (`flutter pub add <pkg>`). If `pubspec.yaml` has broken/non-existent dependencies or SDK constraints causing analyzer errors, fix `pubspec.yaml` and run `flutter pub get`.\n'
               '7) HONEST SUMMARY: In your final answer, concisely report ONLY the files actually created/modified and verification status.'
               '$projectBlocks'
