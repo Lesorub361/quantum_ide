@@ -3029,10 +3029,9 @@ if [ -f "\$CONFIG/native_userspace_mode.flag" ]; then
         export CURL_CA_BUNDLE="\$PREFIX/etc/tls/cert.pem"
         export GIT_SSL_CAINFO="\$PREFIX/etc/tls/cert.pem"
     fi
-    PRELOAD_LIBS=""
-    [ -f "\$PROOT_LIB_DIR/libtermux-exec.so" ] && PRELOAD_LIBS="\$PROOT_LIB_DIR/libtermux-exec.so"
-    [ -f "\$PROOT_LIB_DIR/liblse_compat.so" ] && PRELOAD_LIBS="\${PRELOAD_LIBS:+\$PRELOAD_LIBS:}\$PROOT_LIB_DIR/liblse_compat.so"
-    [ -n "\$PRELOAD_LIBS" ] && export LD_PRELOAD="\$PRELOAD_LIBS"
+    if [ -f "\$PROOT_LIB_DIR/libtermux-exec.so" ]; then
+        export LD_PRELOAD="\$PROOT_LIB_DIR/libtermux-exec.so"
+    fi
     mkdir -p "\$PREFIX/bin" "\$PREFIX/lib" "\$FILES_DIR/projects" "\$TMPDIR" 2>/dev/null || true
     case "\$GUEST_CWD" in
         /root/projects/*)
@@ -3056,25 +3055,18 @@ if [ -f "\$CONFIG/native_userspace_mode.flag" ]; then
     esac
     [ ! -d "\$NATIVE_CWD" ] && NATIVE_CWD="\$HOME"
     cd "\$NATIVE_CWD" 2>/dev/null || cd "\$HOME" 2>/dev/null || true
-    LOADER="\$PROOT_LIB_DIR/libquantum_loader.so"
     BASH_BIN="\$PREFIX/bin/bash"
-    [ ! -f "\$BASH_BIN" ] && BASH_BIN="/system/bin/sh"
+    [ ! -x "\$BASH_BIN" ] && BASH_BIN="/system/bin/sh"
     shift 2 2>/dev/null || true
     if [ "\$1" = "/bin/bash" ] || [ "\$1" = "bash" ]; then
         shift 2>/dev/null || true
     fi
-    if [ -x "\$LOADER" ] && [ "\$BASH_BIN" != "/system/bin/sh" ]; then
-        if [ "\$#" -gt 0 ]; then
-            exec "\$LOADER" "\$BASH_BIN" "\$@"
-        else
-            exec "\$LOADER" "\$BASH_BIN" -i
-        fi
+    # Bionic ELF binaries (Termux/Leostryx usr/bin/bash) use Android's linker64,
+    # NEVER glibc's libquantum_loader.so (which cannot load Bionic libdl.so).
+    if [ "\$#" -gt 0 ]; then
+        exec "\$BASH_BIN" "\$@"
     else
-        if [ "\$#" -gt 0 ]; then
-            exec "\$BASH_BIN" "\$@"
-        else
-            exec "\$BASH_BIN" -i
-        fi
+        exec "\$BASH_BIN" -i
     fi
 fi
 
@@ -3703,10 +3695,9 @@ fi
       final prefix = nativeUserspacePrefix;
       final nativeTmp = p.join(_filesDir, 'tmp');
       final nativeBin = p.join(_filesDir, 'bin');
-      final preload = <String>[
-        if (_nativeLibDir.isNotEmpty) '$_nativeLibDir/libtermux-exec.so',
-        if (_nativeLibDir.isNotEmpty) '$_nativeLibDir/liblse_compat.so',
-      ].join(':');
+      final preload = _nativeLibDir.isNotEmpty
+          ? '$_nativeLibDir/libtermux-exec.so'
+          : '';
       return {
         'HOME': _filesDir,
         'PREFIX': prefix,

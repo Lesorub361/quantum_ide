@@ -1,16 +1,16 @@
 {
-  "versionCode": 317,
-  "versionName": "1.2.301",
-  "notes": "## 🚀 QuantumIDE v1.2.301\n\n### Исправление запуска OpenCode Engine (`opencode serve`) на Android\n- **Постоянный процесс через `StreamingCommand`** вместо `nohup ... &`: в PRoot Ubuntu и Native ARM64 Userspace сервер больше не убивается сразу после завершения оболочки `bash -c` и не зависит от недоступной папки `/tmp`.\n- **Живой захват stdout/stderr и логов в Talker**: при любой ошибке запуска OpenCode точная причина и код выхода сразу показываются прямо в статусе чата.\n- **Расширенный `PATH`**: автоматический поиск бинарника `opencode` в `~/.opencode/bin`, `~/.local/bin`, `~/.npm-global/bin` и `$PREFIX/bin`.",
+  "versionCode": 318,
+  "versionName": "1.2.302",
+  "notes": "## 🚀 QuantumIDE v1.2.302\n\n### Исправление ошибки `libdl.so: cannot open shared object file` в режиме Native ARM64 Userspace\n- В `init-host` и `terminalEnv` исправлен запуск Bionic-бинарников (`usr/bin/bash`, `pkg`, `curl`, `node`, `opencode`): они больше не прогоняются через glibc-линкер `libquantum_loader.so` и не подгружают glibc-библиотеку `liblse_compat.so` в `LD_PRELOAD`.\n- Теперь в режиме Native ARM64 Userspace корректно запускаются `bash`, установка и сервер `OpenCode`.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.301/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.302/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.301",
-  "buildNumber": 317,
-  "tag_name": "v1.2.301",
-  "releaseNotes": "Исправлен запуск opencode serve на Android: переход на постоянный процесс StreamingCommand (не убивается PRoot и не требует /tmp), живой вывод ошибок в чат и расширенный поиск PATH."
+  "version": "1.2.302",
+  "buildNumber": 318,
+  "tag_name": "v1.2.302",
+  "releaseNotes": "Исправлена ошибка libdl.so в режиме Native ARM64 Userspace: Bionic bash и утилиты больше не запускаются через glibc-линкер libquantum_loader.so."
 }
