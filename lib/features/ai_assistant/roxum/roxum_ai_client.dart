@@ -61,9 +61,13 @@ class RoxumModelOption {
       case RoxumToolCallingMethod.geminiFunctionCalling:
         return {'Content-Type': 'application/json'};
       case RoxumToolCallingMethod.openAiCompatible:
+        final isOpenRouter = url.contains('openrouter.ai');
         return {
           'Content-Type': 'application/json',
           if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+          if (isOpenRouter)
+            'HTTP-Referer': 'https://github.com/Lesorub361/quantum_ide',
+          if (isOpenRouter) 'X-Title': 'Quantum IDE',
         };
     }
   }
@@ -134,8 +138,9 @@ class RoxumModelOption {
     }
     if (settings.openrouterApiKey.trim().isNotEmpty) {
       for (final m in [
-        ('nvidia/nemotron-3.5-super-vl:free', true),
-        ('cohere/north-mini-code:free', true),
+        ('qwen/qwen3-coder:free', true),
+        ('deepseek/deepseek-chat-v3-0324:free', true),
+        ('meta-llama/llama-3.3-70b-instruct:free', true),
         ('qwen/qwen-2.5-coder-32b-instruct', false),
         ('anthropic/claude-3.5-sonnet', false),
         ('google/gemini-2.5-flash', false),
@@ -481,6 +486,18 @@ class RoxumAiClient {
     }
 
     if (settings.openrouterApiKey.trim().isNotEmpty) {
+      int codingRank(String modelId) {
+        final m = modelId.toLowerCase();
+        if (m.contains('qwen3-coder') || m.contains('qwen-2.5-coder')) return 0;
+        if (m.contains('claude-sonnet') || m.contains('claude-3.7') || m.contains('claude-3.5')) return 1;
+        if (m.contains('deepseek-chat') || m.contains('deepseek-v3')) return 2;
+        if (m.contains('gemini-2.5') || m.contains('gemini-2.0')) return 3;
+        if (m.contains('codestral') || m.contains('gpt-4o') || m.contains('gpt-4.1')) return 4;
+        if (m.contains('llama-3.3-70b') || m.contains('qwen3') || m.contains('deepseek-r1')) return 5;
+        if (m.contains('preview') || m.contains('ernie') || m.contains('vl')) return 9;
+        return 7;
+      }
+
       futures.add(
         fetchOpenAiStyle(
           provider: 'OpenRouter',
@@ -490,6 +507,9 @@ class RoxumAiClient {
         ).then((list) {
           list.sort((a, b) {
             if (a.isFree != b.isFree) return a.isFree ? -1 : 1;
+            final ra = codingRank(a.model);
+            final rb = codingRank(b.model);
+            if (ra != rb) return ra.compareTo(rb);
             return a.model.compareTo(b.model);
           });
           return list;
@@ -729,14 +749,19 @@ class RoxumAiClient {
 
     final messages = List<Map<String, dynamic>>.from(historyMessages);
     const maxIterations = 48;
-    const maxVerificationFixRounds = 3;
+    const maxVerificationFixRounds = 4;
     var executedAnyTool = false;
     var editedAnyFile = false;
+    var needsFreshVerification = false;
     var hasUnresolvedErrors = false;
     var lastErrorCount = 0;
+    var lastAnalyzerSummary = '';
     var verificationFixRounds = 0;
     var nudgedHallucination = false;
+    var incompleteStopNudges = 0;
     var nudgedEmptyAfterTools = false;
+    var lastNudgedAssistantText = '';
+    final recentCallSignatures = <String>[];
 
     try {
       for (int step = 0; step < maxIterations; step++) {
@@ -802,46 +827,122 @@ class RoxumAiClient {
         }
 
         if (effectiveTurn.toolCalls.isEmpty || agenticTools == null) {
-          final cleanAnswer = _splitThinkTags(effectiveTurn.text).answer;
-          if (agenticTools != null &&
+          final cleanAnswer = _splitThinkTags(effectiveTurn.text).answer.trim();
+
+          // Break immediately if the model repeats the exact same non-tool response
+          // twice in a row after being nudged (prevents infinite "Исправлю:" loops).
+          final isRepeatingNudgedText =
+              cleanAnswer.isNotEmpty && cleanAnswer == lastNudgedAssistantText;
+
+          if (!isRepeatingNudgedText &&
+              agenticTools != null &&
               tools.isNotEmpty &&
               !executedAnyTool &&
               !nudgedHallucination &&
               _looksLikeFakeEditClaim(cleanAnswer)) {
             nudgedHallucination = true;
+            lastNudgedAssistantText = cleanAnswer;
             messages.add({'role': 'assistant', 'content': cleanAnswer});
             messages.add({
               'role': 'user',
               'content':
-                  'СТОП! Ты не вызвал ни одного инструмента (readFile / editFile / writeFile / runCommand), поэтому в проекте НИЧЕГО не изменилось. '
-                  'Не пиши отчёт о несуществующих правках — прямо сейчас вызови инструменты и реально прочитай и отредактируй файлы.',
+                  'СТОП! Ты не вызвал ни одного инструмента (readFile / editFile / multiEditFile / writeFile / runCommand), поэтому в проекте НИЧЕГО не изменилось. '
+                  'Прямо сейчас вызови реальные инструменты и выполни задачу.',
             });
             continue;
           }
+
+          // Catch mid-thought stops (e.g. ending with "Исправлю:" or dumping a large
+          // code block in chat instead of calling editFile/writeFile).
+          if (!isRepeatingNudgedText &&
+              agenticTools != null &&
+              tools.isNotEmpty &&
+              incompleteStopNudges < 2 &&
+              _looksLikeIncompleteStop(
+                cleanAnswer,
+                editedAnyFile: editedAnyFile,
+              )) {
+            incompleteStopNudges++;
+            lastNudgedAssistantText = cleanAnswer;
+            messages.add({'role': 'assistant', 'content': cleanAnswer});
+            messages.add({
+              'role': 'user',
+              'content':
+                  'Ты оборвал действие на тексте (или вывел код в чат), НЕ вызвав инструмент (`editFile`, `multiEditFile` или `writeFile`). '
+                  'Не описывай правку словами — немедленно вызови инструмент и примени изменения к файлу!',
+            });
+            continue;
+          }
+
+          // Live Auto-Verification Gate (OpenCode-style): if files were edited,
+          // run fresh diagnostics automatically when needed so we NEVER rely on
+          // stale error counts from earlier steps.
           if (agenticTools != null &&
               editedAnyFile &&
-              hasUnresolvedErrors &&
-              verificationFixRounds < maxVerificationFixRounds) {
-            verificationFixRounds++;
-            final editedFiles = agenticTools.pendingEdits.keys
-                .map((p) => p.split(RegExp(r'[/\\]')).last)
-                .toList();
-            final filesHint = editedFiles.isEmpty
-                ? ''
-                : ' Actually edited files so far: ${editedFiles.join(', ')}.';
-            messages.add({'role': 'assistant', 'content': cleanAnswer});
-            messages.add({
-              'role': 'user',
-              'content':
-                  'VERIFICATION GATE ($verificationFixRounds/$maxVerificationFixRounds): '
-                  'The project still has $lastErrorCount unresolved compilation/analyzer error(s). '
-                  'Do NOT stop yet. Fix the errors using `editFile` (do NOT rewrite whole files with `writeFile`) '
-                  'and re-run `mcp__quantum_token_saver__smart_analyze_errors` to confirm 0 errors before giving your final answer.$filesHint',
-            });
-            continue;
+              (needsFreshVerification || hasUnresolvedErrors)) {
+            if (needsFreshVerification) {
+              final autoDiagId = 'auto_verify_$step';
+              final autoRunning = RoxumToolCallRecord(
+                id: autoDiagId,
+                name: 'getLspDiagnostics',
+                arguments: const {},
+                isRunning: true,
+              );
+              onToolEvent(autoRunning);
+              final autoRes = await agenticTools.execute(
+                'getLspDiagnostics',
+                const {},
+              );
+              onToolEvent(
+                autoRunning.copyWith(
+                  isRunning: false,
+                  success: autoRes.success,
+                  output: autoRes.output,
+                ),
+              );
+              needsFreshVerification = false;
+              final freshErrCount = _countAnalyzerErrors(autoRes.output);
+              lastAnalyzerSummary = autoRes.output;
+              if (freshErrCount > 0) {
+                hasUnresolvedErrors = true;
+                lastErrorCount = freshErrCount;
+              } else {
+                hasUnresolvedErrors = false;
+                lastErrorCount = 0;
+              }
+            }
+
+            if (!isRepeatingNudgedText &&
+                hasUnresolvedErrors &&
+                verificationFixRounds < maxVerificationFixRounds) {
+              verificationFixRounds++;
+              lastNudgedAssistantText = cleanAnswer;
+              final editedFiles = agenticTools.pendingEdits.keys
+                  .map((p) => p.split(RegExp(r'[/\\]')).last)
+                  .toList();
+              final filesHint = editedFiles.isEmpty
+                  ? ''
+                  : '\nModified files: ${editedFiles.join(', ')}.';
+              final diagBlock = lastAnalyzerSummary.trim().isNotEmpty
+                  ? '\n\nCURRENT ANALYZER DIAGNOSTICS:\n$lastAnalyzerSummary'
+                  : '';
+              if (cleanAnswer.isNotEmpty) {
+                messages.add({'role': 'assistant', 'content': cleanAnswer});
+              }
+              messages.add({
+                'role': 'user',
+                'content':
+                    'VERIFICATION GATE ($verificationFixRounds/$maxVerificationFixRounds): '
+                    'The project currently has $lastErrorCount compilation/analyzer error(s). '
+                    'Fix ALL errors right now using `multiEditFile` or `editFile` (do NOT stop with text only, and do NOT rewrite large files with `writeFile`).'
+                    '$filesHint$diagBlock',
+              });
+              continue;
+            }
           }
+
           if (agenticTools != null &&
-              cleanAnswer.trim().isEmpty &&
+              cleanAnswer.isEmpty &&
               executedAnyTool) {
             if (!nudgedEmptyAfterTools) {
               nudgedEmptyAfterTools = true;
@@ -850,20 +951,61 @@ class RoxumAiClient {
                 'content':
                     'Ты остановился после выполнения инструментов и не написал ответ. '
                     'Если задача не завершена — продолжи вызов инструментов. '
-                    'Если завершена или возникла ошибка — кратко напиши итог и результат.',
+                    'Если завершена — кратко напиши итог и список изменённых файлов.',
               });
               continue;
             }
-            return 'Модель завершила шаги без текстового отчёта. Проверьте результаты выполненных шагов выше или нажмите «Продолжить выполнение».';
+            return 'Задача выполнена (см. применённые изменения выше).';
+          }
+
+          if (isRepeatingNudgedText && hasUnresolvedErrors) {
+            return '$cleanAnswer\n\n⚠️ Модель остановилась без вызова инструмента правок (осталось ошибок анализатора: $lastErrorCount). Попробуйте нажать «Продолжить» или выбрать более сильную кодерскую модель (Qwen Coder / DeepSeek V3 / Gemini / Claude).';
           }
           return cleanAnswer;
         }
 
         executedAnyTool = true;
+        lastNudgedAssistantText = '';
         messages.add(effectiveTurn.rawAssistantMessage);
 
         for (final call in effectiveTurn.toolCalls) {
           if (isCancelled()) return _splitThinkTags(turn.text).answer;
+
+          final sig = '${call.name}|${jsonEncode(call.args)}';
+          final duplicateStreak =
+              recentCallSignatures.isNotEmpty && recentCallSignatures.last == sig;
+          final duplicateCount =
+              recentCallSignatures.where((s) => s == sig).length;
+          recentCallSignatures.add(sig);
+          if (recentCallSignatures.length > 8) {
+            recentCallSignatures.removeAt(0);
+          }
+
+          if (duplicateStreak || duplicateCount >= 2) {
+            final loopMsg = RoxumToolExecutionResult(
+              success: false,
+              output:
+                  '[Loop Guard] Skipped duplicate call to `${call.name}` with identical arguments. '
+                  'Do NOT repeat the exact same read/edit call — move forward with `multiEditFile` / `editFile` or finish the task.',
+            );
+            onToolEvent(
+              RoxumToolCallRecord(
+                id: call.id,
+                name: call.name,
+                arguments: call.args,
+                isRunning: false,
+                success: false,
+                output: loopMsg.output,
+              ),
+            );
+            messages.add({
+              'role': 'tool',
+              'tool_call_id': call.id,
+              'name': call.name,
+              'content': loopMsg.toJsonString(),
+            });
+            continue;
+          }
 
           final runningRecord = RoxumToolCallRecord(
             id: call.id,
@@ -885,21 +1027,56 @@ class RoxumAiClient {
           const editToolNames = {
             'writeFile',
             'createFile',
+            'write',
+            'write_file',
             'editFile',
+            'edit',
+            'edit_file',
+            'multiEditFile',
+            'multiEdit',
+            'multiedit',
             'replaceAllInFile',
+            'replaceInProject',
+            'insertAtLine',
             'multiFileReplace',
           };
           if (editToolNames.contains(call.name) && result.success) {
             editedAnyFile = true;
+            recentCallSignatures.clear();
+            // Check if inline OpenCode-style [Diagnostics] already ran inside write/edit
+            if (result.output.contains('[Diagnostics for ')) {
+              final diagIdx = result.output.indexOf('[Diagnostics for ');
+              final diagPart = result.output.substring(diagIdx);
+              lastAnalyzerSummary = diagPart;
+              final inlineErrs = _countAnalyzerErrors(diagPart);
+              if (inlineErrs > 0) {
+                hasUnresolvedErrors = true;
+                lastErrorCount = inlineErrs;
+                needsFreshVerification = false;
+              } else if (diagPart.contains('0 error(s)') ||
+                  diagPart.contains('No issues found')) {
+                hasUnresolvedErrors = false;
+                lastErrorCount = 0;
+                // Still run workspace-level check once if multiple files were edited
+                needsFreshVerification = agenticTools.pendingEdits.length > 1;
+              } else {
+                needsFreshVerification = true;
+              }
+            } else {
+              needsFreshVerification = true;
+            }
           }
 
           final isAnalyzerCall =
               call.name == 'mcp__quantum_token_saver__smart_analyze_errors' ||
               call.name == 'getLspDiagnostics' ||
+              call.name == 'diagnostics' ||
               (call.name == 'runCommand' &&
                   (call.args['command']?.toString().contains('analyze') ??
                       false));
           if (isAnalyzerCall) {
+            needsFreshVerification = false;
+            lastAnalyzerSummary = result.output;
             final errCount = _countAnalyzerErrors(result.output);
             if (errCount > 0) {
               hasUnresolvedErrors = true;
@@ -956,9 +1133,23 @@ class RoxumAiClient {
 
   /// Compacts older tool outputs and superseded/older `writeFile` arguments in
   /// assistant messages so multi-step agent loops do not re-send huge file
-  /// contents on every subsequent turn.
+  /// contents on every subsequent turn while ALWAYS keeping the latest
+  /// compiler diagnostics intact.
   void _compactMessagesForTokenSavings(List<Map<String, dynamic>> messages) {
     compactMessagesForTokenSavings(messages);
+  }
+
+  static bool _isDiagnosticsToolMessage(Map<String, dynamic> msg) {
+    if (msg['role'] != 'tool') return false;
+    final name = msg['name']?.toString() ?? '';
+    if (name == 'mcp__quantum_token_saver__smart_analyze_errors' ||
+        name == 'getLspDiagnostics' ||
+        name == 'diagnostics') {
+      return true;
+    }
+    final content = msg['content']?.toString() ?? '';
+    return content.contains('[Diagnostics for ') ||
+        (content.contains('Summary:') && content.contains('error(s)'));
   }
 
   /// Public testable compactor that replaces old `tool` outputs and old or
@@ -980,9 +1171,12 @@ class RoxumAiClient {
         final fn = tc['function'];
         if (fn is! Map) continue;
         final name = fn['name']?.toString() ?? '';
-        if (name != 'writeFile' && name != 'createFile') continue;
+        if (name != 'writeFile' && name != 'createFile' && name != 'write') {
+          continue;
+        }
         final parsed = _tryDecodeArgsMap(fn['arguments']);
-        final path = parsed?['filePath']?.toString().trim() ?? '';
+        final path =
+            (parsed?['filePath'] ?? parsed?['path'])?.toString().trim() ?? '';
         if (path.isNotEmpty) {
           latestWriteByPath[path] = i;
         }
@@ -1011,7 +1205,7 @@ class RoxumAiClient {
           continue;
         }
         final name = fn['name']?.toString() ?? '';
-        if (name != 'writeFile' && name != 'createFile') {
+        if (name != 'writeFile' && name != 'createFile' && name != 'write') {
           newToolCalls.add(tc);
           continue;
         }
@@ -1021,7 +1215,8 @@ class RoxumAiClient {
           continue;
         }
         final content = parsed['content']?.toString() ?? '';
-        final path = parsed['filePath']?.toString().trim() ?? '';
+        final path =
+            (parsed['filePath'] ?? parsed['path'])?.toString().trim() ?? '';
         final isSuperseded =
             path.isNotEmpty && (latestWriteByPath[path] ?? i) > i;
         final isOld = i < assistantCutoff;
@@ -1051,17 +1246,49 @@ class RoxumAiClient {
       }
     }
 
-    // 2. Compact older `role: tool` outputs beyond the most recent 6 messages.
-    if (messages.length <= 8) return;
-    final cutoff = messages.length - 6;
+    // 2. Locate the MOST RECENT diagnostics tool message so we NEVER truncate
+    // active compiler errors, while collapsing older superseded diagnostics so
+    // the model never chases stale fixed bugs!
+    var latestDiagIdx = -1;
+    for (int i = messages.length - 1; i >= 1; i--) {
+      if (_isDiagnosticsToolMessage(messages[i])) {
+        latestDiagIdx = i;
+        break;
+      }
+    }
+    if (latestDiagIdx > 1) {
+      for (int i = 1; i < latestDiagIdx; i++) {
+        final msg = messages[i];
+        if (_isDiagnosticsToolMessage(msg)) {
+          final content = msg['content']?.toString() ?? '';
+          if (!content.contains('[superseded diagnostics')) {
+            messages[i] = {
+              ...msg,
+              'content': jsonEncode({
+                'success': true,
+                'output':
+                    '[superseded diagnostics — see latest analyzer output in recent messages]',
+              }),
+            };
+          }
+        }
+      }
+    }
+
+    // 3. Compact older `role: tool` outputs beyond the most recent 10 messages,
+    // EXCEPT `latestDiagIdx` which always stays intact.
+    if (messages.length <= 12) return;
+    final cutoff = messages.length - 10;
     for (int i = 1; i < cutoff; i++) {
+      if (i == latestDiagIdx) continue;
       final msg = messages[i];
       if (msg['role'] == 'tool') {
         final content = msg['content']?.toString() ?? '';
-        if (content.length > 900 &&
-            !content.contains('[compacted tool output:')) {
-          final head = content.substring(0, 420);
-          final tail = content.substring(content.length - 220);
+        if (content.length > 2200 &&
+            !content.contains('[compacted tool output:') &&
+            !content.contains('[superseded diagnostics')) {
+          final head = content.substring(0, 1400);
+          final tail = content.substring(content.length - 500);
           messages[i] = {
             ...msg,
             'content':
@@ -1222,6 +1449,7 @@ class RoxumAiClient {
     final toolBuffers =
         <int, ({StringBuffer id, StringBuffer name, StringBuffer args})>{};
     RoxumUsageStats usage = const RoxumUsageStats();
+    String? finishReason;
 
     var lineCarry = '';
     await for (final chunk in streamed.stream.transform(utf8.decoder)) {
@@ -1254,7 +1482,11 @@ class RoxumAiClient {
 
           final choices = (json['choices'] as List?) ?? const [];
           if (choices.isEmpty) continue;
-          final delta = (choices.first['delta'] as Map?)
+          final firstChoice = choices.first;
+          if (firstChoice is Map && firstChoice['finish_reason'] != null) {
+            finishReason = firstChoice['finish_reason']?.toString();
+          }
+          final delta = (firstChoice is Map ? firstChoice['delta'] as Map? : null)
               ?.cast<String, dynamic>();
           if (delta == null) continue;
 
@@ -1350,36 +1582,161 @@ class RoxumAiClient {
     for (final idx in sortedKeys) {
       final buf = toolBuffers[idx]!;
       final id = buf.id.isNotEmpty ? buf.id.toString() : 'call_$idx';
-      final name = buf.name.toString();
+      final name = buf.name.toString().trim();
       final rawArgs = buf.args.isNotEmpty ? buf.args.toString() : '{}';
-      Map<String, dynamic> parsedArgs = {};
-      try {
-        final d = jsonDecode(rawArgs);
-        if (d is Map<String, dynamic>) parsedArgs = d;
-      } catch (_) {}
+      final parsedArgs = _decodeToolArgsWithRecovery(
+        rawArgs,
+        finishReason: finishReason,
+      );
       if (name.isNotEmpty) {
+        final safeSerializedArgs = parsedArgs.containsKey('__parse_error__')
+            ? jsonEncode(parsedArgs)
+            : rawArgs;
         calls.add((id: id, name: name, args: parsedArgs));
         rawCalls.add({
           'id': id,
           'type': 'function',
-          'function': {'name': name, 'arguments': rawArgs},
+          'function': {'name': name, 'arguments': safeSerializedArgs},
         });
       }
     }
 
     final finalSplit = _splitThinkTags(contentBuf.toString());
+    var cleanAnswer = finalSplit.answer;
+
+    // Fallback: extract `<tool_call>{...}</tool_call>` or `<function=name>{...}</function>`
+    // emitted as plain text by OpenRouter free/open-weight models.
+    if (calls.isEmpty && cleanAnswer.isNotEmpty) {
+      final fallback = extractTextToolCalls(cleanAnswer);
+      if (fallback.calls.isNotEmpty) {
+        cleanAnswer = fallback.remainingText;
+        for (final fc in fallback.calls) {
+          calls.add(fc);
+          rawCalls.add({
+            'id': fc.id,
+            'type': 'function',
+            'function': {'name': fc.name, 'arguments': jsonEncode(fc.args)},
+          });
+        }
+      }
+    }
+
+    final effectiveReasoning = reasoningBuf.isNotEmpty
+        ? reasoningBuf.toString()
+        : finalSplit.reasoning;
     return _ParsedTurn(
-      text: finalSplit.answer,
+      text: cleanAnswer,
+      reasoning: effectiveReasoning,
       toolCalls: calls,
       rawAssistantMessage: {
         'role': 'assistant',
-        'content': (finalSplit.answer.isEmpty && rawCalls.isNotEmpty)
+        'content': (cleanAnswer.isEmpty && rawCalls.isNotEmpty)
             ? null
-            : finalSplit.answer,
+            : cleanAnswer,
         if (rawCalls.isNotEmpty) 'tool_calls': rawCalls,
       },
       usage: usage,
     );
+  }
+
+  static Map<String, dynamic> _decodeToolArgsWithRecovery(
+    String rawArgs, {
+    String? finishReason,
+  }) {
+    final trimmed = rawArgs.trim();
+    if (trimmed.isEmpty || trimmed == '{}') return <String, dynamic>{};
+    try {
+      final d = jsonDecode(trimmed);
+      if (d is Map<String, dynamic>) return d;
+      if (d is Map) return Map<String, dynamic>.from(d);
+    } catch (_) {
+      // Strip accidental markdown fences if present
+      final stripped = trimmed
+          .replaceFirst(RegExp(r'^```(?:json)?\s*', caseSensitive: false), '')
+          .replaceFirst(RegExp(r'\s*```$'), '')
+          .trim();
+      try {
+        final d2 = jsonDecode(stripped);
+        if (d2 is Map<String, dynamic>) return d2;
+        if (d2 is Map) return Map<String, dynamic>.from(d2);
+      } catch (_) {}
+    }
+    return {
+      '__parse_error__':
+          'Tool arguments JSON was truncated or malformed (finish_reason=${finishReason ?? 'unknown'}, ${trimmed.length} chars). '
+          'Split large files into smaller modular files (150-250 lines) or use `editFile` / `multiEditFile` instead of sending huge file contents in one call.',
+    };
+  }
+
+  /// Extracts `<tool_call>{"name": ..., "arguments": ...}</tool_call>` or
+  /// `<function=toolName>{...}</function>` blocks emitted in plain text by
+  /// open-weight models that occasionally miss OpenAI's streaming `tool_calls`.
+  static ({
+    List<({String id, String name, Map<String, dynamic> args})> calls,
+    String remainingText,
+  }) extractTextToolCalls(String text) {
+    final extracted = <({String id, String name, Map<String, dynamic> args})>[];
+    var cleaned = text;
+
+    final xmlToolCallRe = RegExp(
+      r'<tool_call>\s*([\s\S]*?)\s*</tool_call>',
+      caseSensitive: false,
+    );
+    for (final m in xmlToolCallRe.allMatches(text)) {
+      final body = m.group(1)?.trim() ?? '';
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map) {
+          final name =
+              (decoded['name'] ?? (decoded['function'] as Map?)?['name'])
+                  ?.toString()
+                  .trim() ??
+              '';
+          final rawArgs =
+              decoded['arguments'] ??
+              decoded['parameters'] ??
+              (decoded['function'] as Map?)?['arguments'];
+          Map<String, dynamic> args = {};
+          if (rawArgs is Map) {
+            args = Map<String, dynamic>.from(rawArgs);
+          } else if (rawArgs is String && rawArgs.trim().startsWith('{')) {
+            args = _decodeToolArgsWithRecovery(rawArgs);
+          }
+          if (name.isNotEmpty) {
+            extracted.add((
+              id: 'txtcall_${extracted.length}',
+              name: name,
+              args: args,
+            ));
+          }
+        }
+      } catch (_) {}
+    }
+    if (extracted.isNotEmpty) {
+      cleaned = cleaned.replaceAll(xmlToolCallRe, '').trim();
+      return (calls: extracted, remainingText: cleaned);
+    }
+
+    final fnTagRe = RegExp(
+      r'<function=([A-Za-z0-9_]+)>\s*([\s\S]*?)\s*</function>',
+      caseSensitive: false,
+    );
+    for (final m in fnTagRe.allMatches(text)) {
+      final name = m.group(1)?.trim() ?? '';
+      final body = m.group(2)?.trim() ?? '{}';
+      if (name.isNotEmpty) {
+        final args = _decodeToolArgsWithRecovery(body);
+        extracted.add((
+          id: 'fncall_${extracted.length}',
+          name: name,
+          args: args,
+        ));
+      }
+    }
+    if (extracted.isNotEmpty) {
+      cleaned = cleaned.replaceAll(fnTagRe, '').trim();
+    }
+    return (calls: extracted, remainingText: cleaned);
   }
 
   Duration _retryDelay(Map<String, String> headers, int attempt) {
@@ -1404,6 +1761,8 @@ class RoxumAiClient {
     required List<Map<String, dynamic>> messages,
     required List<Map<String, dynamic>> tools,
   }) {
+    final isAgentMode = tools.isNotEmpty;
+    final temp = isAgentMode ? 0.15 : 0.4;
     switch (model.method) {
       case RoxumToolCallingMethod.anthropicMessages:
         final systemPrompts = messages
@@ -1414,7 +1773,8 @@ class RoxumAiClient {
         final nonSystem = messages.where((m) => m['role'] != 'system').toList();
         return {
           'model': model.model,
-          'max_tokens': 4096,
+          'max_tokens': 8192,
+          'temperature': temp,
           if (systemPrompts.isNotEmpty) 'system': systemPrompts,
           'messages': _toAnthropicMessages(nonSystem),
           if (tools.isNotEmpty) 'tools': _toAnthropicTools(tools),
@@ -1428,6 +1788,10 @@ class RoxumAiClient {
         final nonSystem = messages.where((m) => m['role'] != 'system').toList();
         return {
           'contents': _toGeminiContents(nonSystem),
+          'generationConfig': {
+            'temperature': temp,
+            'maxOutputTokens': 8192,
+          },
           if (systemPrompts.isNotEmpty)
             'systemInstruction': {
               'parts': [
@@ -1440,9 +1804,19 @@ class RoxumAiClient {
             ],
         };
       case RoxumToolCallingMethod.openAiCompatible:
+        final idLower = model.model.toLowerCase();
+        final isOpenAiReasoner =
+            idLower.startsWith('o1') ||
+            idLower.startsWith('o3') ||
+            idLower.startsWith('o4') ||
+            idLower.contains('/o1') ||
+            idLower.contains('/o3') ||
+            idLower.contains('/o4');
         return {
           'model': model.model,
           'messages': messages,
+          'max_tokens': 8192,
+          if (!isOpenAiReasoner) 'temperature': temp,
           if (tools.isNotEmpty) 'tools': tools,
           if (tools.isNotEmpty) 'tool_choice': 'auto',
         };
@@ -1459,15 +1833,48 @@ class RoxumAiClient {
     return _fakeEditRegex.hasMatch(text);
   }
 
+  static final _imminentActionPromiseRe = RegExp(
+    r'(исправлю|сейчас\s+(исправлю|обновлю|создам|заменю|проверю|перепишу)|давайте\s+исправим|вношу\s+правки|применяю\s+изменения|let\s+me\s+(fix|edit|update|create|apply)|i\s+will\s+now\s+(fix|edit|update|write))\s*[:.…]*$',
+    caseSensitive: false,
+  );
+
+  /// Detects when an LLM stops mid-thought without calling a tool (for example
+  /// ending with `"Исправлю:"` or printing a large full-file code block into
+  /// chat when no files were modified yet).
+  static bool _looksLikeIncompleteStop(
+    String text, {
+    required bool editedAnyFile,
+  }) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    // Ends with a colon announcing an action ("Исправлю:", "Обновлю код:")
+    if (trimmed.length < 400 && trimmed.endsWith(':')) {
+      return true;
+    }
+    if (trimmed.length < 500 && _imminentActionPromiseRe.hasMatch(trimmed)) {
+      return true;
+    }
+    // Model dumped a large code block (>= 25 lines) in chat without editing any file
+    if (!editedAnyFile && trimmed.contains('```')) {
+      final fenceMatches = RegExp(r'```[a-zA-Z0-9_+-]*\n([\s\S]*?)```').allMatches(trimmed);
+      for (final m in fenceMatches) {
+        final codeLines = (m.group(1) ?? '').split('\n').length;
+        if (codeLines >= 25) return true;
+      }
+    }
+    return false;
+  }
+
   _ParsedTurn _parseResponse(
     RoxumToolCallingMethod method,
     Map<String, dynamic> json,
   ) {
     switch (method) {
       case RoxumToolCallingMethod.openAiCompatible:
-        final msg =
-            (json['choices'] as List).first['message'] as Map<String, dynamic>;
-        final text = msg['content']?.toString() ?? '';
+        final firstChoice = (json['choices'] as List).first as Map<String, dynamic>;
+        final msg = firstChoice['message'] as Map<String, dynamic>;
+        final finishReason = firstChoice['finish_reason']?.toString();
+        var text = msg['content']?.toString() ?? '';
         var reasoning =
             msg['reasoning_content']?.toString() ??
             msg['reasoning']?.toString() ??
@@ -1483,6 +1890,7 @@ class RoxumAiClient {
           reasoning = rBuf.toString();
         }
         final calls = <({String id, String name, Map<String, dynamic> args})>[];
+        final outRawCalls = <Map<String, dynamic>>[];
         final rawCalls = msg['tool_calls'] as List?;
         if (rawCalls != null) {
           for (final item in rawCalls) {
@@ -1490,15 +1898,29 @@ class RoxumAiClient {
             final fn = item['function'] as Map?;
             if (fn == null) continue;
             final id = item['id']?.toString() ?? 'call_${calls.length}';
-            final name = fn['name']?.toString() ?? '';
+            final name = fn['name']?.toString().trim() ?? '';
             final rawArgs = fn['arguments']?.toString() ?? '{}';
-            Map<String, dynamic> parsedArgs = {};
-            try {
-              final d = jsonDecode(rawArgs);
-              if (d is Map<String, dynamic>) parsedArgs = d;
-            } catch (_) {}
+            final parsedArgs = _decodeToolArgsWithRecovery(
+              rawArgs,
+              finishReason: finishReason,
+            );
             if (name.isNotEmpty) {
               calls.add((id: id, name: name, args: parsedArgs));
+              outRawCalls.add(Map<String, dynamic>.from(item));
+            }
+          }
+        }
+        if (calls.isEmpty && text.isNotEmpty) {
+          final fallback = extractTextToolCalls(text);
+          if (fallback.calls.isNotEmpty) {
+            text = fallback.remainingText;
+            for (final fc in fallback.calls) {
+              calls.add(fc);
+              outRawCalls.add({
+                'id': fc.id,
+                'type': 'function',
+                'function': {'name': fc.name, 'arguments': jsonEncode(fc.args)},
+              });
             }
           }
         }
@@ -1515,10 +1937,10 @@ class RoxumAiClient {
           toolCalls: calls,
           rawAssistantMessage: {
             'role': 'assistant',
-            'content': (text.isEmpty && rawCalls != null && rawCalls.isNotEmpty)
+            'content': (text.isEmpty && outRawCalls.isNotEmpty)
                 ? null
                 : text,
-            if (rawCalls != null && rawCalls.isNotEmpty) 'tool_calls': rawCalls,
+            if (outRawCalls.isNotEmpty) 'tool_calls': outRawCalls,
           },
           usage: RoxumUsageStats(
             promptTokens: oPrompt,

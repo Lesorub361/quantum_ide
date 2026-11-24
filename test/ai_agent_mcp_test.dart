@@ -309,16 +309,155 @@ And with single quotes:
       },
     );
 
-    test('gitDiff returns concise message outside a git repository', () async {
-      final toolsProvider = Provider<RoxumAgenticTools>(
-        (ref) => RoxumAgenticTools(ref, pendingEdits: {}),
-      );
-      final tools = container.read(toolsProvider);
-      final res = await tools.execute('gitDiff', {'filePath': 'sample.dart'});
+    test(
+      'McpService.formatCompactAnalyzerDiagnostics deduplicates main.dart vs lib/main.dart and keeps line numbers visible',
+      () {
+        final dupLines = <String>[
+          "  error • Undefined name 'x' • main.dart:257:11 • undefined_identifier",
+          "  error • Undefined name 'x' • main.dart:261:11 • undefined_identifier",
+          "  error • Undefined name 'x' • main.dart:288:11 • undefined_identifier",
+          "  error • Undefined name 'x' • main.dart:305:11 • undefined_identifier",
+          "  error • Undefined name 'x' • main.dart:410:11 • undefined_identifier",
+          "  error • Undefined name 'x' • lib/main.dart:257:11 • undefined_identifier",
+          "  error • Undefined name 'x' • lib/main.dart:261:11 • undefined_identifier",
+          "  error • Undefined name 'x' • lib/main.dart:288:11 • undefined_identifier",
+          "  error • Undefined name 'x' • lib/main.dart:305:11 • undefined_identifier",
+          "  error • Undefined name 'x' • lib/main.dart:410:11 • undefined_identifier",
+        ];
+        final formatted = McpService.formatCompactAnalyzerDiagnostics(
+          dupLines.join('\n'),
+        );
+        expect(formatted, contains('Summary: 5 error(s)'));
+        expect(formatted, contains('257, 261, 288, 305, 410'));
+        expect(formatted, isNot(contains('..')));
+      },
+    );
 
-      expect(res.success, isFalse);
-      expect(res.output, equals('Not a git repository.'));
-    });
+    test(
+      'RoxumAiClient.compactMessagesForTokenSavings preserves latest diagnostics while collapsing superseded diagnostics',
+      () {
+        final oldDiag = jsonEncode({
+          'success': true,
+          'output':
+              'Summary: 29 error(s), 0 warning(s), 0 info(s).\n${List.filled(40, "error • lib/main.dart:257: undefined_identifier — Undefined name 'x'.").join('\n')}',
+        });
+        final latestDiag = jsonEncode({
+          'success': true,
+          'output':
+              'Summary: 2 error(s), 0 warning(s), 0 info(s).\n${List.filled(35, "error • lib/main.dart:812: invalid_constant — Invalid constant value.").join('\n')}',
+        });
+        final messages = <Map<String, dynamic>>[
+          {'role': 'system', 'content': 'sys'},
+          {'role': 'user', 'content': 'fix game'},
+          {
+            'role': 'tool',
+            'tool_call_id': 'diag_1',
+            'name': 'getLspDiagnostics',
+            'content': oldDiag,
+          },
+          {
+            'role': 'tool',
+            'tool_call_id': 'diag_2',
+            'name': 'getLspDiagnostics',
+            'content': latestDiag,
+          },
+          for (var i = 0; i < 12; i++)
+            {
+              'role': 'tool',
+              'tool_call_id': 'read_$i',
+              'name': 'readFile',
+              'content': 'short read $i',
+            },
+        ];
+
+        RoxumAiClient.compactMessagesForTokenSavings(messages);
+
+        expect(
+          messages[2]['content'].toString(),
+          contains('[superseded diagnostics'),
+        );
+        // Latest diagnostics MUST remain intact even when older than 10 messages!
+        expect(messages[3]['content'], equals(latestDiag));
+      },
+    );
+
+    test(
+      'RoxumAiClient.extractTextToolCalls parses <tool_call> and <function=...> fallback blocks',
+      () {
+        const sample = '''
+Сейчас применю правку:
+<tool_call>
+{"name": "editFile", "arguments": {"filePath": "lib/main.dart", "oldText": "int i = 0;", "newText": "int x = 0;"}}
+</tool_call>
+''';
+        final res = RoxumAiClient.extractTextToolCalls(sample);
+        expect(res.calls, hasLength(1));
+        expect(res.calls.first.name, equals('editFile'));
+        expect(res.calls.first.args['filePath'], equals('lib/main.dart'));
+        expect(res.remainingText, equals('Сейчас применю правку:'));
+      },
+    );
+
+    test(
+      'RoxumAgenticTools supports fuzzy editFile, multiEditFile, placeholder rejection, and gitDiff outside git',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final tempDir = await Directory.systemTemp.createTemp('roxum_tools_test_');
+        final localContainer = ProviderContainer();
+        addTearDown(() async {
+          localContainer.dispose();
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+        await localContainer
+            .read(workspaceProvider.notifier)
+            .setWorkspace(tempDir.path);
+
+        final toolsProvider = Provider<RoxumAgenticTools>(
+          (ref) => RoxumAgenticTools(ref, pendingEdits: {}),
+        );
+        final tools = localContainer.read(toolsProvider);
+
+        final gitRes = await tools.execute('gitDiff', {'filePath': 'sample.dart'});
+        expect(gitRes.success, isFalse);
+        expect(gitRes.output, equals('Not a git repository.'));
+
+        final codeLines = <String>[
+          for (var i = 0; i < 40; i++) '  final line$i = $i;',
+        ].join('\n');
+        await File('${tempDir.path}/game.dart').writeAsString(
+          'class Game {\n$codeLines\n  void tick() {\n    int i = 0;\n  }\n}\n',
+        );
+
+        // Reject destructive lazy placeholder overwrite
+        final lazyWrite = await tools.execute('writeFile', {
+          'filePath': 'game.dart',
+          'content': 'class Game {\n  // ... existing code ...\n}\n',
+        });
+        expect(lazyWrite.success, isFalse);
+        expect(lazyWrite.output, contains('REJECTED'));
+
+        // Fuzzy indentation-tolerant editFile + multiEditFile
+        final multiRes = await tools.execute('multiEditFile', {
+          'filePath': 'game.dart',
+          'edits': [
+            {
+              'oldText': 'final line0 = 0;',
+              'newText': '  final line0 = 100;',
+            },
+            {
+              'oldText': 'void tick() {\n  int i = 0;\n}',
+              'newText': '  void tick() {\n    int x = 1;\n  }',
+            },
+          ],
+        });
+        expect(multiRes.success, isTrue);
+        final updatedDisk = await File('${tempDir.path}/game.dart').readAsString();
+        expect(updatedDisk, contains('final line0 = 100;'));
+        expect(updatedDisk, contains('int x = 1;'));
+      },
+    );
 
     test('Official Dart & Flutter MCP (dart mcp-server) preset is registered', () {
       final catalogItem = McpCatalog.items.where(
@@ -339,7 +478,13 @@ And with single quotes:
     test(
       'RoxumSkillLoader loads workspace SKILL.md and matches built-in Flutter/Genkit skills on demand',
       () async {
-        final skillDir = Directory('${tempWorkspace.path}/.agents/skills/custom-game');
+        final tempSkillWs = await Directory.systemTemp.createTemp('roxum_skill_test_');
+        addTearDown(() async {
+          if (await tempSkillWs.exists()) {
+            await tempSkillWs.delete(recursive: true);
+          }
+        });
+        final skillDir = Directory('${tempSkillWs.path}/.agents/skills/custom-game');
         await skillDir.create(recursive: true);
         await File('${skillDir.path}/SKILL.md').writeAsString('''
 ---
@@ -350,14 +495,14 @@ Always use fixed timestep for physics updates.
 ''');
 
         final matchedCustom = RoxumSkillLoader.buildMatchedSkillsBlock(
-          workspace: tempWorkspace.path,
+          workspace: tempSkillWs.path,
           userPrompt: 'Помоги оптимизировать custom game loop',
         );
         expect(matchedCustom, contains('Custom Game Loop'));
         expect(matchedCustom, contains('fixed timestep'));
 
         final matchedPreview = RoxumSkillLoader.buildMatchedSkillsBlock(
-          workspace: tempWorkspace.path,
+          workspace: tempSkillWs.path,
           userPrompt: 'Добавь @Preview для моей кнопки',
           activeFilePath: 'lib/widgets/my_button.dart',
         );

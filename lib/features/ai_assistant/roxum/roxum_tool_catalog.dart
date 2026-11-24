@@ -5,80 +5,43 @@ class AgenticToolSpec {
   final String label;
   final String description;
   final bool requiresWriteAccess;
+  final bool defaultEnabled;
 
   const AgenticToolSpec({
     required this.name,
     required this.label,
     required this.description,
     required this.requiresWriteAccess,
+    this.defaultEnabled = true,
   });
 }
 
 const List<AgenticToolSpec> agenticToolSpecs = [
   AgenticToolSpec(
-    name: 'activeEditorFile',
-    label: 'Активный файл',
-    description: 'Получает путь к текущему открытому файлу в редакторе.',
-    requiresWriteAccess: false,
-  ),
-  AgenticToolSpec(
-    name: 'currentlySelectedText',
-    label: 'Выделенный текст',
-    description: 'Получает выделенный текст в активном редакторе.',
-    requiresWriteAccess: false,
-  ),
-  AgenticToolSpec(
-    name: 'getLspDiagnostics',
-    label: 'Диагностика / ошибки',
-    description: 'Получает ошибки и предупреждения из открытых файлов.',
-    requiresWriteAccess: false,
-  ),
-  AgenticToolSpec(
     name: 'readFile',
     label: 'Чтение файла',
-    description: 'Читает содержимое файла.',
-    requiresWriteAccess: false,
-  ),
-  AgenticToolSpec(
-    name: 'readFilesBatch',
-    label: 'Пакетное чтение',
-    description: 'Читает несколько файлов за один вызов.',
+    description: 'Читает содержимое файла (до 1200 строк за один вызов).',
     requiresWriteAccess: false,
   ),
   AgenticToolSpec(
     name: 'writeFile',
     label: 'Запись файла',
-    description: 'Создаёт или перезаписывает файл с отслеживанием diff.',
+    description:
+        'Создаёт или перезаписывает файл с авто-проверкой ошибок и diff.',
     requiresWriteAccess: true,
   ),
   AgenticToolSpec(
     name: 'editFile',
     label: 'Правка файла',
-    description: 'Заменяет фрагмент текста в файле с отслеживанием diff.',
+    description:
+        'Точечно заменяет фрагмент кода (с умным поиском отступов и авто-диагностикой).',
     requiresWriteAccess: true,
   ),
   AgenticToolSpec(
-    name: 'insertAtLine',
-    label: 'Вставка в строку',
-    description: 'Вставляет текст перед или после указанной строки.',
-    requiresWriteAccess: true,
-  ),
-  AgenticToolSpec(
-    name: 'replaceAllInFile',
-    label: 'Замена в файле',
-    description: 'Заменяет все вхождения текста в файле.',
-    requiresWriteAccess: true,
-  ),
-  AgenticToolSpec(
-    name: 'deleteFile',
-    label: 'Удаление файла',
-    description: 'Удаляет файл из проекта.',
-    requiresWriteAccess: true,
-  ),
-  AgenticToolSpec(
-    name: 'renamePath',
-    label: 'Переименование',
-    description: 'Переименовывает или перемещает файл/папку.',
+    name: 'multiEditFile',
+    label: 'Пакетная правка (MultiEdit)',
+    description:
+        'Применяет сразу несколько правок к одному файлу за 1 шаг (как multiedit в OpenCode).',
     requiresWriteAccess: true,
   ),
   AgenticToolSpec(
@@ -96,20 +59,39 @@ const List<AgenticToolSpec> agenticToolSpecs = [
   AgenticToolSpec(
     name: 'grepInFiles',
     label: 'Поиск по тексту',
-    description: 'Ищет строки в файлах проекта.',
+    description: 'Ищет строки или регулярные выражения в файлах проекта.',
     requiresWriteAccess: false,
   ),
   AgenticToolSpec(
-    name: 'getFileInfo',
-    label: 'Метаданные файла',
-    description: 'Возвращает размер и время изменения файла.',
+    name: 'codeOutline',
+    label: 'Структура кода (AST/Символы)',
+    description:
+        'Возвращает список классов, функций и строк (#L) без чтения всего файла.',
     requiresWriteAccess: false,
   ),
   AgenticToolSpec(
-    name: 'getPendingEditsForFile',
-    label: 'Ожидающие правки',
-    description: 'Показывает неподтверждённые изменения агента.',
+    name: 'getLspDiagnostics',
+    label: 'Диагностика / ошибки',
+    description: 'Получает ошибки компилятора и анализатора по проекту или файлу.',
     requiresWriteAccess: false,
+  ),
+  AgenticToolSpec(
+    name: 'runCommand',
+    label: 'Терминал (Shell / Root / PRoot)',
+    description: 'Выполняет команду в терминале проекта с авто-поиском путей.',
+    requiresWriteAccess: true,
+  ),
+  AgenticToolSpec(
+    name: 'deleteFile',
+    label: 'Удаление файла',
+    description: 'Удаляет файл из проекта.',
+    requiresWriteAccess: true,
+  ),
+  AgenticToolSpec(
+    name: 'renamePath',
+    label: 'Переименование',
+    description: 'Переименовывает или перемещает файл/папку.',
+    requiresWriteAccess: true,
   ),
   AgenticToolSpec(
     name: 'gitStatus',
@@ -123,25 +105,35 @@ const List<AgenticToolSpec> agenticToolSpecs = [
     description: 'Возвращает git diff изменений.',
     requiresWriteAccess: false,
   ),
+  // Дополнительные инструменты (можно включить вручную, всегда поддерживаются при вызове)
   AgenticToolSpec(
-    name: 'gitLog',
-    label: 'Git log',
-    description: 'Возвращает последние коммиты git.',
+    name: 'readFilesBatch',
+    label: 'Пакетное чтение',
+    description: 'Читает несколько файлов за один вызов.',
     requiresWriteAccess: false,
+    defaultEnabled: false,
   ),
   AgenticToolSpec(
-    name: 'codeOutline',
-    label: 'Структура кода (AST/Символы)',
-    description:
-        'Возвращает список классов, функций и строк (#L) без чтения всего файла (экономит 85% токенов).',
-    requiresWriteAccess: false,
+    name: 'replaceAllInFile',
+    label: 'Замена всех вхождений',
+    description: 'Заменяет все вхождения строки в файле.',
+    requiresWriteAccess: true,
+    defaultEnabled: false,
+  ),
+  AgenticToolSpec(
+    name: 'insertAtLine',
+    label: 'Вставка в строку',
+    description: 'Вставляет текст перед или после указанной строки.',
+    requiresWriteAccess: true,
+    defaultEnabled: false,
   ),
   AgenticToolSpec(
     name: 'checkEnvironment',
     label: 'Поиск SDK и окружения',
     description:
-        'Ищет установленные в системе Flutter, Dart, Java, Gradle, Node, Python, Git, Rust и их пути.',
+        'Ищет установленные в системе Flutter, Dart, Java, Gradle, Node, Python, Git, Rust.',
     requiresWriteAccess: false,
+    defaultEnabled: false,
   ),
   AgenticToolSpec(
     name: 'installPackages',
@@ -149,12 +141,42 @@ const List<AgenticToolSpec> agenticToolSpecs = [
     description:
         'Устанавливает недостающие пакеты и библиотеки (pub, npm, pip, apt, cargo).',
     requiresWriteAccess: true,
+    defaultEnabled: false,
   ),
   AgenticToolSpec(
-    name: 'runCommand',
-    label: 'Терминал (Shell / Root / PRoot)',
-    description: 'Выполняет команду в терминале проекта с авто-поиском путей.',
-    requiresWriteAccess: true,
+    name: 'activeEditorFile',
+    label: 'Активный файл',
+    description: 'Получает путь к текущему открытому файлу в редакторе.',
+    requiresWriteAccess: false,
+    defaultEnabled: false,
+  ),
+  AgenticToolSpec(
+    name: 'currentlySelectedText',
+    label: 'Выделенный текст',
+    description: 'Получает выделенный текст в активном редакторе.',
+    requiresWriteAccess: false,
+    defaultEnabled: false,
+  ),
+  AgenticToolSpec(
+    name: 'getFileInfo',
+    label: 'Метаданные файла',
+    description: 'Возвращает размер и время изменения файла.',
+    requiresWriteAccess: false,
+    defaultEnabled: false,
+  ),
+  AgenticToolSpec(
+    name: 'getPendingEditsForFile',
+    label: 'Ожидающие правки',
+    description: 'Показывает неподтверждённые изменения агента.',
+    requiresWriteAccess: false,
+    defaultEnabled: false,
+  ),
+  AgenticToolSpec(
+    name: 'gitLog',
+    label: 'Git log',
+    description: 'Возвращает последние коммиты git.',
+    requiresWriteAccess: false,
+    defaultEnabled: false,
   ),
 ];
 
@@ -163,7 +185,7 @@ Map<String, bool> normalizeAgenticToolSelections(
 ) {
   return {
     for (final spec in agenticToolSpecs)
-      spec.name: selections?[spec.name] ?? true,
+      spec.name: selections?[spec.name] ?? spec.defaultEnabled,
   };
 }
 
@@ -175,12 +197,19 @@ List<Map<String, dynamic>> filterAgenticToolsBySelection(
     return tools;
   }
 
+  final knownSpecs = {
+    for (final spec in agenticToolSpecs) spec.name: spec.defaultEnabled,
+  };
+
   return tools.where((tool) {
     final function = tool['function'];
     if (function is! Map) return true;
     final toolName = function['name']?.toString();
     if (toolName == null || toolName.isEmpty) return true;
-    return selections[toolName] ?? true;
+    if (selections.containsKey(toolName)) {
+      return selections[toolName]!;
+    }
+    return knownSpecs[toolName] ?? false;
   }).toList();
 }
 

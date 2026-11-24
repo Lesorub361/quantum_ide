@@ -580,6 +580,95 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     return cleaned.replaceAll(RegExp(r'\n{3,}'), '\n\n').trim();
   }
 
+  /// Keeps the LLM tool schema lean (OpenCode-style ~14-16 tools instead of 45+)
+  /// by filtering built-in MCP tools based on user intent while preserving all
+  /// custom external MCP servers.
+  List<Map<String, dynamic>> _selectRelevantMcpTools({
+    required List<Map<String, dynamic>> rawMcp,
+    required String prompt,
+    required bool hasNativeFs,
+  }) {
+    final q = prompt.toLowerCase();
+    final wantsWeb = RegExp(
+      r'(http|https|url|docs|документ|найди в инете|поиск|интернет|pub\.dev|npm|mdn|stackoverflow)',
+    ).hasMatch(q);
+    final wantsBuildOrDevice = RegExp(
+      r'(apk|aab|gradle|build|сборк|собери|установи|adb|logcat|shizuku|устройств|телефон|девайс|crash|вылет)',
+    ).hasMatch(q);
+    final wantsDbOrNet = RegExp(
+      r'(sqlite|sql|\.db|database|баз[аыуе]|таблиц|network|трафик|talker|лог)',
+    ).hasMatch(q);
+    final wantsTests = RegExp(r'(test|тест|todo|fixme)').hasMatch(q);
+    final wantsMemory = RegExp(
+      r'(запомни|память|memory|сохрани правило)',
+    ).hasMatch(q);
+
+    final out = <Map<String, dynamic>>[];
+    for (final t in rawMcp) {
+      final server = (t['server']?.toString() ?? '').trim();
+      final serverLower = server.toLowerCase();
+      final name = (t['name']?.toString() ?? '').trim();
+      if (hasNativeFs &&
+          (serverLower == 'local filesystem access' ||
+              serverLower == 'quantum-filesystem' ||
+              serverLower == 'quantum-shell')) {
+        continue;
+      }
+      if (!serverLower.startsWith('quantum-')) {
+        // User-configured external MCP server (e.g. dart mcp-server, github, etc.)
+        out.add(t);
+        continue;
+      }
+      switch (serverLower) {
+        case 'quantum-codegraph':
+          if (name == 'read_symbol' || name == 'find_symbol_usages') {
+            out.add(t);
+          }
+          break;
+        case 'quantum-token-saver':
+          if (wantsTests && (name == 'run_tests' || name == 'scan_todos')) {
+            out.add(t);
+          }
+          break;
+        case 'quantum-web-fetch':
+          if (wantsWeb) out.add(t);
+          break;
+        case 'quantum-build-doctor':
+        case 'quantum-device-qa':
+          if (wantsBuildOrDevice) out.add(t);
+          break;
+        case 'quantum-sqlite-telemetry':
+          if (wantsDbOrNet) out.add(t);
+          break;
+        case 'quantum-memory':
+          if (wantsMemory) out.add(t);
+          break;
+      }
+    }
+    return out;
+  }
+
+  String _buildTurnHistorySummary(RoxumConversationTurn turn, String workspace) {
+    final cleanText = _stripFakeToolMarkers(turn.aiResponse);
+    if (turn.fileEdits.isEmpty) return cleanText;
+    final wsPrefix = workspace.isNotEmpty
+        ? '${workspace.replaceAll('\\', '/')}/'
+        : '';
+    final files = turn.fileEdits
+        .map((fe) {
+          final norm = fe.filePath.replaceAll('\\', '/');
+          final rel = wsPrefix.isNotEmpty && norm.startsWith(wsPrefix)
+              ? norm.substring(wsPrefix.length)
+              : norm;
+          return '$rel (+${fe.addedLines}/-${fe.removedLines})';
+        })
+        .join(', ');
+    if (cleanText.isEmpty) {
+      return 'Updated files: $files.';
+    }
+    return '$cleanText\n\n(Modified files: $files)';
+  }
+
   String _loadProjectContextBlocks(String workspace) {
     if (workspace.isEmpty) return '';
     final buf = StringBuffer();
@@ -673,37 +762,32 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final baseTools = state.chatMode == RoxumChatMode.agent
         ? RoxumAgenticTools.buildOpenAiTools(state.toolSelections)
         : const <Map<String, dynamic>>[];
-    List<Map<String, dynamic>> rawMcp = const [];
     List<Map<String, dynamic>> mcpTools = const [];
     if (state.chatMode == RoxumChatMode.agent &&
         ref.read(mcpServiceProvider).any((s) => s.isEnabled)) {
       try {
-        rawMcp = await ref
+        final rawMcp = await ref
             .read(mcpServiceProvider.notifier)
             .getAvailableMcpTools()
             .timeout(const Duration(seconds: 12));
-        final hasNativeFs = baseTools.any((t) {
-          final fnName = (t['function'] as Map?)?['name']?.toString() ?? '';
-          return fnName == 'readFile' || fnName == 'writeFile';
-        });
-        final filteredMcp = hasNativeFs
-            ? rawMcp
-                .where(
-                  (t) =>
-                      (t['server']?.toString() ?? '').toLowerCase() !=
-                      'local filesystem access',
-                )
-                .toList()
-            : rawMcp;
+        // Register ALL MCP tools in _mcpToolRegistry first so direct calls always work,
+        // then expose only contextually relevant non-duplicate tools in payload schema.
+        RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
+        final filteredMcp = _selectRelevantMcpTools(
+          rawMcp: rawMcp,
+          prompt: trimmed,
+          hasNativeFs: baseTools.any((t) {
+            final fnName = (t['function'] as Map?)?['name']?.toString() ?? '';
+            return fnName == 'readFile' || fnName == 'writeFile';
+          }),
+        );
         mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(filteredMcp);
+        // Re-populate full registry after building filtered schemas
+        RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
       } catch (_) {}
     }
     final toolsSchema = <Map<String, dynamic>>[...baseTools, ...mcpTools];
 
-    final mcpSummary = mcpTools.isEmpty
-        ? ''
-        : '\nACTIVE MCP TOOLS (${mcpTools.length} available — use them proactively!):\n'
-              '${mcpTools.map((t) => '- ${(t['function'] as Map)['name']}: ${(t['function'] as Map)['description']}').join('\n')}\n';
     final projectBlocks = _loadProjectContextBlocks(workspace);
     final matchedSkillsBlock = RoxumSkillLoader.buildMatchedSkillsBlock(
       workspace: workspace,
@@ -712,24 +796,23 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     );
 
     final systemPrompt = state.chatMode == RoxumChatMode.agent
-        ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace, the device/system filesystem (/root, /storage/emulated/0, SDK directories, host paths), shell (including ADB / Shizuku `rish` when available), and MCP servers via tool calls '
-              '(readFile, codeOutline, writeFile, editFile, listFiles, grepInFiles, runCommand, checkEnvironment, installPackages, getLspDiagnostics, gitStatus, and all `mcp__*` tools). '
-              'Workspace root: "$workspace"${guestWorkspace != workspace ? ' (in shell/terminal mapped to "$guestWorkspace")' : ''}. '
-              '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}\n'
-              'CRITICAL RULES FOR HIGH EFFICIENCY & ACCURACY:\n'
-              '0) ACT, DO NOT DESCRIBE: perform the task with REAL tool calls (writeFile/editFile/runCommand...). NEVER write text like "[Executed tools...]", never claim an edit/build succeeded unless a real tool result confirmed it, and never finish with only a plan or description.\n'
-              '1) TARGETED EDITS & RELATIVE PATHS: Use SHORT workspace-relative paths (e.g. `lib/main.dart`, NOT `/data/user/0/.../lib/main.dart`). For existing files over 40 lines, NEVER rewrite the entire file with `writeFile` to fix imports or bugs — ALWAYS use `editFile` or `replaceAllInFile`!\n'
-              '2) TOKEN SAVING & CODEGRAPH MCP: For unfamiliar or large files/projects, call `mcp__quantum_codegraph__project_symbols` or `codeOutline` first, use `mcp__quantum_codegraph__read_symbol` to read a specific class/method body with brace balancing, `mcp__quantum_codegraph__find_symbol_usages` to find references across the project, or `readFile` with `startLine` and `endLine`.\n'
-              '3) PACKAGES & PUBSPEC: NEVER add Flutter/Dart packages by manually rewriting `pubspec.yaml` (and never invent package versions). ALWAYS run `flutter pub add <package>` (or `dart pub add <package>`) via `runCommand` so compatible versions are resolved and fetched automatically. If you edit `pubspec.yaml` directly, immediately run `flutter pub get`.\n'
-              '4) ENVIRONMENT & SDKS: NEVER assume `flutter`, `dart`, `node`, `python`, `java`, or `git` is missing and NEVER try to manually download huge SDK tarballs via curl unless `checkEnvironment` proves it is absent. Always call `checkEnvironment` first to see exact installed SDK paths and versions.\n'
-              '5) REAL VERIFICATION & SMART ANALYZER MCP: After creating or editing files, ALWAYS call `mcp__quantum_token_saver__smart_analyze_errors` (or `getLspDiagnostics`) and fix ALL compiler errors using `editFile` before finishing.\n'
-              '6) MCP CATEGORIES: Architecture/navigation=quantum-codegraph; diagnostics/quality=quantum-token-saver; build/dependencies=quantum-build-doctor; devices/runtime=quantum-device-qa; project memory=quantum-memory; docs/web=quantum-web-fetch; data/telemetry=quantum-sqlite-telemetry. Choose the narrowest relevant category instead of calling every MCP.\n'
-              '7) PROJECT MEMORY & WEB DOCS: Save important project facts with `mcp__quantum_memory__save_memory`; use `mcp__quantum_web_fetch__web_search_docs` / `fetch_url_markdown` for external docs.\n'
-              '8) HONESTY & ANTI-HALLUCINATION: NEVER invent file names, packages, or tool runs in your final report — mention ONLY files you actually created/edited via tools in this turn.\n'
-              '$mcpSummary'
+        ? 'You are Roxum, an autonomous Staff Software Engineer inside QuantumIDE (OpenCode-grade execution engine).\n'
+              'Workspace: "$workspace"${guestWorkspace != workspace ? ' (shell path: "$guestWorkspace")' : ''}.'
+              '${activeFilePath != null ? ' Active file: "$activeFilePath".' : ''}\n\n'
+              'CORE OPERATING PRINCIPLES:\n'
+              '1) ACT DIRECTLY WITH TOOLS: Execute tasks end-to-end using real tool calls (`readFile`, `writeFile`, `editFile`, `multiEditFile`, `listFiles`, `globSearchFiles`, `grepInFiles`, `getLspDiagnostics`, `runCommand`). NEVER stop mid-task with promises like "Исправлю:" or dump unapplied code into chat.\n'
+              '2) ZERO WASTED STEPS: Do NOT call `checkEnvironment` unless a shell command failed with `command not found`. `readFile` reads up to 1200 lines in ONE call — read full files directly instead of making many tiny 15-line reads. Always use workspace-relative paths (e.g. `lib/main.dart`).\n'
+              '3) MODULAR ARCHITECTURE (NO MONOLITHS): When building games, multi-screen apps, or rich features, NEVER cram 500-1000 lines into a single `lib/main.dart`! Split into clean, cohesive modules of 120-260 lines each (e.g. `lib/models/...`, `lib/game/...` or `lib/controllers/...`, `lib/widgets/...`) and connect them in a clean `lib/main.dart`.\n'
+              '4) SURGICAL EDITS & MULTIEDIT: For existing files, NEVER rewrite the entire file with `writeFile` to fix errors or imports, and NEVER use placeholders like `// ... existing code`. When fixing multiple issues in one file, fix ALL of them in ONE `multiEditFile` call!\n'
+              '5) INLINE DIAGNOSTICS LOOP: `writeFile`, `editFile`, and `multiEditFile` automatically run static analysis and append `[Diagnostics for ...]` with exact line numbers and source snippets. Fix every `error •` immediately until `0 error(s)` before giving your final summary.\n'
+              '6) MODERN FLUTTER / DART RULES:\n'
+              '   - Keyboard events: NEVER use deprecated/removed `RawKeyEvent`, `RawKeyDownEvent`, `RawKeyboardListener`, or `Focus(onKey: ...)`. Always use `KeyboardListener` or `Focus(autofocus: true, onKeyEvent: (node, event) { if (event is KeyDownEvent) { ... } return KeyEventResult.handled; })` with `import \'package:flutter/services.dart\';`.\n'
+              '   - Colors & Const: `Color` has NO `*` operator — use `Color.lerp(...)` or `.withValues(alpha: ...)`. Never put `${...}` string interpolation or runtime getters inside `const` widgets (`const Text(...)`).\n'
+              '   - Packages: Add packages via `runCommand` (`flutter pub add <pkg>`). If `pubspec.yaml` has broken/non-existent dependencies or SDK constraints causing analyzer errors, fix `pubspec.yaml` and run `flutter pub get`.\n'
+              '7) HONEST SUMMARY: In your final answer, concisely report ONLY the files actually created/modified and verification status.'
               '$projectBlocks'
               '$matchedSkillsBlock\n'
-              'Respond in the user\'s language.'
+              'Always respond in the user\'s language.'
         : 'You are a helpful coding assistant inside QuantumIDE. '
               '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
               '$projectBlocks'
@@ -766,8 +849,11 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       {'role': 'system', 'content': systemPrompt},
       for (final t in baseTurns) ...[
         {'role': 'user', 'content': t.userRequest},
-        if (t.aiResponse.isNotEmpty)
-          {'role': 'assistant', 'content': _stripFakeToolMarkers(t.aiResponse)},
+        if (t.aiResponse.isNotEmpty || t.fileEdits.isNotEmpty)
+          {
+            'role': 'assistant',
+            'content': _buildTurnHistorySummary(t, workspace),
+          },
       ],
       {'role': 'user', 'content': currentUserContent},
     ];
@@ -775,6 +861,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final startedAt = DateTime.now();
     var stepStartedAt = startedAt;
     var currentStep = 0;
+    final stepReasonings = <int, String>{};
     final turnEditedPaths = <String>{};
     final stepEditIds = <String, String>{};
     final pendingCopy = Map<String, RoxumPendingEdit>.from(state.pendingEdits);
@@ -888,6 +975,12 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           final now = DateTime.now();
           final totalElapsed = now.difference(startedAt).inMilliseconds;
           final stepElapsed = now.difference(stepStartedAt).inMilliseconds;
+          if (reasoning.trim().isNotEmpty) {
+            stepReasonings[currentStep] = reasoning.trim();
+          }
+          final combinedReasoning = (stepReasonings.keys.toList()..sort())
+              .map((k) => stepReasonings[k]!)
+              .join('\n\n');
           _updateTurn(turnId, (turn) {
             final tl = reasoning.trim().isEmpty
                 ? turn.timeline
@@ -901,7 +994,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
                     ),
                   );
             return turn.copyWith(
-              reasoningText: reasoning,
+              reasoningText: combinedReasoning,
               thinkingDurationMs: totalElapsed,
               timeline: tl,
             );

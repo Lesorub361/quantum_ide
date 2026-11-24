@@ -9,7 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:quantum_ide/core/services/workspace_service.dart';
-import 'package:quantum_ide/core/services/quantum_ai_agent_service.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 
@@ -185,9 +185,10 @@ class _QuantumTerminalToolsModalState extends ConsumerState<QuantumTerminalTools
 
   void _explainErrorWithAi(String errorLog) {
     Navigator.of(context).pop();
-    final prompt = 'Пожалуйста, проанализируй эту ошибку терминала и предложи точное решение:\n\n```text\n$errorLog\n```';
+    final prompt =
+        'Пожалуйста, проанализируй эту ошибку терминала и исправь её в проекте:\n\n```text\n$errorLog\n```';
     ref.read(panelProvider.notifier).selectTab(PanelTab.aiAgent);
-    ref.read(quantumAiAgentServiceProvider).sendMessage(prompt);
+    ref.read(roxumChatProvider.notifier).sendPrompt(prompt);
   }
 
   void _generateAiCommand(String request) async {
@@ -219,11 +220,11 @@ class _QuantumTerminalToolsModalState extends ConsumerState<QuantumTerminalTools
       return;
     }
 
-    // Otherwise delegate to Quantum AI Agent
+    // Otherwise delegate to Roxum AI Agent
     Navigator.of(context).pop();
     final prompt = 'Сгенерируй только Bash команду для Linux/PRoot терминала: $request';
     ref.read(panelProvider.notifier).selectTab(PanelTab.aiAgent);
-    ref.read(quantumAiAgentServiceProvider).sendMessage(prompt);
+    ref.read(roxumChatProvider.notifier).sendPrompt(prompt);
   }
 
   @override

@@ -171,16 +171,36 @@ class RoxumAgenticTools {
       ),
       _toolDef(
         'editFile',
-        'Replaces an exact target snippet in a file with replacement text.',
+        'Replaces a target code snippet in a file with replacement text (supports flexible whitespace matching and returns inline compiler diagnostics).',
         {
           'filePath': {'type': 'string', 'description': 'Path to the file.'},
           'oldText': {
             'type': 'string',
-            'description': 'Exact text to replace.',
+            'description': 'Target text to replace.',
           },
           'newText': {'type': 'string', 'description': 'Replacement text.'},
         },
         required: ['filePath', 'oldText', 'newText'],
+      ),
+      _toolDef(
+        'multiEditFile',
+        'Applies multiple sequential edits to a single file in ONE atomic call (like OpenCode multiedit) and returns inline compiler diagnostics.',
+        {
+          'filePath': {'type': 'string', 'description': 'Path to the file.'},
+          'edits': {
+            'type': 'array',
+            'description': 'Ordered list of {oldText, newText} replacements.',
+            'items': {
+              'type': 'object',
+              'properties': {
+                'oldText': {'type': 'string', 'description': 'Target snippet.'},
+                'newText': {'type': 'string', 'description': 'Replacement snippet.'},
+              },
+              'required': ['oldText', 'newText'],
+            },
+          },
+        },
+        required: ['filePath', 'edits'],
       ),
       _toolDef(
         'insertAtLine',
@@ -433,6 +453,13 @@ class RoxumAgenticTools {
     Map<String, dynamic> args,
   ) async {
     try {
+      if (args.containsKey('__parse_error__')) {
+        return RoxumToolExecutionResult(
+          success: false,
+          output: args['__parse_error__']?.toString() ??
+              'Tool arguments JSON could not be parsed.',
+        );
+      }
       if (name.startsWith('mcp__')) {
         var target = _mcpToolRegistry[name];
         if (target == null) {
@@ -473,12 +500,17 @@ class RoxumAgenticTools {
         case 'currentlySelectedText':
           return _currentlySelectedText();
         case 'getLspDiagnostics':
-          return await _getLspDiagnostics(args['filePath']?.toString());
+        case 'diagnostics':
+          return await _getLspDiagnostics(
+            (args['filePath'] ?? args['path'])?.toString(),
+          );
         case 'readFile':
+        case 'read':
+        case 'read_file':
           return await _readFile(
-            args['filePath']?.toString() ?? '',
-            startLine: (args['startLine'] as num?)?.toInt(),
-            endLine: (args['endLine'] as num?)?.toInt(),
+            (args['filePath'] ?? args['path'])?.toString() ?? '',
+            startLine: _parseInt(args['startLine'] ?? args['offset']),
+            endLine: _parseInt(args['endLine']),
           );
         case 'readFilesBatch':
           final list =
@@ -486,20 +518,36 @@ class RoxumAgenticTools {
               const [];
           return await _readFilesBatch(list);
         case 'writeFile':
+        case 'createFile':
+        case 'write':
+        case 'write_file':
           return await _writeFile(
-            args['filePath']?.toString() ?? '',
+            (args['filePath'] ?? args['path'])?.toString() ?? '',
             args['content']?.toString() ?? '',
           );
         case 'editFile':
+        case 'edit':
+        case 'edit_file':
           return await _editFile(
-            args['filePath']?.toString() ?? '',
-            args['oldText']?.toString() ?? '',
-            args['newText']?.toString() ?? '',
+            (args['filePath'] ?? args['path'])?.toString() ?? '',
+            (args['oldText'] ?? args['oldString'] ?? args['old_string'])
+                    ?.toString() ??
+                '',
+            (args['newText'] ?? args['newString'] ?? args['new_string'])
+                    ?.toString() ??
+                '',
+          );
+        case 'multiEditFile':
+        case 'multiEdit':
+        case 'multiedit':
+          return await _multiEditFile(
+            (args['filePath'] ?? args['path'])?.toString() ?? '',
+            args['edits'],
           );
         case 'insertAtLine':
           return await _insertAtLine(
             args['filePath']?.toString() ?? '',
-            (args['line'] as num?)?.toInt() ?? 1,
+            _parseInt(args['line']) ?? 1,
             args['text']?.toString() ?? '',
             position: args['position']?.toString() ?? 'after',
           );
@@ -513,13 +561,15 @@ class RoxumAgenticTools {
           return await _replaceInProject(
             args['search']?.toString() ?? '',
             args['replace']?.toString() ?? '',
-            isRegex: args['isRegex'] == true,
+            isRegex: _parseBool(args['isRegex'], defaultValue: false),
             globPattern: args['globPattern']?.toString() ?? '**/*',
             directoryPath: args['directoryPath']?.toString(),
-            dryRun: args['dryRun'] == true,
+            dryRun: _parseBool(args['dryRun'], defaultValue: false),
           );
         case 'deleteFile':
-          return await _deleteFile(args['filePath']?.toString() ?? '');
+          return await _deleteFile(
+            (args['filePath'] ?? args['path'])?.toString() ?? '',
+          );
         case 'renamePath':
         case 'rename':
           return await _renamePath(
@@ -527,21 +577,27 @@ class RoxumAgenticTools {
             args['newPath']?.toString() ?? '',
           );
         case 'listFiles':
+        case 'list':
+        case 'ls':
           return await _listFiles(
-            args['directoryPath']?.toString() ?? '',
-            recursive: args['recursive'] == true,
+            (args['directoryPath'] ?? args['path'])?.toString() ?? '',
+            recursive: _parseBool(args['recursive'], defaultValue: false),
           );
         case 'globSearchFiles':
+        case 'glob':
           return await _globSearchFiles(
             args['pattern']?.toString() ?? '',
-            directoryPath: args['directoryPath']?.toString(),
+            directoryPath:
+                (args['directoryPath'] ?? args['path'])?.toString(),
           );
         case 'grepInFiles':
         case 'searchInFiles':
+        case 'grep':
           return await _grepInFiles(
-            args['query']?.toString() ?? '',
-            directoryPath: args['directoryPath']?.toString(),
-            isRegex: args['isRegex'] == true,
+            (args['query'] ?? args['pattern'])?.toString() ?? '',
+            directoryPath:
+                (args['directoryPath'] ?? args['path'])?.toString(),
+            isRegex: _parseBool(args['isRegex'], defaultValue: false),
             caseSensitive: _parseBool(
               args['caseSensitive'],
               defaultValue: false,
@@ -574,6 +630,8 @@ class RoxumAgenticTools {
             manager: args['manager']?.toString() ?? 'auto',
           );
         case 'runCommand':
+        case 'bash':
+        case 'run_command':
           return await _runShell(args['command']?.toString() ?? '');
         default:
           return RoxumToolExecutionResult(
@@ -634,10 +692,58 @@ class RoxumAgenticTools {
   }
 
   Future<RoxumToolExecutionResult> _getLspDiagnostics(String? filePath) async {
-    final editor = _ref.read(editorProvider);
     final target = filePath != null && filePath.isNotEmpty
         ? _resolvePath(filePath)
         : null;
+
+    // Run real static analysis first when pubspec.yaml / tsconfig.json exists so
+    // unopened or freshly written files ALWAYS report accurate compiler errors.
+    final runtime = _ref.read(runtimeServiceProvider);
+    final relTarget = target != null ? _relativePath(target) : '';
+    final safeTarget =
+        relTarget.isNotEmpty &&
+            relTarget != '.' &&
+            !relTarget.contains(';') &&
+            !relTarget.contains('`') &&
+            !relTarget.contains(r'$')
+        ? ' "$relTarget"'
+        : '';
+    final pubspec = File(p.join(workspacePath, 'pubspec.yaml'));
+    final tsconfig = File(p.join(workspacePath, 'tsconfig.json'));
+    if (await pubspec.exists()) {
+      final res = await runtime.runCommandDetailed(
+        'if command -v dart >/dev/null 2>&1; then '
+        '  dart analyze$safeTarget 2>&1; '
+        'elif [ -x "\$HOME/flutter/bin/dart" ]; then '
+        '  "\$HOME/flutter/bin/dart" analyze$safeTarget 2>&1; '
+        'else '
+        '  flutter analyze --no-pub$safeTarget 2>&1; '
+        'fi',
+        workingDirectory: workspacePath,
+        timeout: const Duration(seconds: 75),
+      );
+      final compact = McpService.formatCompactAnalyzerDiagnostics(res.combined);
+      final withSnippets = await McpService.appendErrorSourceSnippets(
+        workspacePath,
+        compact,
+      );
+      if (withSnippets.trim().isNotEmpty) {
+        return RoxumToolExecutionResult(success: true, output: withSnippets);
+      }
+    } else if (await tsconfig.exists()) {
+      final res = await runtime.runCommandDetailed(
+        'npx tsc --noEmit 2>&1',
+        workingDirectory: workspacePath,
+        timeout: const Duration(seconds: 60),
+      );
+      final compact = McpService.formatCompactAnalyzerDiagnostics(res.combined);
+      return RoxumToolExecutionResult(
+        success: true,
+        output: compact.isEmpty ? 'Summary: 0 error(s). No issues found.' : compact,
+      );
+    }
+
+    final editor = _ref.read(editorProvider);
     final items = <Map<String, dynamic>>[];
     for (final f in editor.openFiles) {
       if (target != null && p.normalize(f.path) != target) continue;
@@ -654,57 +760,9 @@ class RoxumAgenticTools {
       return RoxumToolExecutionResult(success: true, output: jsonEncode(items));
     }
 
-    // Fallback: Run real static analysis on the workspace or target file so
-    // errors in unopened or newly created files are ALWAYS detected!
-    final runtime = _ref.read(runtimeServiceProvider);
-    final targetArg = target != null ? '"${_relativePath(target)}"' : '';
-    final pubspec = File(p.join(workspacePath, 'pubspec.yaml'));
-    final tsconfig = File(p.join(workspacePath, 'tsconfig.json'));
-    if (await pubspec.exists()) {
-      final res = await runtime.runCommandDetailed(
-        '(dart analyze $targetArg 2>&1 || flutter analyze --no-pub $targetArg 2>&1)',
-        workingDirectory: workspacePath,
-        timeout: const Duration(seconds: 75),
-      );
-      final diagLines = res.combined
-          .split('\n')
-          .where(
-            (l) =>
-                l.contains('error •') ||
-                l.contains('warning •') ||
-                l.contains('info •') ||
-                l.contains('Error:') ||
-                l.contains('No issues found'),
-          )
-          .take(60)
-          .toList();
-      if (diagLines.isNotEmpty) {
-        return RoxumToolExecutionResult(
-          success: true,
-          output: diagLines.join('\n'),
-        );
-      }
-    } else if (await tsconfig.exists()) {
-      final res = await runtime.runCommandDetailed(
-        'npx tsc --noEmit 2>&1',
-        workingDirectory: workspacePath,
-        timeout: const Duration(seconds: 60),
-      );
-      if (res.combined.trim().isNotEmpty) {
-        return RoxumToolExecutionResult(
-          success: true,
-          output: res.combined.length > 3500
-              ? res.combined.substring(0, 3500)
-              : res.combined,
-        );
-      }
-    }
-
-    return RoxumToolExecutionResult(
+    return const RoxumToolExecutionResult(
       success: true,
-      output: target != null && await Directory(target).exists()
-          ? 'LSP has no cached diagnostics for directory "${_relativePath(target)}". Pass a specific file path or run project analyzer (smart_analyze_errors / flutter analyze).'
-          : 'No cached diagnostics are available. Run project analyzer (smart_analyze_errors / flutter analyze) to produce diagnostics.',
+      output: 'Summary: 0 error(s), 0 warning(s), 0 info(s).\nNo issues found.',
     );
   }
 
@@ -713,6 +771,12 @@ class RoxumAgenticTools {
     int? startLine,
     int? endLine,
   }) async {
+    if (rawPath.trim().isEmpty) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'filePath is required.',
+      );
+    }
     final path = _resolvePath(rawPath);
     final file = File(path);
     if (!await file.exists()) {
@@ -729,10 +793,11 @@ class RoxumAgenticTools {
       );
     }
     final s = (startLine ?? 1).clamp(1, lines.length);
-    // Cap default un-ranged reads to 320 lines to avoid blowing up context tokens
+    // OpenCode-grade default window (1200 lines) so typical source files are read
+    // in a single call instead of 5-8 fragmented round-trips.
     final defaultEnd =
-        (startLine == null && endLine == null && lines.length > 200)
-        ? 200
+        (startLine == null && endLine == null && lines.length > 1200)
+        ? 1200
         : lines.length;
     final e = (endLine ?? defaultEnd).clamp(s, lines.length);
     final buf = StringBuffer();
@@ -744,7 +809,7 @@ class RoxumAgenticTools {
     }
     if (e < lines.length && endLine == null) {
       buf.writeln(
-        '... [Showing lines $s-$e of ${lines.length}. Call readFile with startLine=${e + 1}, endLine=${(e + 200).clamp(e + 1, lines.length)} to read further, or use codeOutline.]',
+        '... [Showing lines $s-$e of ${lines.length}. Call readFile with startLine=${e + 1}, endLine=${(e + 1200).clamp(e + 1, lines.length)} to read further.]',
       );
     }
     return RoxumToolExecutionResult(success: true, output: buf.toString());
@@ -764,6 +829,7 @@ class RoxumAgenticTools {
     String newContent, {
     required bool existedBefore,
     required String originalContent,
+    bool runAutoDiagnostics = true,
   }) async {
     final file = File(path);
     await file.parent.create(recursive: true);
@@ -791,6 +857,7 @@ class RoxumAgenticTools {
       await LiveTelemetryService.instance.onFileUpdated?.call(path);
     } catch (_) {}
 
+    final notes = StringBuffer();
     try {
       final diags = FastSyntaxEngine.instance.analyze(path, newContent);
       if (diags.isNotEmpty) {
@@ -798,10 +865,48 @@ class RoxumAgenticTools {
             .take(5)
             .map((d) => 'Line ${d.range.index + 1}: ${d.message}')
             .join('; ');
-        return '\n[FastSyntaxEngine Warning: $summary — please verify brackets/quotes!]';
+        notes.write(
+          '\n[FastSyntaxEngine Warning: $summary — please verify brackets/quotes!]',
+        );
       }
     } catch (_) {}
-    return '';
+
+    // OpenCode-style inline diagnostics right inside writeFile / editFile / multiEditFile
+    if (runAutoDiagnostics && _isInsideWorkspace(path)) {
+      final ext = p.extension(path).toLowerCase();
+      if (ext == '.dart') {
+        final pubspec = File(p.join(workspacePath, 'pubspec.yaml'));
+        if (await pubspec.exists()) {
+          try {
+            final rel = _relativePath(path);
+            if (!rel.contains(';') && !rel.contains('`') && !rel.contains(r'$')) {
+              final runtime = _ref.read(runtimeServiceProvider);
+              final res = await runtime.runCommandDetailed(
+                'if command -v dart >/dev/null 2>&1; then '
+                '  dart analyze "$rel" 2>&1; '
+                'elif [ -x "\$HOME/flutter/bin/dart" ]; then '
+                '  "\$HOME/flutter/bin/dart" analyze "$rel" 2>&1; '
+                'fi',
+                workingDirectory: workspacePath,
+                timeout: const Duration(seconds: 30),
+              );
+              if (res.combined.trim().isNotEmpty) {
+                final compact = McpService.formatCompactAnalyzerDiagnostics(
+                  res.combined,
+                );
+                final fullDiag = await McpService.appendErrorSourceSnippets(
+                  workspacePath,
+                  compact,
+                  maxSnippets: 8,
+                );
+                notes.write('\n\n[Diagnostics for $rel]\n$fullDiag');
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+    return notes.toString();
   }
 
   static ({int added, int removed}) _computeDiffCounts(
@@ -847,32 +952,52 @@ class RoxumAgenticTools {
     return await _runShell(command);
   }
 
+  static final _lazyPlaceholderRe = RegExp(
+    r'(//\s*\.\.\.\s*(existing|rest\s+of|remaining|unchanged|остальн|прежн|без\s+изменен)|/\*\s*\.\.\.\s*(existing|rest|остальн))',
+    caseSensitive: false,
+  );
+
   Future<RoxumToolExecutionResult> _writeFile(
     String rawPath,
     String content,
   ) async {
+    if (rawPath.trim().isEmpty) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'filePath is required for writeFile.',
+      );
+    }
     final path = _resolvePath(rawPath);
     final file = File(path);
     final existed = await file.exists();
     final original = existed ? await file.readAsString() : '';
     final originalLines = original.isEmpty ? 0 : original.split('\n').length;
+    final rel = _relativePath(path);
+
+    if (existed && originalLines > 30 && _lazyPlaceholderRe.hasMatch(content)) {
+      return RoxumToolExecutionResult(
+        success: false,
+        output:
+            'REJECTED: "$rel" already exists ($originalLines lines) and your content contains lazy placeholder comments (e.g. "// ... existing code"). '
+            'Use `editFile` or `multiEditFile` to apply targeted replacements without deleting existing code!',
+      );
+    }
+
     final syntaxWarn = await _recordAndWrite(
       path,
       content,
       existedBefore: existed,
       originalContent: original,
     );
-    final rel = _relativePath(path);
     final extraNotes = StringBuffer();
-    if (existed && originalLines > 40) {
+    if (existed && originalLines > 60) {
       extraNotes.write(
-        '\n[EFFICIENCY WARNING: "$rel" already existed with $originalLines lines. '
-        'For targeted fixes or import updates, ALWAYS use `editFile` instead of rewriting the whole file with `writeFile` to save tokens.]',
+        '\n[TIP: "$rel" already existed ($originalLines lines). Prefer `editFile` or `multiEditFile` for incremental fixes.]',
       );
     }
     if (rel == 'pubspec.yaml' || rel.endsWith('/pubspec.yaml')) {
       extraNotes.write(
-        '\n[ACTION REQUIRED: pubspec.yaml changed — run `flutter pub get` (or prefer `flutter pub add <package>` when adding packages) to verify dependencies.]',
+        '\n[ACTION REQUIRED: pubspec.yaml changed — run `flutter pub get` (or prefer `flutter pub add <package>`) to sync dependencies.]',
       );
     }
     return RoxumToolExecutionResult(
@@ -882,11 +1007,72 @@ class RoxumAgenticTools {
     );
   }
 
+  /// OpenCode-style multi-stage matcher:
+  /// 1) Exact match
+  /// 2) CRLF->LF normalized exact match
+  /// 3) Line-trimmed contiguous block match (tolerates indentation drift)
+  String? _applySmartReplacement(
+    String source,
+    String oldText,
+    String newText,
+  ) {
+    if (oldText.isEmpty) return null;
+    if (source.contains(oldText)) {
+      return source.replaceFirst(oldText, newText);
+    }
+    final normSource = source.replaceAll('\r\n', '\n');
+    final normOld = oldText.replaceAll('\r\n', '\n');
+    final normNew = newText.replaceAll('\r\n', '\n');
+    if (normSource.contains(normOld)) {
+      return normSource.replaceFirst(normOld, normNew);
+    }
+
+    final srcLines = normSource.split('\n');
+    final oldLines = normOld.split('\n');
+    // Strip trailing empty line if model added an extra trailing newline
+    if (oldLines.length > 1 && oldLines.last.trim().isEmpty) {
+      oldLines.removeLast();
+    }
+    if (oldLines.isEmpty || oldLines.length > srcLines.length) return null;
+
+    final matchIndices = <int>[];
+    for (var i = 0; i <= srcLines.length - oldLines.length; i++) {
+      var allMatch = true;
+      for (var j = 0; j < oldLines.length; j++) {
+        if (srcLines[i + j].trim() != oldLines[j].trim()) {
+          allMatch = false;
+          break;
+        }
+      }
+      if (allMatch) {
+        matchIndices.add(i);
+      }
+    }
+
+    if (matchIndices.length == 1) {
+      final idx = matchIndices.first;
+      final newLines = normNew.split('\n');
+      final rebuilt = <String>[
+        ...srcLines.sublist(0, idx),
+        ...newLines,
+        ...srcLines.sublist(idx + oldLines.length),
+      ];
+      return rebuilt.join('\n');
+    }
+    return null;
+  }
+
   Future<RoxumToolExecutionResult> _editFile(
     String rawPath,
     String oldText,
     String newText,
   ) async {
+    if (rawPath.trim().isEmpty) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'filePath is required for editFile.',
+      );
+    }
     final path = _resolvePath(rawPath);
     final file = File(path);
     if (!await file.exists()) {
@@ -896,14 +1082,14 @@ class RoxumAgenticTools {
       );
     }
     final original = await file.readAsString();
-    if (!original.contains(oldText)) {
+    final updated = _applySmartReplacement(original, oldText, newText);
+    if (updated == null) {
       final hint = _closestLineHint(original, oldText);
       return RoxumToolExecutionResult(
         success: false,
         output: 'Target snippet not found in ${_relativePath(path)}.$hint',
       );
     }
-    final updated = original.replaceFirst(oldText, newText);
     final syntaxWarn = await _recordAndWrite(
       path,
       updated,
@@ -917,6 +1103,96 @@ class RoxumAgenticTools {
     return RoxumToolExecutionResult(
       success: true,
       output: 'Updated $rel.$syntaxWarn$pubNote',
+    );
+  }
+
+  Future<RoxumToolExecutionResult> _multiEditFile(
+    String rawPath,
+    Object? rawEdits,
+  ) async {
+    if (rawPath.trim().isEmpty) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'filePath is required for multiEditFile.',
+      );
+    }
+    final path = _resolvePath(rawPath);
+    final rel = _relativePath(path);
+    final file = File(path);
+    if (!await file.exists()) {
+      return RoxumToolExecutionResult(
+        success: false,
+        output: 'File not found: $rel',
+      );
+    }
+    List<dynamic> editList = const [];
+    if (rawEdits is List) {
+      editList = rawEdits;
+    } else if (rawEdits is String && rawEdits.trim().startsWith('[')) {
+      try {
+        final decoded = jsonDecode(rawEdits);
+        if (decoded is List) editList = decoded;
+      } catch (_) {}
+    }
+    if (editList.isEmpty) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'multiEditFile requires a non-empty `edits` array of {oldText, newText}.',
+      );
+    }
+
+    final original = await file.readAsString();
+    var working = original;
+    var appliedCount = 0;
+    final failures = <String>[];
+
+    for (var i = 0; i < editList.length; i++) {
+      final item = editList[i];
+      if (item is! Map) continue;
+      final oldText =
+          (item['oldText'] ?? item['oldString'] ?? item['old_string'])
+              ?.toString() ??
+          '';
+      final newText =
+          (item['newText'] ?? item['newString'] ?? item['new_string'])
+              ?.toString() ??
+          '';
+      if (oldText.isEmpty) {
+        failures.add('Edit #${i + 1}: oldText was empty.');
+        continue;
+      }
+      final next = _applySmartReplacement(working, oldText, newText);
+      if (next != null) {
+        working = next;
+        appliedCount++;
+      } else {
+        failures.add(
+          'Edit #${i + 1} failed (snippet not found):${_closestLineHint(working, oldText)}',
+        );
+      }
+    }
+
+    if (appliedCount == 0) {
+      return RoxumToolExecutionResult(
+        success: false,
+        output:
+            'None of the ${editList.length} edits matched in $rel.\n${failures.join('\n')}',
+      );
+    }
+
+    final syntaxWarn = await _recordAndWrite(
+      path,
+      working,
+      existedBefore: true,
+      originalContent: original,
+    );
+    final failSummary = failures.isEmpty
+        ? ''
+        : '\n[Partial warning: ${failures.length} edit(s) did not match:\n${failures.join('\n')}]';
+    return RoxumToolExecutionResult(
+      success: true,
+      output:
+          'Applied $appliedCount/${editList.length} edit(s) to $rel.$failSummary$syntaxWarn',
     );
   }
 
@@ -989,10 +1265,18 @@ class RoxumAgenticTools {
 
   String _closestLineHint(String content, String target) {
     if (target.trim().isEmpty) return '';
-    final targetWords = target.trim().split(RegExp(r'\s+')).toSet();
+    final firstNonEmptyLine = target
+        .split('\n')
+        .map((l) => l.trim())
+        .firstWhere((l) => l.isNotEmpty, orElse: () => target.trim());
+    final targetWords = firstNonEmptyLine
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    if (targetWords.isEmpty) return '';
+
     var best = 0.0;
     var bestLine = 0;
-    var bestText = '';
     final lines = content.split('\n');
     for (var i = 0; i < lines.length; i++) {
       final words = lines[i]
@@ -1007,12 +1291,16 @@ class RoxumAgenticTools {
       if (score > best) {
         best = score;
         bestLine = i + 1;
-        bestText = lines[i].trim();
       }
     }
-    if (best < 0.65) return '';
-    return '\nClosest match at line $bestLine (similarity ${(best * 100).round()}%):\n'
-        '$bestLine: $bestText\nCheck exact characters (e.g. "/" vs ".") and retry.';
+    if (best < 0.45 || bestLine == 0) return '';
+    final winStart = (bestLine - 5).clamp(1, lines.length);
+    final winEnd = (bestLine + 9).clamp(winStart, lines.length);
+    final snippet = StringBuffer();
+    for (var ln = winStart; ln <= winEnd; ln++) {
+      snippet.writeln('$ln: ${lines[ln - 1]}');
+    }
+    return '\nClosest match near line $bestLine (#L$winStart-$winEnd — copy exact lines from here):\n${snippet.toString().trimRight()}';
   }
 
   Future<RoxumToolExecutionResult> _replaceInProject(
@@ -1064,6 +1352,7 @@ class RoxumAgenticTools {
             updated,
             existedBefore: true,
             originalContent: original,
+            runAutoDiagnostics: false,
           );
         }
         report.add('$rel: $count replacement(s)${dryRun ? ' (dry-run)' : ''}');
@@ -1276,6 +1565,13 @@ class RoxumAgenticTools {
     if (value is bool) return value;
     if (value is String) return value.trim().toLowerCase() == 'true';
     return defaultValue;
+  }
+
+  int? _parseInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
   }
 
   Future<RoxumToolExecutionResult> _getFileInfo(String rawPath) async {

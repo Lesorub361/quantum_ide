@@ -165,7 +165,7 @@ class McpClientInstance {
         'capabilities': {
           'roots': {'listChanged': false},
         },
-        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.306'},
+        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.307'},
       }, timeout: const Duration(seconds: 12));
       await _sendNotification('notifications/initialized', const {});
       _isHandshakeDone = true;
@@ -1180,7 +1180,13 @@ class McpClientInstance {
             : '';
         final res = await runtime.runCommandDetailed(
           'if [ -f pubspec.yaml ]; then '
-          '  (dart analyze$safeTarget 2>&1 || flutter analyze --no-pub$safeTarget 2>&1); '
+          '  if command -v dart >/dev/null 2>&1; then '
+          '    dart analyze$safeTarget 2>&1; '
+          '  elif [ -x "\$HOME/flutter/bin/dart" ]; then '
+          '    "\$HOME/flutter/bin/dart" analyze$safeTarget 2>&1; '
+          '  else '
+          '    flutter analyze --no-pub$safeTarget 2>&1; '
+          '  fi; '
           'elif [ -f tsconfig.json ]; then '
           '  npx tsc --noEmit 2>&1; '
           'elif [ -f Cargo.toml ]; then '
@@ -1191,8 +1197,12 @@ class McpClientInstance {
           workingDirectory: workspace,
           timeout: const Duration(seconds: 90),
         );
-        final diagText = McpService.formatCompactAnalyzerDiagnostics(
+        final baseDiag = McpService.formatCompactAnalyzerDiagnostics(
           res.combined,
+        );
+        final diagText = await McpService.appendErrorSourceSnippets(
+          workspace,
+          baseDiag,
         );
         return {
           'exitCode': res.exitCode,
@@ -1448,7 +1458,11 @@ class McpClientInstance {
             : '';
         final res = await runtime.runCommandDetailed(
           'if [ -f pubspec.yaml ]; then '
-          '  (flutter test --no-pub$safeArg 2>&1 || dart test$safeArg 2>&1); '
+          '  if grep -q "sdk: flutter" pubspec.yaml 2>/dev/null && command -v flutter >/dev/null 2>&1; then '
+          '    flutter test --no-pub$safeArg 2>&1; '
+          '  else '
+          '    dart test$safeArg 2>&1; '
+          '  fi; '
           'elif [ -f package.json ]; then '
           '  npm test 2>&1; '
           'elif [ -f Cargo.toml ]; then '
@@ -2249,7 +2263,7 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
 
   /// Aggregates repetitive analyzer output (e.g. `dart analyze` / `flutter analyze` / `tsc`)
   /// by `(severity, filePath, errorCode)` so the AI agent receives compact, actionable
-  /// diagnostics instead of dozens of duplicated lines.
+  /// diagnostics with exact line numbers and zero duplicate path inflation.
   static String formatCompactAnalyzerDiagnostics(String rawOutput) {
     final trimmedRaw = rawOutput.trim();
     if (trimmedRaw.isEmpty) return 'No issues found.';
@@ -2264,91 +2278,123 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
       r'^\s*(error|warning|info)\s+-\s+([^:\s]+):(\d+):(\d+)\s+-\s+(.+?)\s+-\s+([a-zA-Z0-9_]+)\s*$',
     );
 
-    final groups =
-        <
-          String,
-          ({
-            String severity,
-            String file,
-            String code,
-            String message,
-            List<int> lines,
-          })
-        >{};
+    final parsedItems = <({
+      String severity,
+      String file,
+      int line,
+      int col,
+      String code,
+      String message,
+    })>[];
     final otherLines = <String>[];
-    var errorCount = 0;
-    var warningCount = 0;
-    var infoCount = 0;
 
     for (final rawLine in trimmedRaw.split('\n')) {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
 
-      String? severity;
-      String? file;
-      int? lineNum;
-      String? message;
-      String? code;
-
       final mBullet = bulletRe.firstMatch(rawLine);
       if (mBullet != null) {
-        severity = mBullet.group(1)!.toLowerCase();
-        message = mBullet.group(2)!.trim();
-        file = mBullet.group(3)!.trim();
-        lineNum = int.tryParse(mBullet.group(4)!) ?? 0;
-        code = mBullet.group(6)!.trim();
-      } else {
-        final mDash = dartDashRe.firstMatch(rawLine);
-        if (mDash != null) {
-          severity = mDash.group(1)!.toLowerCase();
-          file = mDash.group(2)!.trim();
-          lineNum = int.tryParse(mDash.group(3)!) ?? 0;
-          message = mDash.group(5)!.trim();
-          code = mDash.group(6)!.trim();
-        }
+        parsedItems.add((
+          severity: mBullet.group(1)!.toLowerCase(),
+          message: mBullet.group(2)!.trim(),
+          file: mBullet.group(3)!.trim().replaceAll('\\', '/').replaceFirst(RegExp(r'^\./'), ''),
+          line: int.tryParse(mBullet.group(4)!) ?? 0,
+          col: int.tryParse(mBullet.group(5)!) ?? 0,
+          code: mBullet.group(6)!.trim(),
+        ));
+        continue;
       }
 
-      if (severity != null &&
-          file != null &&
-          code != null &&
-          message != null) {
-        if (severity == 'error') {
-          errorCount++;
-        } else if (severity == 'warning') {
-          warningCount++;
-        } else {
-          infoCount++;
-        }
-        final key = '$severity|$file|$code';
-        final existing = groups[key];
-        if (existing != null) {
-          existing.lines.add(lineNum ?? 0);
-        } else {
-          groups[key] = (
-            severity: severity,
-            file: file,
-            code: code,
-            message: message,
-            lines: [lineNum ?? 0],
-          );
-        }
-      } else if (line.startsWith('Error:') ||
+      final mDash = dartDashRe.firstMatch(rawLine);
+      if (mDash != null) {
+        parsedItems.add((
+          severity: mDash.group(1)!.toLowerCase(),
+          file: mDash.group(2)!.trim().replaceAll('\\', '/').replaceFirst(RegExp(r'^\./'), ''),
+          line: int.tryParse(mDash.group(3)!) ?? 0,
+          col: int.tryParse(mDash.group(4)!) ?? 0,
+          message: mDash.group(5)!.trim(),
+          code: mDash.group(6)!.trim(),
+        ));
+        continue;
+      }
+
+      if (line.startsWith('Error:') ||
           line.contains('error TS') ||
           line.contains('error •') ||
           line.contains('warning •')) {
-        if (line.startsWith('Error:') ||
-            line.contains('error TS') ||
-            line.contains('error •')) {
-          errorCount++;
-        } else {
-          warningCount++;
+        if (!otherLines.contains(line)) {
+          otherLines.add(line);
         }
-        otherLines.add(line);
       }
     }
 
-    if (groups.isEmpty && otherLines.isEmpty) {
+    if (parsedItems.isEmpty && otherLines.isEmpty) {
       return trimmedRaw;
+    }
+
+    // Canonicalize bare filenames (e.g. `main.dart` -> `lib/main.dart`) if a longer
+    // relative path ending with `/<basename>` exists in the same analyzer output.
+    final knownRelByBase = <String, String>{};
+    for (final item in parsedItems) {
+      if (item.file.contains('/')) {
+        knownRelByBase[p.posix.basename(item.file)] = item.file;
+      }
+    }
+
+    final seenExact = <String>{};
+    final groups = <
+      String,
+      ({
+        String severity,
+        String file,
+        String code,
+        String message,
+        List<int> lines,
+      })
+    >{};
+    var errorCount = 0;
+    var warningCount = 0;
+    var infoCount = 0;
+
+    for (final item in parsedItems) {
+      final canonicalFile = !item.file.contains('/')
+          ? (knownRelByBase[item.file] ?? item.file)
+          : item.file;
+      final dedupKey =
+          '${item.severity}|$canonicalFile|${item.line}|${item.col}|${item.code}';
+      if (!seenExact.add(dedupKey)) continue;
+
+      if (item.severity == 'error') {
+        errorCount++;
+      } else if (item.severity == 'warning') {
+        warningCount++;
+      } else {
+        infoCount++;
+      }
+
+      final groupKey = '${item.severity}|$canonicalFile|${item.code}';
+      final existing = groups[groupKey];
+      if (existing != null) {
+        existing.lines.add(item.line);
+      } else {
+        groups[groupKey] = (
+          severity: item.severity,
+          file: canonicalFile,
+          code: item.code,
+          message: item.message,
+          lines: [item.line],
+        );
+      }
+    }
+
+    for (final line in otherLines) {
+      if (line.startsWith('Error:') ||
+          line.contains('error TS') ||
+          line.contains('error •')) {
+        errorCount++;
+      } else {
+        warningCount++;
+      }
     }
 
     int severityRank(String s) => s == 'error' ? 0 : (s == 'warning' ? 1 : 2);
@@ -2373,9 +2419,9 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
         final loc = uniqueLines.isNotEmpty ? ':${uniqueLines.first}' : '';
         out.writeln('${g.severity} • ${g.file}$loc: ${g.code} — ${g.message}');
       } else {
-        final lineDesc = uniqueLines.length <= 4
+        final lineDesc = uniqueLines.length <= 20
             ? uniqueLines.join(', ')
-            : '${uniqueLines.take(3).join(', ')}..${uniqueLines.last}';
+            : '${uniqueLines.take(18).join(', ')}, ... (${uniqueLines.length} lines, last ${uniqueLines.last})';
         out.writeln(
           '${g.severity} • ${g.file}: [${count}x] ${g.code} (lines $lineDesc) — ${g.message}',
         );
@@ -2387,6 +2433,71 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
     }
 
     return out.toString().trim();
+  }
+
+  /// Appends exact offending source lines (`file:line | code`) for `error •` entries
+  /// so the AI agent can fix compiler errors immediately via `editFile`/`multiEditFile`
+  /// without spending extra turns on fragmented `readFile` calls.
+  static Future<String> appendErrorSourceSnippets(
+    String workspace,
+    String compactDiag, {
+    int maxSnippets = 12,
+  }) async {
+    if (!compactDiag.contains('error •') || workspace.trim().isEmpty) {
+      return compactDiag;
+    }
+    final singleLineRe = RegExp(r'^error\s+•\s+([^:\s]+):(\d+):', multiLine: true);
+    final multiLineRe = RegExp(
+      r'^error\s+•\s+([^:\s]+):\s+\[\d+x\]\s+\S+\s+\(lines\s+([^)]+)\)',
+      multiLine: true,
+    );
+
+    final fileLines = <String, Set<int>>{};
+    for (final m in singleLineRe.allMatches(compactDiag)) {
+      final file = m.group(1)!;
+      final ln = int.tryParse(m.group(2)!) ?? 0;
+      if (ln > 0) fileLines.putIfAbsent(file, () => <int>{}).add(ln);
+    }
+    for (final m in multiLineRe.allMatches(compactDiag)) {
+      final file = m.group(1)!;
+      final nums = RegExp(r'\d+')
+          .allMatches(m.group(2)!)
+          .map((n) => int.tryParse(n.group(0)!) ?? 0)
+          .where((n) => n > 0)
+          .take(4);
+      if (nums.isNotEmpty) {
+        fileLines.putIfAbsent(file, () => <int>{}).addAll(nums);
+      }
+    }
+    if (fileLines.isEmpty) return compactDiag;
+
+    final snippets = <String>[];
+    for (final entry in fileLines.entries) {
+      if (snippets.length >= maxSnippets) break;
+      File f = File(p.isAbsolute(entry.key) ? entry.key : p.join(workspace, entry.key));
+      if (!await f.exists() && !entry.key.contains('/')) {
+        final libCandidate = File(p.join(workspace, 'lib', entry.key));
+        if (await libCandidate.exists()) f = libCandidate;
+      }
+      if (!await f.exists()) continue;
+      try {
+        final src = await f.readAsLines();
+        final sortedNums = entry.value.toList()..sort();
+        for (final ln in sortedNums) {
+          if (snippets.length >= maxSnippets) break;
+          if (ln < 1 || ln > src.length) continue;
+          final prev = ln > 1 ? '  ${ln - 1}: ${src[ln - 2]}' : null;
+          final curr = '> $ln: ${src[ln - 1]}';
+          final next = ln < src.length ? '  ${ln + 1}: ${src[ln]}' : null;
+          snippets.add(
+            '[${entry.key}:$ln]\n${[if (prev != null) prev, curr, if (next != null) next].join('\n')}',
+          );
+        }
+      } catch (_) {}
+    }
+
+    if (snippets.isEmpty) return compactDiag;
+    return '$compactDiag\n\n[Error Source Context (fix directly with editFile / multiEditFile)]:\n${snippets.join('\n')}';
   }
 
   @override

@@ -11,7 +11,7 @@
 [![Build iOS](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml)
 [![Build Web](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml)
 
-**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.240`](https://github.com/Lesorub361/quantum_ide/releases/latest)
+**Основная ветка разработки:** `main` · **Актуальный релиз:** [`v1.2.307`](https://github.com/Lesorub361/quantum_ide/releases/latest)
 
 </div>
 
@@ -36,18 +36,18 @@ QuantumIDE собирается автоматически через GitHub Act
 
 ## ✨ Что уже реализовано в проекте
 
-### 🤖 AI-агент профессионального уровня (Roxum Agent + Quantum AI + MCP)
-- **До 48 шагов автономного цикла + Smart Context Compaction**: агент не обрывается на полпути и автоматически сжимает старые результаты чтения/вывода в компактные резюме, экономя до 70% токенов.
-- **Визуальный таймлайн действий в стиле Antigravity**: живая карточка хода работы агента с цветными иконками языков (`Dart`, `JS/TS`, `Python`, `HTML`, `JSON`, `Bash`), бейджами диапазонов просматриваемых строк (`#L1-80`), статистикой изменений (`+N -M`), индикатором `Running...` и кликабельным переходом к нужной строке файла в редакторе.
-- **Автопоиск SDK и установка недостающих пакетов (`checkEnvironment` & `installPackages`)**: агент автоматически находит установленные в системе `flutter`, `dart`, `agy`, `node`, `npm`, `python3`, `cargo`, `go`, `java`, `adb`, `git` (включая `/persistent/home/...`, `~/.local/bin`, `/opt/flutter/bin`, `/snap/bin`) и сам устанавливает недостающие пакеты через `apt`, `pub`, `npm`, `pip` или `cargo`.
-- **Реальная проверка ошибок (`getLspDiagnostics` + `flutter analyze`)**: после генерации или правки кода агент запускает как встроенный LSP, так и `flutter analyze` / `dart analyze` / `tsc --noEmit` по всему проекту, чтобы увидеть и исправить все ошибки компиляции.
-- **4 встроенных нативных MCP-сервера (0 токенов на запуск, работают без Node/Python)**:
-  - `quantum-code-intel` — мгновенная структура символов файла (`outline_file`), пакетное чтение диапазонов строк и точный поиск по проекту.
-  - `quantum-git-ops` — быстрый статус, diff и лог репозитория.
-  - `quantum-pkg-manager` — проверка окружения и установка пакетов.
-  - `quantum-memory` — долговременная память архитектурных заметок проекта.
+### 🤖 AI-агент профессионального уровня (Roxum Agent — движок уровня OpenCode + MCP)
+- **Авто-диагностика прямо внутри `writeFile` / `editFile` / `multiEditFile`**: сразу после записи или изменения файла агент автоматически проверяет код через `dart analyze` и получает точные строки ошибок и контекст кода без лишних шагов, доводя проект до `0 error(s)`.
+- **Пакетная правка `multiEditFile` и нечёткий поиск блоков**: исправление сразу нескольких ошибок в одном файле за 1 вызов с устойчивостью к сдвигам отступов и защитой от потери существующего кода (`// ... existing code`).
+- **Живой Verification Gate, Loop Guard и умное сжатие контекста**: защита от обрыва ответа на полуслове, блокировка зацикленных вызовов и сохранение актуальной диагностики при сжатии истории (экономия до 70% токенов).
+- **Визуальный таймлайн действий в стиле Antigravity**: живая карточка хода работы агента с цветными иконками языков (`Dart`, `JS/TS`, `Python`, `HTML`, `JSON`, `Bash`), статистикой изменений (`+N -M`), индикатором `Running...` и переходом к файлу в редакторе.
+- **7 встроенных нативных MCP-серверов с контекстной подгрузкой (0 токенов на простой, без Node/Python)**:
+  - `quantum-codegraph` — индекс символов проекта, чтение конкретных классов/методов (`read_symbol`), поиск использований и BM25-поиск.
+  - `quantum-token-saver` — компактная диагностика ошибок без дублей, запуск тестов и сканирование `TODO`/`FIXME`.
+  - `quantum-build-doctor` & `quantum-device-qa` — диагностика сборок Gradle/NDK, подбор флагов под RAM/CPU, ADB/Logcat и статус Shizuku.
+  - `quantum-sqlite-telemetry`, `quantum-web-fetch`, `quantum-memory` — инспекция SQLite/сети, поиск документации и долговременная память проекта.
 - **CodeCrafter Editor & LSP Bridge (`flutter_code_crafter`)**: редактор кода с подсветкой синтаксиса для всех языков (`allLanguages`), фолдингом, брейкпоинтами, направляющими отступов, AI inline-дополнением и мостом к `LspService`.
-- **Мультипровайдерность**: Google Gemini, DeepSeek, OpenAI, Anthropic Claude, OpenRouter, Groq, xAI Grok, Mistral, а также локальные модели (Ollama / `llama.cpp` / Custom OpenAI-compatible API).
+- **Мультипровайдерность и умное ранжирование моделей**: Google Gemini, DeepSeek, OpenAI, Anthropic Claude, OpenRouter (с автоприоритетом `Qwen Coder`, `DeepSeek V3`, `Claude`, `Gemini`, `Llama 3.3 70B`), Groq, xAI Grok, Mistral и локальные серверы (Ollama / `llama.cpp`).
 
 ### 💻 Терминал нового поколения (Conduit Engine) и Root-режим без скачивания Ubuntu
 - **Движок [`conduit_vt`](packages/conduit_vt)**: быстрый рендеринг VT-последовательностей, кликабельные ссылки (`Ctrl+клик` / одиночный тап по URL), автокопирование при выделении и **экранная лупа (magnifier)** на мобильных экранах.
