@@ -1,16 +1,16 @@
 {
-  "versionCode": 328,
-  "versionName": "1.2.312",
-  "notes": "## QuantumIDE v1.2.312 — без тяжёлого x86_64 toolchain\n- quantum-heal-x64 (загрузка amd64 glibc/Box64, ~20-30 МБ и dozen процессов) запускается только при явном QUANTUM_NEED_X64_ENGINE=1.\n- Нативная ARM64 сборка использует родной gen_snapshot и не требует Box64.\n- Проверка окружения распараллелена и с таймаутами (не висит на старте).\n- Ретри pub get, очистка зависших процессов, фикс кнопки Стоп.",
+  "versionCode": 329,
+  "versionName": "1.2.313",
+  "notes": "## QuantumIDE v1.2.313 — новый агент в стиле PocketStrike\n- Добавлен UI-независимый ReAct AgentEngine (maxSteps, отмена, confirmation gate, финальная суммаризация).\n- Единый AgentTool: встроенные инструменты и MCP приводятся к одному формату.\n- MCP через mcp_dart 2.4 (Streamable HTTP + SSE), автоподключение и реконнект.\n- Новый движок включается флагом QI_USE_NEW_AGENT=true (по умолчанию старый цикл).",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/1.2.312/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/1.2.313/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.312",
-  "buildNumber": 328,
-  "tag_name": "1.2.312",
-  "releaseNotes": "Отключена тяжёлая загрузка x86_64 toolchain на ARM64 без явной необходимости; старт без зависаний."
+  "version": "1.2.313",
+  "buildNumber": 329,
+  "tag_name": "1.2.313",
+  "releaseNotes": "Порт архитектуры агента PocketStrike: AgentEngine, AgentTool, MCP через mcp_dart. Feature flag QI_USE_NEW_AGENT."
 }

@@ -337,6 +337,21 @@ class _ParsedTurn {
   });
 }
 
+/// Public result of a single provider turn for the new PocketStrike-style
+/// [AgentEngine]. Kept separate from the private [_ParsedTurn] so the engine
+/// does not depend on this file's internals.
+class RoxumAgentTurn {
+  const RoxumAgentTurn({
+    required this.text,
+    this.reasoning = '',
+    this.toolCalls = const [],
+  });
+
+  final String text;
+  final String reasoning;
+  final List<({String id, String name, Map<String, dynamic> args})> toolCalls;
+}
+
 class RoxumAiClient {
   http.Client? _client;
 
@@ -730,6 +745,55 @@ class RoxumAiClient {
       freeDailyUsed: (freeDaily?['used'] as num?)?.toInt(),
       freeDailyLimit: (freeDaily?['limit'] as num?)?.toInt(),
       freeDailyRemaining: (freeDaily?['remaining'] as num?)?.toInt(),
+    );
+  }
+
+  /// One clean provider turn for the new ReAct engine.
+  ///
+  /// The old [runAgentLoop] mixes provider I/O with tool heuristics; this
+  /// method only performs one request/stream and returns the parsed result.
+  Future<RoxumAgentTurn> streamTurnForAgent({
+    required RoxumModelOption model,
+    required List<Map<String, dynamic>> messages,
+    required List<Map<String, dynamic>> toolSpecs,
+    required void Function(String text) onText,
+    required void Function(String reasoning) onReasoning,
+    required bool Function() isCancelled,
+  }) async {
+    _client?.close();
+    final client = http.Client();
+    _client = client;
+
+    final payload = _buildPayload(
+      model: model,
+      messages: messages,
+      tools: toolSpecs,
+    );
+
+    late final _ParsedTurn turn;
+    if (model.method == RoxumToolCallingMethod.openAiCompatible) {
+      turn = await _sendOpenAiStreaming(
+        client: client,
+        model: model,
+        payload: payload,
+        onAssistantText: onText,
+        onReasoningText: onReasoning,
+        isCancelled: isCancelled,
+      );
+    } else {
+      final res = await client
+          .post(Uri.parse(model.url), headers: model.headers, body: jsonEncode(payload))
+          .timeout(const Duration(seconds: 120));
+      if (isCancelled() || res.statusCode < 200 || res.statusCode >= 300) {
+        return const RoxumAgentTurn(text: '');
+      }
+      turn = _parseResponse(model.method, jsonDecode(res.body) as Map<String, dynamic>);
+    }
+
+    return RoxumAgentTurn(
+      text: turn.text,
+      reasoning: turn.reasoning,
+      toolCalls: turn.toolCalls,
     );
   }
 

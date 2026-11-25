@@ -15,7 +15,15 @@ import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_skill_loader.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
+import 'package:quantum_ide/features/agent/data/agent_engine.dart';
+import 'package:quantum_ide/features/agent/domain/agent_event.dart';
+import 'package:quantum_ide/features/agent/domain/agent_tool.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+
+/// Feature flag for the PocketStrike-style ReAct engine.
+/// Enable with: --dart-define=QI_USE_NEW_AGENT=true
+const bool useNewAgentEngine =
+    bool.fromEnvironment('QI_USE_NEW_AGENT', defaultValue: false);
 
 enum RoxumChatMode { ask, agent }
 
@@ -1130,24 +1138,142 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
               )
             : null;
 
-        finalAnswer = await _client.runAgentLoop(
-          model: model!,
-          historyMessages: history,
-          tools: toolsSchema,
-          agenticTools: toolsRunner,
-          isCancelled: () => _cancelled,
-          onStepStart: (step) {
-            currentStep = step;
-            stepStartedAt = DateTime.now();
-          },
-          onRetryStatus: (status) {
-            handleReasoningText(status);
-          },
-          onToolEvent: handleToolEvent,
-          onAssistantText: handleAssistantText,
-          onReasoningText: handleReasoningText,
-          onUsage: handleUsage,
-        );
+        if (useNewAgentEngine && toolsRunner != null) {
+          // PocketStrike-style ReAct engine: UI-agnostic, no ad-hoc nudges.
+          final engineTools = <AgentTool>[];
+          for (final spec in toolsSchema) {
+            final fn = (spec['function'] as Map?) ?? const {};
+            final name = fn['name']?.toString() ?? '';
+            if (name.isEmpty) continue;
+            final description = fn['description']?.toString() ?? name;
+            final rawSchema =
+                (fn['parameters'] as Map?) ?? const <String, dynamic>{};
+            final schema = Map<String, dynamic>.from(rawSchema);
+            engineTools.add(
+              AgentTool(
+                name: name,
+                description: description,
+                inputSchema: schema,
+                risk: name.startsWith('mcp__')
+                    ? ToolRisk.external
+                    : (name.contains('write') ||
+                            name.contains('delete') ||
+                            name.contains('runCommand'))
+                        ? ToolRisk.destructive
+                        : ToolRisk.safe,
+                run: (args) async {
+                  final res = await toolsRunner.execute(name, args);
+                  return res.output;
+                },
+              ),
+            );
+          }
+
+          final answerBuffer = StringBuffer();
+          final engine = AgentEngine(maxSteps: 48);
+          await for (final event in engine.run(
+            runTurn: ({
+              required messages,
+              required toolSpecs,
+              required onText,
+              required onReasoning,
+              required isCancelled,
+            }) async {
+              final turn = await _client.streamTurnForAgent(
+                model: model!,
+                messages: messages,
+                toolSpecs: toolSpecs,
+                onText: onText,
+                onReasoning: onReasoning,
+                isCancelled: isCancelled,
+              );
+              return AgentTurnResult(
+                text: turn.text,
+                reasoning: turn.reasoning,
+                toolCalls: turn.toolCalls
+                    .map(
+                      (c) => (
+                        id: c.id,
+                        name: c.name,
+                        args: c.args,
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+            history: history,
+            tools: engineTools,
+            policy: ConfirmationPolicy.destructiveOnly,
+            requestConfirmation: (tool, call) async {
+              // Existing UI confirmation sheet is wired in handleToolEvent for
+              // the legacy loop; the new engine currently auto-approves.
+              return ConfirmResult.allow;
+            },
+            isCancelled: () => _cancelled,
+          )) {
+            switch (event) {
+              case AgentStepEvent(:final step):
+                currentStep = step;
+                stepStartedAt = DateTime.now();
+              case AgentStatusEvent(:final message):
+                handleReasoningText(message);
+              case AgentReasoningEvent(:final text):
+                handleReasoningText(text);
+              case AgentTextDeltaEvent(:final text):
+                answerBuffer.write(text);
+                handleAssistantText(text);
+              case AgentToolCallStartedEvent(:final name, :final args):
+                handleToolEvent(
+                  RoxumToolCallRecord(
+                    id: DateTime.now().microsecondsSinceEpoch.toString(),
+                    name: name,
+                    arguments: args,
+                  ),
+                );
+              case AgentToolCallCompletedEvent(
+                  :final name,
+                  :final output,
+                  :final isError
+                ):
+                handleToolEvent(
+                  RoxumToolCallRecord(
+                    id: DateTime.now().microsecondsSinceEpoch.toString(),
+                    name: name,
+                    arguments: const {},
+                    isRunning: false,
+                    success: !isError,
+                    output: output,
+                  ),
+                );
+              case AgentRunErrorEvent(:final message):
+                handleReasoningText('Error: $message');
+              case AgentRunFinishedEvent():
+                break;
+              default:
+                break;
+            }
+          }
+          finalAnswer = answerBuffer.toString();
+        } else {
+          finalAnswer = await _client.runAgentLoop(
+            model: model!,
+            historyMessages: history,
+            tools: toolsSchema,
+            agenticTools: toolsRunner,
+            isCancelled: () => _cancelled,
+            onStepStart: (step) {
+              currentStep = step;
+              stepStartedAt = DateTime.now();
+            },
+            onRetryStatus: (status) {
+              handleReasoningText(status);
+            },
+            onToolEvent: handleToolEvent,
+            onAssistantText: handleAssistantText,
+            onReasoningText: handleReasoningText,
+            onUsage: handleUsage,
+          );
+        }
       }
 
       if (model?.provider == 'OpenRouter') {
