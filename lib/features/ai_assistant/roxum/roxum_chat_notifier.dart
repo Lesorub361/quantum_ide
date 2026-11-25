@@ -18,6 +18,7 @@ import 'package:quantum_ide/features/agent/domain/agent_tool.dart';
 import 'package:quantum_ide/core/models/chat_models.dart';
 import 'package:quantum_ide/features/agent/data/built_in_tools.dart';
 import 'package:quantum_ide/features/agent/domain/agent_tool.dart' as ps;
+import 'package:quantum_ide/shared/widgets/confirm_action_sheet.dart' show ConfirmResult;
 import 'package:quantum_ide/features/mcp/application/mcp_controller.dart';
 import 'package:quantum_ide/features/providers/data/roxum_provider_adapter.dart';
 import 'package:quantum_ide/features/providers/domain/provider_types.dart';

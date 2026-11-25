@@ -1,12 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:quantum_ide/features/agent/domain/agent_tool.dart';
-import 'package:quantum_ide/features/local_models/data/local_model_engine.dart';
 
 /// Extra agent tools: Web Search, Code Execution Sandbox, and AI Image Generation.
 class ExtraAgentTools {
   const ExtraAgentTools._();
 
-  static List<AgentTool> all() => [webSearch(), codeSandbox(), generateImage()];
+  static List<AgentTool> all() => [webSearch(), codeSandbox()];
 
   static AgentTool webSearch() => AgentTool(
         name: 'web_search',
@@ -135,37 +134,4 @@ class ExtraAgentTools {
         },
       );
 
-  static AgentTool generateImage() => AgentTool(
-        name: 'generate_image',
-        description:
-            'Generates high-quality 1:1 square AI artwork, photorealistic photos, wallpapers, drawings, and visual scenes using the FLUX.1 neural diffusion engine. '
-            'Always call this tool whenever the user asks to generate, create, draw, paint, design, visualize, or render an image, artwork, illustration, photo, or wallpaper. All images are generated in square 1:1 format.',
-        inputSchema: const {
-          'type': 'object',
-          'properties': {
-            'prompt': {
-              'type': 'string',
-              'description':
-                  'A descriptive visual prompt describing the scene, style, subject, lighting, and details for the image generation engine (e.g. "A fluffy ginger cat sleeping in a sunlit garden, photorealistic, 8k").',
-            },
-          },
-          'required': ['prompt'],
-        },
-        risk: ToolRisk.safe,
-        run: (args) async {
-          final prompt = (args['prompt'] as String? ?? '').trim();
-          if (prompt.isEmpty) return 'Error: Image prompt cannot be empty.';
-
-          try {
-            // Always synthesize in strict 1:1 square ratio
-            final file = await LocalAIProvider.synthesizeImageDirect(
-              prompt: prompt,
-              aspectRatio: '1:1',
-            );
-            return 'Image successfully generated and rendered directly in chat.\n![Generated Image](file://${file.path})';
-          } catch (e) {
-            return 'Failed to generate image: $e';
-          }
-        },
-      );
 }
