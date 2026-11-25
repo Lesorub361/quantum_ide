@@ -84,7 +84,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         session.pty.write(
           Uint8List.fromList(
             utf8.encode(
-              '\x03(pkill -9 -f gen_snapshot 2>/dev/null || true); (pkill -9 -f GradleDaemon 2>/dev/null || true); (pkill -9 -f GradleWrapperMain 2>/dev/null || true); (pkill -9 -f aapt2 2>/dev/null || true); echo "✗ Сборка отменена пользователем"\n',
+              '\n(pkill -9 -f gen_snapshot 2>/dev/null || true); (pkill -9 -f GradleDaemon 2>/dev/null || true); (pkill -9 -f GradleWrapperMain 2>/dev/null || true); (pkill -9 -f aapt2 2>/dev/null || true); echo "✗ Сборка отменена пользователем"\n',
             ),
           ),
         );
