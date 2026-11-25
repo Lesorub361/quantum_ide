@@ -11,6 +11,8 @@ import 'package:quantum_ide/core/services/talker_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_acp_bridge.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_skill_loader.dart';
 import 'package:quantum_ide/features/agent/data/agent_engine.dart';
 import 'package:quantum_ide/features/agent/domain/agent_event.dart';
