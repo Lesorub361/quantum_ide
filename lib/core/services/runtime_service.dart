@@ -1644,7 +1644,7 @@ _quantum_tune_gradle() {
 
     if [ ! -f /tmp/.quantum_healed_ok ] || [ ! -x /usr/bin/aapt2.real ] || [ ! -x /usr/local/bin/gen_snapshot-arm64 ]; then
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+        [ "${QUANTUM_NEED_X64_ENGINE:-0}" = "1" ] && /usr/local/bin/quantum-heal-x64 2>/dev/null || true
         touch /tmp/.quantum_healed_ok 2>/dev/null || true
     else
         /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
@@ -1828,7 +1828,7 @@ flutter() {
             if [ "$_has_manifest" = "0" ]; then
                 echo -e "\033[1;33m[Build Doctor]\033[0m В APK отсутствует AndroidManifest.xml (устаревший кэш ресурсов). Очищаю кэш optimizeReleaseResources и перепаковываю..."
                 rm -rf build/app/intermediates/optimized_processed_res build/app/outputs/flutter-apk build/app/outputs/apk /root/.gradle/caches/build-cache-* ~/.gradle/caches/build-cache-* 2>/dev/null || true
-                /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+                [ "${QUANTUM_NEED_X64_ENGINE:-0}" = "1" ] && /usr/local/bin/quantum-heal-x64 2>/dev/null || true
                 command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1
                 ret=${PIPESTATUS[0]}
             fi
@@ -2071,7 +2071,7 @@ alias fetch="/usr/local/bin/term-fetch"
 gradlew() {
     echo -e "\033[1;34m[1/2]\033[0m Подготовка Gradle, SDK и AAPT2..."
     if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+        [ "${QUANTUM_NEED_X64_ENGINE:-0}" = "1" ] && /usr/local/bin/quantum-heal-x64 2>/dev/null || true
     fi
     local gflags=(
         "--no-daemon"
@@ -2108,7 +2108,7 @@ flutter() {
     if [ "$1" = "build" ] && ( [ "$2" = "apk" ] || [ "$2" = "appbundle" ] ); then
         echo -e "\033[1;34m[1/3]\033[0m Проверка SDK, NDK и нативного AAPT2..."
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+        [ "${QUANTUM_NEED_X64_ENGINE:-0}" = "1" ] && /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
         # Auto-patch legacy AGP <9 plugins (proguard-android.txt -> proguard-android-optimize.txt)
         for _pg_file in /root/.pub-cache/hosted/*/*/android/build.gradle /root/.pub-cache/hosted/*/*/android/build.gradle.kts ./local_plugins/*/android/build.gradle ./local_plugins/*/android/build.gradle.kts ./android/app/build.gradle ./android/app/build.gradle.kts; do
@@ -2178,7 +2178,7 @@ flutter() {
         export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${gradle_workers} -Dorg.gradle.parallel=${gradle_parallel} -Dorg.gradle.caching=true -Dorg.gradle.vfs.watch=false -Dkotlin.compiler.execution.strategy=in-process -Dkotlin.daemon.jvm.options=-Xmx512m"
 
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+        [ "${QUANTUM_NEED_X64_ENGINE:-0}" = "1" ] && /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
         # Auto-patch legacy AGP <9 plugins (proguard-android.txt -> proguard-android-optimize.txt)
         for _pg_file in /root/.pub-cache/hosted/*/*/android/build.gradle /root/.pub-cache/hosted/*/*/android/build.gradle.kts ./local_plugins/*/android/build.gradle ./local_plugins/*/android/build.gradle.kts ./android/app/build.gradle ./android/app/build.gradle.kts; do
@@ -2301,7 +2301,7 @@ EOF
             if [ "$_has_manifest" = "0" ]; then
                 echo -e "\033[1;33m[Build Doctor]\033[0m В APK отсутствует AndroidManifest.xml (устаревший кэш ресурсов). Очищаю кэш optimizeReleaseResources и перепаковываю..."
                 rm -rf build/app/intermediates/optimized_processed_res build/app/outputs/flutter-apk build/app/outputs/apk /root/.gradle/caches/build-cache-* ~/.gradle/caches/build-cache-* 2>/dev/null || true
-                /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+                [ "${QUANTUM_NEED_X64_ENGINE:-0}" = "1" ] && /usr/local/bin/quantum-heal-x64 2>/dev/null || true
                 command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1
                 ret=$?
             fi
@@ -4703,7 +4703,7 @@ fi
 # right before a release build, so skip it during initial setup.
 if [ -f /root/.quantum_flutter_release_requested ] || [ "$1" = "--force-x64" ]; then
     if [ -x /usr/local/bin/quantum-heal-x64 ]; then
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+        [ "${QUANTUM_NEED_X64_ENGINE:-0}" = "1" ] && /usr/local/bin/quantum-heal-x64 2>/dev/null || true
     elif [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
         (apt-get update -y && apt-get install -y qemu-user-static) 2>/dev/null || true
     fi
