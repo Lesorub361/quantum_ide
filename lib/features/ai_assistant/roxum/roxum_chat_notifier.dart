@@ -1169,7 +1169,35 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
             );
           }
 
+          // Diagnostics first: the model must not read a 1000-line file just to
+          // discover two syntax errors. Feed a compact analyzer summary into the
+          // conversation before the ReAct loop starts.
+          final engineHistory = List<Map<String, dynamic>>.from(history);
+          try {
+            final diag = await toolsRunner.execute(
+              'getLspDiagnostics',
+              const <String, dynamic>{},
+            );
+            final diagText = diag.output.trim();
+            if (diagText.isNotEmpty) {
+              final compact = diagText.length > 4000
+                  ? '${diagText.substring(0, 4000)}\n... [truncated]'
+                  : diagText;
+              engineHistory.insert(0, {
+                'role': 'system',
+                'content':
+                    'Static analysis of the workspace (already executed):\n$compact\n'
+                    'Use this to locate errors. Call readFile only with the exact '
+                    'startLine/endLine range you need.',
+              });
+            }
+          } catch (_) {}
+
           final answerBuffer = StringBuffer();
+          // Keep one UI record per provider tool call. Started/Completed events
+          // carry the same callId so we update the row instead of adding a
+          // duplicate "[RUNNING]" + "[OK]" pair (seen in chat exports).
+          final callRecordIds = <String, String>{};
           final engine = AgentEngine(maxSteps: 48);
           await for (final event in engine.run(
             runTurn: ({
@@ -1201,7 +1229,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
                     .toList(),
               );
             },
-            history: history,
+            history: engineHistory,
             tools: engineTools,
             policy: ConfirmationPolicy.destructiveOnly,
             requestConfirmation: (tool, call) async {
@@ -1222,22 +1250,37 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
               case AgentTextDeltaEvent(:final text):
                 answerBuffer.write(text);
                 handleAssistantText(text);
-              case AgentToolCallStartedEvent(:final name, :final args):
+              case AgentToolCallStartedEvent(
+                  :final callId,
+                  :final name,
+                  :final args
+                ):
+                final recordId =
+                    callRecordIds.putIfAbsent(
+                      callId,
+                      () => DateTime.now().microsecondsSinceEpoch.toString(),
+                    );
                 handleToolEvent(
                   RoxumToolCallRecord(
-                    id: DateTime.now().microsecondsSinceEpoch.toString(),
+                    id: recordId,
                     name: name,
                     arguments: args,
                   ),
                 );
               case AgentToolCallCompletedEvent(
+                  :final callId,
                   :final name,
                   :final output,
                   :final isError
                 ):
+                final recordId =
+                    callRecordIds.putIfAbsent(
+                      callId,
+                      () => DateTime.now().microsecondsSinceEpoch.toString(),
+                    );
                 handleToolEvent(
                   RoxumToolCallRecord(
-                    id: DateTime.now().microsecondsSinceEpoch.toString(),
+                    id: recordId,
                     name: name,
                     arguments: const {},
                     isRunning: false,

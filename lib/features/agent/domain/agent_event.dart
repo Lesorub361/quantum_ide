@@ -25,20 +25,28 @@ class AgentStepEvent extends AgentEvent {
 }
 
 class AgentToolCallStartedEvent extends AgentEvent {
-  const AgentToolCallStartedEvent(this.name, this.args);
+  const AgentToolCallStartedEvent(this.callId, this.name, this.args);
+  final String callId;
   final String name;
   final Map<String, dynamic> args;
 }
 
 class AgentToolCallCompletedEvent extends AgentEvent {
-  const AgentToolCallCompletedEvent(this.name, this.output, this.isError);
+  const AgentToolCallCompletedEvent(
+    this.callId,
+    this.name,
+    this.output,
+    this.isError,
+  );
+  final String callId;
   final String name;
   final String output;
   final bool isError;
 }
 
 class AgentToolCallDeniedEvent extends AgentEvent {
-  const AgentToolCallDeniedEvent(this.name);
+  const AgentToolCallDeniedEvent(this.callId, this.name);
+  final String callId;
   final String name;
 }
 

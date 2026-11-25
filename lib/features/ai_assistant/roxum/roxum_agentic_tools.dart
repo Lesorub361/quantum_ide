@@ -806,11 +806,14 @@ class RoxumAgenticTools {
       );
     }
     final s = (startLine ?? 1).clamp(1, lines.length);
-    // OpenCode-grade default window (1200 lines) so typical source files are read
-    // in a single call instead of 5-8 fragmented round-trips.
+    // Keep tool observations small. Dumping a whole 1000+ line file into the
+    // conversation burns the context window and makes the model think for
+    // minutes. The agent should first read diagnostics, then request the exact
+    // line range it needs.
+    const maxWindow = 200;
     final defaultEnd =
-        (startLine == null && endLine == null && lines.length > 1200)
-        ? 1200
+        (startLine == null && endLine == null && lines.length > maxWindow)
+        ? maxWindow
         : lines.length;
     final e = (endLine ?? defaultEnd).clamp(s, lines.length);
     final buf = StringBuffer();
@@ -822,7 +825,7 @@ class RoxumAgenticTools {
     }
     if (e < lines.length && endLine == null) {
       buf.writeln(
-        '... [Showing lines $s-$e of ${lines.length}. Call readFile with startLine=${e + 1}, endLine=${(e + 1200).clamp(e + 1, lines.length)} to read further.]',
+        '... [Showing lines $s-$e of ${lines.length}. Call readFile with startLine=${e + 1}, endLine=${(e + maxWindow).clamp(e + 1, lines.length)} to read further.]',
       );
     }
     return RoxumToolExecutionResult(success: true, output: buf.toString());

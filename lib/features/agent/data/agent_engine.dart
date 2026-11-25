@@ -132,7 +132,7 @@ class AgentEngine {
               call.name.endsWith('__${t.name}');
         }).firstOrNull;
 
-        yield AgentToolCallStartedEvent(call.name, call.args);
+        yield AgentToolCallStartedEvent(call.id, call.name, call.args);
 
         String observation;
         var isError = false;
@@ -168,8 +168,8 @@ class AgentEngine {
                   'name': call.name,
                   'content': observation,
                 });
-                yield AgentToolCallDeniedEvent(call.name);
-                yield AgentToolCallCompletedEvent(call.name, observation, true);
+                yield AgentToolCallDeniedEvent(call.id, call.name);
+                yield AgentToolCallCompletedEvent(call.id, call.name, observation, true);
                 continue;
             }
           }
@@ -188,7 +188,7 @@ class AgentEngine {
           'name': call.name,
           'content': observation,
         });
-        yield AgentToolCallCompletedEvent(call.name, observation, isError);
+        yield AgentToolCallCompletedEvent(call.id, call.name, observation, isError);
       }
 
       if (cancelled) break;
