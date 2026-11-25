@@ -11,7 +11,7 @@
 [![Build iOS](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml)
 [![Build Web](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml)
 
-**Основная ветка разработки:** `main` · **Актуальный релиз:** [`v1.2.307`](https://github.com/Lesorub361/quantum_ide/releases/latest)
+**Основная ветка разработки:** `main` · **Актуальный релиз:** [`v1.2.308`](https://github.com/Lesorub361/quantum_ide/releases/latest)
 
 </div>
 
@@ -36,10 +36,11 @@ QuantumIDE собирается автоматически через GitHub Act
 
 ## ✨ Что уже реализовано в проекте
 
-### 🤖 AI-агент профессионального уровня (Roxum Agent — движок уровня OpenCode + MCP)
-- **Авто-диагностика прямо внутри `writeFile` / `editFile` / `multiEditFile`**: сразу после записи или изменения файла агент автоматически проверяет код через `dart analyze` и получает точные строки ошибок и контекст кода без лишних шагов, доводя проект до `0 error(s)`.
+### 🤖 AI-агент профессионального уровня (ACP: OpenCode / Gemini CLI / Claude Code + Roxum Built-in + MCP)
+- **Нативная интеграция внешних кодинг-агентов по стандарту Agent Client Protocol (`acp_dart ^0.5.0`)**: подключает напрямую **OpenCode (`opencode acp`)**, **Gemini CLI (`gemini --experimental-acp`)** и **Claude Code (`claude-code-acp`)** прямо в чат QuantumIDE с автопробросом API-ключей, живым стримингом мыслей/инструментов/diff-ов, автообновлением редактора и установкой CLI в 1 клик.
+- **Авто-диагностика `errorsOnly` внутри `writeFile` / `editFile` / `multiEditFile`**: во встроенном движке Roxum Built-in правки автоматически проверяются через `dart analyze` без шума `info`/`warning` при `0 error(s)`, с защитой от неоднозначных замен, таймаутом 45с на зависание SSE-потока и сжатием больших `readFile` (-75% токенов).
 - **Пакетная правка `multiEditFile` и нечёткий поиск блоков**: исправление сразу нескольких ошибок в одном файле за 1 вызов с устойчивостью к сдвигам отступов и защитой от потери существующего кода (`// ... existing code`).
-- **Живой Verification Gate, Loop Guard и умное сжатие контекста**: защита от обрыва ответа на полуслове, блокировка зацикленных вызовов и сохранение актуальной диагностики при сжатии истории (экономия до 70% токенов).
+- **Живой Verification Gate, Loop Guard и умное сжатие контекста**: защита от обрыва ответа на полуслове, блокировка зацикленных вызовов и сохранение актуальной диагностики при сжатии истории.
 - **Визуальный таймлайн действий в стиле Antigravity**: живая карточка хода работы агента с цветными иконками языков (`Dart`, `JS/TS`, `Python`, `HTML`, `JSON`, `Bash`), статистикой изменений (`+N -M`), индикатором `Running...` и переходом к файлу в редакторе.
 - **7 встроенных нативных MCP-серверов с контекстной подгрузкой (0 токенов на простой, без Node/Python)**:
   - `quantum-codegraph` — индекс символов проекта, чтение конкретных классов/методов (`read_symbol`), поиск использований и BM25-поиск.

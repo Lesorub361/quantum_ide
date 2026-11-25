@@ -10,6 +10,7 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/talker_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_acp_bridge.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_skill_loader.dart';
@@ -289,6 +290,9 @@ class RoxumChatState {
   final List<RoxumChatSession> sessions;
   final String currentSessionId;
   final RoxumChatMode chatMode;
+  final RoxumAgentEngine agentEngine;
+  final Map<RoxumAgentEngine, bool> installedEngines;
+  final RoxumAgentEngine? installingEngine;
   final String? selectedModelId;
   final bool isGenerating;
   final Map<String, bool> toolSelections;
@@ -302,6 +306,14 @@ class RoxumChatState {
     required this.sessions,
     required this.currentSessionId,
     this.chatMode = RoxumChatMode.agent,
+    this.agentEngine = RoxumAgentEngine.builtIn,
+    this.installedEngines = const {
+      RoxumAgentEngine.builtIn: true,
+      RoxumAgentEngine.opencodeAcp: false,
+      RoxumAgentEngine.geminiAcp: false,
+      RoxumAgentEngine.claudeAcp: false,
+    },
+    this.installingEngine,
     this.selectedModelId,
     this.isGenerating = false,
     required this.toolSelections,
@@ -323,6 +335,10 @@ class RoxumChatState {
     List<RoxumChatSession>? sessions,
     String? currentSessionId,
     RoxumChatMode? chatMode,
+    RoxumAgentEngine? agentEngine,
+    Map<RoxumAgentEngine, bool>? installedEngines,
+    RoxumAgentEngine? installingEngine,
+    bool clearInstallingEngine = false,
     String? selectedModelId,
     bool? isGenerating,
     Map<String, bool>? toolSelections,
@@ -336,6 +352,11 @@ class RoxumChatState {
       sessions: sessions ?? this.sessions,
       currentSessionId: currentSessionId ?? this.currentSessionId,
       chatMode: chatMode ?? this.chatMode,
+      agentEngine: agentEngine ?? this.agentEngine,
+      installedEngines: installedEngines ?? this.installedEngines,
+      installingEngine: clearInstallingEngine
+          ? null
+          : (installingEngine ?? this.installingEngine),
       selectedModelId: selectedModelId ?? this.selectedModelId,
       isGenerating: isGenerating ?? this.isGenerating,
       toolSelections: toolSelections ?? this.toolSelections,
@@ -354,7 +375,10 @@ final roxumChatProvider = NotifierProvider<RoxumChatNotifier, RoxumChatState>(
 );
 
 class RoxumChatNotifier extends Notifier<RoxumChatState> {
+  static const String _enginePrefsKey = 'roxum_agent_engine_v1';
+
   final RoxumAiClient _client = RoxumAiClient();
+  final RoxumAcpBridge _acpBridge = RoxumAcpBridge();
   bool _cancelled = false;
   int _activeRunToken = 0;
   String _activePrefsKey = 'roxum_chat_sessions_v2_global';
@@ -368,7 +392,10 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
 
   @override
   RoxumChatState build() {
-    ref.onDispose(_client.cancel);
+    ref.onDispose(() {
+      _client.cancel();
+      _acpBridge.resetSession();
+    });
     final workspacePath = ref.watch(
       workspaceProvider.select((w) => w.currentPath),
     );
@@ -382,12 +409,75 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       updatedAt: DateTime.now(),
     );
     _restoreSessions(prefsKey);
+    Future.microtask(_restoreAndDetectEngines);
     Future.microtask(refreshAllModels);
     return RoxumChatState(
       sessions: [initialSession],
       currentSessionId: initialId,
       toolSelections: normalizeAgenticToolSelections(null),
     );
+  }
+
+  Future<void> _restoreAndDetectEngines() async {
+    String? savedEngine;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      savedEngine = prefs.getString(_enginePrefsKey);
+      if (savedEngine != null && savedEngine.isNotEmpty) {
+        state = state.copyWith(
+          agentEngine: RoxumAgentEngine.fromId(savedEngine),
+        );
+      }
+    } catch (_) {}
+
+    final detected = await refreshInstalledEngines();
+    // Auto-select OpenCode (ACP) on first launch if `opencode` is already
+    // installed in the user's PRoot/Desktop environment!
+    if ((savedEngine == null || savedEngine.isEmpty) &&
+        detected[RoxumAgentEngine.opencodeAcp] == true) {
+      state = state.copyWith(agentEngine: RoxumAgentEngine.opencodeAcp);
+    }
+  }
+
+  Future<Map<RoxumAgentEngine, bool>> refreshInstalledEngines() async {
+    try {
+      final runtime = ref.read(runtimeServiceProvider);
+      final detected = await RoxumAcpBridge.detectInstalledEngines(runtime);
+      state = state.copyWith(installedEngines: detected);
+      return detected;
+    } catch (_) {
+      return state.installedEngines;
+    }
+  }
+
+  Future<void> setAgentEngine(RoxumAgentEngine engine) async {
+    if (state.agentEngine == engine) return;
+    await _acpBridge.resetSession();
+    state = state.copyWith(agentEngine: engine);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_enginePrefsKey, engine.id);
+    } catch (_) {}
+  }
+
+  Future<({bool success, String output})> installAgentEngine(
+    RoxumAgentEngine engine,
+  ) async {
+    if (state.installingEngine != null) {
+      return (success: false, output: 'Уже выполняется установка другого движка.');
+    }
+    state = state.copyWith(installingEngine: engine);
+    try {
+      final runtime = ref.read(runtimeServiceProvider);
+      final res = await RoxumAcpBridge.installEngine(runtime, engine);
+      await refreshInstalledEngines();
+      if (res.success) {
+        await setAgentEngine(engine);
+      }
+      return res;
+    } finally {
+      state = state.copyWith(clearInstallingEngine: true);
+    }
   }
 
   Future<void> _restoreSessions(String prefsKey) async {
@@ -442,6 +532,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
 
   void createNewSession() {
     if (state.isGenerating) return;
+    _acpBridge.resetSession();
     final id = const Uuid().v4();
     final session = RoxumChatSession(
       id: id,
@@ -458,6 +549,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
 
   void switchSession(String id) {
     if (state.isGenerating) return;
+    if (state.currentSessionId != id) {
+      _acpBridge.resetSession();
+    }
     state = state.copyWith(currentSessionId: id);
   }
 
@@ -471,6 +565,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final nextId = state.currentSessionId == id
         ? remaining.first.id
         : state.currentSessionId;
+    if (state.currentSessionId == id) {
+      _acpBridge.resetSession();
+    }
     state = state.copyWith(sessions: remaining, currentSessionId: nextId);
     _persistSessions();
   }
@@ -478,6 +575,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
   void stopGeneration() {
     _cancelled = true;
     _client.cancel();
+    _acpBridge.cancelActiveTurn();
     state = state.copyWith(isGenerating: false);
   }
 
@@ -714,7 +812,11 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
 
     final settings = ref.read(settingsProvider);
     final models = availableModels(settings);
-    if (models.isEmpty) {
+    final useAcp =
+        state.chatMode == RoxumChatMode.agent &&
+        state.agentEngine != RoxumAgentEngine.builtIn;
+
+    if (!useAcp && models.isEmpty) {
       _appendErrorTurn(
         trimmed,
         'Нет настроенных провайдеров. Нажмите «Подключить API» в шапке чата, чтобы добавить ключ или локальный сервер (например http://IP:8080/v1).',
@@ -722,10 +824,12 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       return;
     }
 
-    final model = models.firstWhere(
-      (m) => m.id == state.selectedModelId,
-      orElse: () => models.first,
-    );
+    final RoxumModelOption? model = models.isEmpty
+        ? null
+        : models.firstWhere(
+            (m) => m.id == state.selectedModelId,
+            orElse: () => models.first,
+          );
 
     final baseTurns = truncateFromIndex != null
         ? state.currentSession.turns.take(truncateFromIndex).toList()
@@ -752,111 +856,15 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
 
     _cancelled = false;
     final runToken = ++_activeRunToken;
-    state = state.copyWith(isGenerating: true, selectedModelId: model.id);
+    state = state.copyWith(
+      isGenerating: true,
+      selectedModelId: model?.id ?? state.selectedModelId,
+    );
 
     final workspace = ref.read(workspaceProvider).currentPath ?? '';
     final runtime = ref.read(runtimeServiceProvider);
     final guestWorkspace = runtime.toProotPath(workspace);
     final activeFilePath = ref.read(editorProvider).activeFilePath;
-
-    final baseTools = state.chatMode == RoxumChatMode.agent
-        ? RoxumAgenticTools.buildOpenAiTools(state.toolSelections)
-        : const <Map<String, dynamic>>[];
-    List<Map<String, dynamic>> mcpTools = const [];
-    if (state.chatMode == RoxumChatMode.agent &&
-        ref.read(mcpServiceProvider).any((s) => s.isEnabled)) {
-      try {
-        final rawMcp = await ref
-            .read(mcpServiceProvider.notifier)
-            .getAvailableMcpTools()
-            .timeout(const Duration(seconds: 12));
-        // Register ALL MCP tools in _mcpToolRegistry first so direct calls always work,
-        // then expose only contextually relevant non-duplicate tools in payload schema.
-        RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
-        final filteredMcp = _selectRelevantMcpTools(
-          rawMcp: rawMcp,
-          prompt: trimmed,
-          hasNativeFs: baseTools.any((t) {
-            final fnName = (t['function'] as Map?)?['name']?.toString() ?? '';
-            return fnName == 'readFile' || fnName == 'writeFile';
-          }),
-        );
-        mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(filteredMcp);
-        // Re-populate full registry after building filtered schemas
-        RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
-      } catch (_) {}
-    }
-    final toolsSchema = <Map<String, dynamic>>[...baseTools, ...mcpTools];
-
-    final projectBlocks = _loadProjectContextBlocks(workspace);
-    final matchedSkillsBlock = RoxumSkillLoader.buildMatchedSkillsBlock(
-      workspace: workspace,
-      userPrompt: trimmed,
-      activeFilePath: activeFilePath,
-    );
-
-    final systemPrompt = state.chatMode == RoxumChatMode.agent
-        ? 'You are Roxum, an autonomous Staff Software Engineer inside QuantumIDE (OpenCode-grade execution engine).\n'
-              'Workspace: "$workspace"${guestWorkspace != workspace ? ' (shell path: "$guestWorkspace")' : ''}.'
-              '${activeFilePath != null ? ' Active file: "$activeFilePath".' : ''}\n\n'
-              'CORE OPERATING PRINCIPLES:\n'
-              '1) ACT DIRECTLY WITH TOOLS: Execute tasks end-to-end using real tool calls (`readFile`, `writeFile`, `editFile`, `multiEditFile`, `listFiles`, `globSearchFiles`, `grepInFiles`, `getLspDiagnostics`, `runCommand`). NEVER stop mid-task with promises like "Исправлю:" or dump unapplied code into chat.\n'
-              '2) ZERO WASTED STEPS: Do NOT call `checkEnvironment` unless a shell command failed with `command not found`. `readFile` reads up to 1200 lines in ONE call — read full files directly instead of making many tiny 15-line reads. Always use workspace-relative paths (e.g. `lib/main.dart`).\n'
-              '3) MODULAR ARCHITECTURE (NO MONOLITHS): When building games, multi-screen apps, or rich features, NEVER cram 500-1000 lines into a single `lib/main.dart`! Split into clean, cohesive modules of 120-260 lines each (e.g. `lib/models/...`, `lib/game/...` or `lib/controllers/...`, `lib/widgets/...`) and connect them in a clean `lib/main.dart`.\n'
-              '4) SURGICAL EDITS & MULTIEDIT: For existing files, NEVER rewrite the entire file with `writeFile` to fix errors or imports, and NEVER use placeholders like `// ... existing code`. When fixing multiple issues in one file, fix ALL of them in ONE `multiEditFile` call!\n'
-              '5) INLINE DIAGNOSTICS LOOP: `writeFile`, `editFile`, and `multiEditFile` automatically run static analysis and append `[Diagnostics for ...]` with exact line numbers and source snippets. Fix every `error •` immediately until `0 error(s)` before giving your final summary.\n'
-              '6) MODERN FLUTTER / DART RULES:\n'
-              '   - Keyboard events: NEVER use deprecated/removed `RawKeyEvent`, `RawKeyDownEvent`, `RawKeyboardListener`, or `Focus(onKey: ...)`. Always use `KeyboardListener` or `Focus(autofocus: true, onKeyEvent: (node, event) { if (event is KeyDownEvent) { ... } return KeyEventResult.handled; })` with `import \'package:flutter/services.dart\';`.\n'
-              '   - Colors & Const: `Color` has NO `*` operator — use `Color.lerp(...)` or `.withValues(alpha: ...)`. Never put `\${...}` string interpolation or runtime getters inside `const` widgets (`const Text(...)`).\n'
-              '   - Packages: Add packages via `runCommand` (`flutter pub add <pkg>`). If `pubspec.yaml` has broken/non-existent dependencies or SDK constraints causing analyzer errors, fix `pubspec.yaml` and run `flutter pub get`.\n'
-              '7) HONEST SUMMARY: In your final answer, concisely report ONLY the files actually created/modified and verification status.'
-              '$projectBlocks'
-              '$matchedSkillsBlock\n'
-              'Always respond in the user\'s language.'
-        : 'You are a helpful coding assistant inside QuantumIDE. '
-              '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
-              '$projectBlocks'
-              '$matchedSkillsBlock\n'
-              'Respond concisely in the user\'s language.';
-
-    final textBuffer = StringBuffer(trimmed);
-    final imageParts = <Map<String, dynamic>>[];
-    for (final att in attachments) {
-      if (att.isImage) {
-        imageParts.add({
-          'type': 'image_url',
-          'image_url': {'url': 'data:${att.mimeType};base64,${att.base64Data}'},
-        });
-      } else if (att.textContent != null && att.textContent!.isNotEmpty) {
-        textBuffer.write(
-          '\n\n<attached_file name="${att.name}">\n${att.textContent}\n</attached_file>',
-        );
-      } else {
-        textBuffer.write(
-          '\n\n[Прикреплён файл: ${att.name} (${att.sizeBytes} байт)]',
-        );
-      }
-    }
-
-    final dynamic currentUserContent = imageParts.isEmpty
-        ? textBuffer.toString()
-        : [
-            {'type': 'text', 'text': textBuffer.toString()},
-            ...imageParts,
-          ];
-
-    final history = <Map<String, dynamic>>[
-      {'role': 'system', 'content': systemPrompt},
-      for (final t in baseTurns) ...[
-        {'role': 'user', 'content': t.userRequest},
-        if (t.aiResponse.isNotEmpty || t.fileEdits.isNotEmpty)
-          {
-            'role': 'assistant',
-            'content': _buildTurnHistorySummary(t, workspace),
-          },
-      ],
-      {'role': 'user', 'content': currentUserContent},
-    ];
 
     final startedAt = DateTime.now();
     var stepStartedAt = startedAt;
@@ -883,133 +891,266 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       return list;
     }
 
-    final toolsRunner = state.chatMode == RoxumChatMode.agent
-        ? RoxumAgenticTools(
-            ref,
-            pendingEdits: pendingCopy,
-            onPendingEditsChanged: (updated) {
-              state = state.copyWith(pendingEdits: updated);
-              for (final k in updated.keys) {
-                final nextContent = updated[k]!.updatedContent;
-                if (lastSeenContent[k] != nextContent ||
-                    !turnEditedPaths.contains(k)) {
-                  lastSeenContent[k] = nextContent;
-                  turnEditedPaths.add(k);
-                  stepEditIds['$currentStep::$k'] ??= 'edit_${currentStep}_$k';
-                }
-              }
-              final editsForTurn = turnEditedPaths
-                  .map((p) => updated[p])
-                  .whereType<RoxumPendingEdit>()
-                  .toList();
-              _updateTurn(turnId, (t) {
-                var tl = t.timeline;
-                for (final entry in stepEditIds.entries) {
-                  final parts = entry.key.split('::');
-                  if (parts.length == 2 &&
-                      parts[0] == '$currentStep' &&
-                      updated[parts[1]] != null) {
-                    tl = upsertTimeline(
-                      tl,
-                      RoxumTimelineItem(
-                        id: entry.value,
-                        kind: RoxumTimelineKind.fileEdit,
-                        fileEdit: updated[parts[1]],
-                      ),
-                    );
-                  }
-                }
-                return t.copyWith(fileEdits: editsForTurn, timeline: tl);
-              });
-            },
-          )
-        : null;
-
-    try {
-      final finalAnswer = await _client.runAgentLoop(
-        model: model,
-        historyMessages: history,
-        tools: toolsSchema,
-        agenticTools: toolsRunner,
-        isCancelled: () => _cancelled,
-        onStepStart: (step) {
-          currentStep = step;
-          stepStartedAt = DateTime.now();
-        },
-        onToolEvent: (record) {
-          _updateTurn(turnId, (turn) {
-            final list = List<RoxumToolCallRecord>.from(turn.toolCalls);
-            final idx = list.indexWhere((c) => c.id == record.id);
-            if (idx >= 0) {
-              list[idx] = record;
-            } else {
-              list.add(record);
-            }
-            final tl = upsertTimeline(
-              turn.timeline,
+    void handlePendingEditsChanged(Map<String, RoxumPendingEdit> updated) {
+      state = state.copyWith(pendingEdits: updated);
+      for (final k in updated.keys) {
+        final nextContent = updated[k]!.updatedContent;
+        if (lastSeenContent[k] != nextContent || !turnEditedPaths.contains(k)) {
+          lastSeenContent[k] = nextContent;
+          turnEditedPaths.add(k);
+          stepEditIds['$currentStep::$k'] ??= 'edit_${currentStep}_$k';
+        }
+      }
+      final editsForTurn = turnEditedPaths
+          .map((p) => updated[p])
+          .whereType<RoxumPendingEdit>()
+          .toList();
+      _updateTurn(turnId, (t) {
+        var tl = t.timeline;
+        for (final entry in stepEditIds.entries) {
+          final parts = entry.key.split('::');
+          if (parts.length == 2 &&
+              parts[0] == '$currentStep' &&
+              updated[parts[1]] != null) {
+            tl = upsertTimeline(
+              tl,
               RoxumTimelineItem(
-                id: 'tool_${record.id}',
-                kind: RoxumTimelineKind.toolCall,
-                toolCall: record,
+                id: entry.value,
+                kind: RoxumTimelineKind.fileEdit,
+                fileEdit: updated[parts[1]],
               ),
             );
-            return turn.copyWith(toolCalls: list, timeline: tl);
-          });
-        },
-        onAssistantText: (text) {
-          _updateTurn(turnId, (turn) {
-            final tl = text.trim().isEmpty
-                ? turn.timeline
-                : upsertTimeline(
-                    turn.timeline,
-                    RoxumTimelineItem(
-                      id: 'step_${currentStep}_text',
-                      kind: RoxumTimelineKind.text,
-                      text: text,
-                    ),
-                  );
-            return turn.copyWith(aiResponse: text, timeline: tl);
-          });
-        },
-        onReasoningText: (reasoning) {
-          final now = DateTime.now();
-          final totalElapsed = now.difference(startedAt).inMilliseconds;
-          final stepElapsed = now.difference(stepStartedAt).inMilliseconds;
-          if (reasoning.trim().isNotEmpty) {
-            stepReasonings[currentStep] = reasoning.trim();
           }
-          final combinedReasoning = (stepReasonings.keys.toList()..sort())
-              .map((k) => stepReasonings[k]!)
-              .join('\n\n');
-          _updateTurn(turnId, (turn) {
-            final tl = reasoning.trim().isEmpty
-                ? turn.timeline
-                : upsertTimeline(
-                    turn.timeline,
-                    RoxumTimelineItem(
-                      id: 'step_${currentStep}_reasoning',
-                      kind: RoxumTimelineKind.reasoning,
-                      text: reasoning,
-                      durationMs: stepElapsed,
-                    ),
-                  );
-            return turn.copyWith(
-              reasoningText: combinedReasoning,
-              thinkingDurationMs: totalElapsed,
-              timeline: tl,
-            );
-          });
-        },
-        onUsage: (usage) {
-          state = state.copyWith(sessionUsage: state.sessionUsage + usage);
-          _updateTurn(
-            turnId,
-            (turn) => turn.copyWith(usage: turn.usage + usage),
-          );
-        },
-      );
+        }
+        return t.copyWith(fileEdits: editsForTurn, timeline: tl);
+      });
+    }
 
-      if (model.provider == 'OpenRouter') {
+    void handleToolEvent(RoxumToolCallRecord record) {
+      _updateTurn(turnId, (turn) {
+        final list = List<RoxumToolCallRecord>.from(turn.toolCalls);
+        final idx = list.indexWhere((c) => c.id == record.id);
+        if (idx >= 0) {
+          list[idx] = record;
+        } else {
+          list.add(record);
+        }
+        final tl = upsertTimeline(
+          turn.timeline,
+          RoxumTimelineItem(
+            id: 'tool_${record.id}',
+            kind: RoxumTimelineKind.toolCall,
+            toolCall: record,
+          ),
+        );
+        return turn.copyWith(
+          aiResponse: record.isRunning ? '' : turn.aiResponse,
+          toolCalls: list,
+          timeline: tl,
+        );
+      });
+    }
+
+    void handleAssistantText(String text) {
+      _updateTurn(turnId, (turn) {
+        final tl = text.trim().isEmpty
+            ? turn.timeline
+            : upsertTimeline(
+                turn.timeline,
+                RoxumTimelineItem(
+                  id: 'step_${currentStep}_text',
+                  kind: RoxumTimelineKind.text,
+                  text: text,
+                ),
+              );
+        return turn.copyWith(aiResponse: text, timeline: tl);
+      });
+    }
+
+    void handleReasoningText(String reasoning) {
+      final now = DateTime.now();
+      final totalElapsed = now.difference(startedAt).inMilliseconds;
+      final stepElapsed = now.difference(stepStartedAt).inMilliseconds;
+      if (reasoning.trim().isNotEmpty) {
+        stepReasonings[currentStep] = reasoning.trim();
+      }
+      final combinedReasoning = (stepReasonings.keys.toList()..sort())
+          .map((k) => stepReasonings[k]!)
+          .join('\n\n');
+      _updateTurn(turnId, (turn) {
+        final tl = reasoning.trim().isEmpty
+            ? turn.timeline
+            : upsertTimeline(
+                turn.timeline,
+                RoxumTimelineItem(
+                  id: 'step_${currentStep}_reasoning',
+                  kind: RoxumTimelineKind.reasoning,
+                  text: reasoning,
+                  durationMs: stepElapsed,
+                ),
+              );
+        return turn.copyWith(
+          reasoningText: combinedReasoning,
+          thinkingDurationMs: totalElapsed,
+          timeline: tl,
+        );
+      });
+    }
+
+    void handleUsage(RoxumUsageStats usage) {
+      state = state.copyWith(sessionUsage: state.sessionUsage + usage);
+      _updateTurn(turnId, (turn) => turn.copyWith(usage: turn.usage + usage));
+    }
+
+    try {
+      final String finalAnswer;
+      if (useAcp) {
+        finalAnswer = await _acpBridge.runPromptTurn(
+          ref: ref,
+          engine: state.agentEngine,
+          workspacePath: workspace,
+          chatSessionId: state.currentSessionId,
+          promptText: trimmed,
+          attachments: attachments,
+          settings: settings,
+          selectedModelId: model?.id ?? state.selectedModelId,
+          pendingEdits: pendingCopy,
+          onPendingEditsChanged: handlePendingEditsChanged,
+          onToolEvent: handleToolEvent,
+          onAssistantText: handleAssistantText,
+          onReasoningText: handleReasoningText,
+          onUsage: handleUsage,
+          isCancelled: () => _cancelled,
+        );
+      } else {
+        final baseTools = state.chatMode == RoxumChatMode.agent
+            ? RoxumAgenticTools.buildOpenAiTools(state.toolSelections)
+            : const <Map<String, dynamic>>[];
+        List<Map<String, dynamic>> mcpTools = const [];
+        if (state.chatMode == RoxumChatMode.agent &&
+            ref.read(mcpServiceProvider).any((s) => s.isEnabled)) {
+          try {
+            final rawMcp = await ref
+                .read(mcpServiceProvider.notifier)
+                .getAvailableMcpTools()
+                .timeout(const Duration(seconds: 12));
+            RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
+            final filteredMcp = _selectRelevantMcpTools(
+              rawMcp: rawMcp,
+              prompt: trimmed,
+              hasNativeFs: baseTools.any((t) {
+                final fnName =
+                    (t['function'] as Map?)?['name']?.toString() ?? '';
+                return fnName == 'readFile' || fnName == 'writeFile';
+              }),
+            );
+            mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(filteredMcp);
+            RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
+          } catch (_) {}
+        }
+        final toolsSchema = <Map<String, dynamic>>[...baseTools, ...mcpTools];
+
+        final projectBlocks = _loadProjectContextBlocks(workspace);
+        final matchedSkillsBlock = RoxumSkillLoader.buildMatchedSkillsBlock(
+          workspace: workspace,
+          userPrompt: trimmed,
+          activeFilePath: activeFilePath,
+        );
+
+        final systemPrompt = state.chatMode == RoxumChatMode.agent
+            ? 'You are Roxum, an autonomous Staff Software Engineer inside QuantumIDE (OpenCode-grade execution engine).\n'
+                  'Workspace: "$workspace"${guestWorkspace != workspace ? ' (shell path: "$guestWorkspace")' : ''}.'
+                  '${activeFilePath != null ? ' Active file: "$activeFilePath".' : ''}\n\n'
+                  'CORE OPERATING PRINCIPLES:\n'
+                  '1) ACT DIRECTLY WITH TOOLS: Execute tasks end-to-end using real tool calls (`readFile`, `writeFile`, `editFile`, `multiEditFile`, `listFiles`, `globSearchFiles`, `grepInFiles`, `getLspDiagnostics`, `runCommand`). NEVER stop mid-task with promises like "Исправлю:" / "Let me fix:" or dump unapplied code into chat.\n'
+                  '2) ZERO WASTED STEPS: Do NOT call `checkEnvironment` unless a shell command failed with `command not found`. `readFile` reads up to 1200 lines in ONE call — read full files directly instead of making many tiny 15-line reads. Always use workspace-relative paths (e.g. `lib/main.dart`).\n'
+                  '3) CREATING NEW GAMES & APPS (MODULAR + MOBILE-PLAYABLE): When the user asks to CREATE a game or app (e.g. "создай игру...", "сделай приложение..."), NEVER cram 500-1000 lines into a single `lib/main.dart`, and NEVER stop after merely patching 1-2 lint errors in an old/broken/desktop-only `lib/main.dart` stub! Split cleanly into focused modules of 120-260 lines each (`lib/models/...`, `lib/game/...` or `lib/controllers/...`, `lib/widgets/...`) wired from a clean `lib/main.dart`. For Flutter games on Android/mobile, ALWAYS include working on-screen touch controls (virtual D-pad/joystick + Attack/Mine/Place/Jump buttons) alongside optional keyboard support.\n'
+                  '4) SURGICAL EDITS & MULTIEDIT: When fixing bugs or modifying existing features, NEVER rewrite whole files with `writeFile` and NEVER use placeholders like `// ... existing code`. Pass a native JSON array (NOT a string) to `multiEditFile` to apply multiple fixes in ONE call, and include 2-3 surrounding lines in `oldText` so it uniquely matches.\n'
+                  '5) INLINE DIAGNOSTICS & ZERO-ERROR STOP RULE: `writeFile`, `editFile`, and `multiEditFile` automatically run static analysis and append `[Diagnostics for ...]`. Fix every `error •` immediately until `0 error(s)`. Once `0 error(s)` is reached, STOP chasing `info`/`warning` lints (`deprecated_member_use`, `prefer_final_fields`, `unused_field`) and focus on completing the user\'s actual feature or delivering your concise final summary!\n'
+                  '6) MODERN FLUTTER / DART RULES:\n'
+                  '   - Keyboard events: NEVER use `RawKeyEvent`, `RawKeyDownEvent`, `RawKeyboardListener`, `Focus(onKey: ...)`, or `KeyboardListener`! Use ONLY `Focus(autofocus: true, onKeyEvent: (node, event) { if (event is KeyDownEvent) { ... } return KeyEventResult.handled; })` with `import \'package:flutter/services.dart\';`.\n'
+                  '   - Colors & Const: `Color` has NO `*` operator — use `Color.lerp(...)` or `.withValues(alpha: ...)`. Never put `\${...}` string interpolation or runtime getters inside `const` widgets (`const Text(...)`).\n'
+                  '   - Packages: Add packages via `runCommand` (`flutter pub add <pkg>`). If `pubspec.yaml` has broken/non-existent dependencies or SDK constraints causing analyzer errors, fix `pubspec.yaml` and run `flutter pub get`.\n'
+                  '7) HONEST SUMMARY: In your final answer, concisely report ONLY the files actually created/modified and verification status.'
+                  '$projectBlocks'
+                  '$matchedSkillsBlock\n'
+                  'Always respond in the user\'s language.'
+            : 'You are a helpful coding assistant inside QuantumIDE. '
+                  '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
+                  '$projectBlocks'
+                  '$matchedSkillsBlock\n'
+                  'Respond concisely in the user\'s language.';
+
+        final textBuffer = StringBuffer(trimmed);
+        final imageParts = <Map<String, dynamic>>[];
+        for (final att in attachments) {
+          if (att.isImage) {
+            imageParts.add({
+              'type': 'image_url',
+              'image_url': {
+                'url': 'data:${att.mimeType};base64,${att.base64Data}',
+              },
+            });
+          } else if (att.textContent != null && att.textContent!.isNotEmpty) {
+            textBuffer.write(
+              '\n\n<attached_file name="${att.name}">\n${att.textContent}\n</attached_file>',
+            );
+          } else {
+            textBuffer.write(
+              '\n\n[Прикреплён файл: ${att.name} (${att.sizeBytes} байт)]',
+            );
+          }
+        }
+
+        final dynamic currentUserContent = imageParts.isEmpty
+            ? textBuffer.toString()
+            : [
+                {'type': 'text', 'text': textBuffer.toString()},
+                ...imageParts,
+              ];
+
+        final history = <Map<String, dynamic>>[
+          {'role': 'system', 'content': systemPrompt},
+          for (final t in baseTurns) ...[
+            {'role': 'user', 'content': t.userRequest},
+            if (t.aiResponse.isNotEmpty || t.fileEdits.isNotEmpty)
+              {
+                'role': 'assistant',
+                'content': _buildTurnHistorySummary(t, workspace),
+              },
+          ],
+          {'role': 'user', 'content': currentUserContent},
+        ];
+
+        final toolsRunner = state.chatMode == RoxumChatMode.agent
+            ? RoxumAgenticTools(
+                ref,
+                pendingEdits: pendingCopy,
+                onPendingEditsChanged: handlePendingEditsChanged,
+              )
+            : null;
+
+        finalAnswer = await _client.runAgentLoop(
+          model: model!,
+          historyMessages: history,
+          tools: toolsSchema,
+          agenticTools: toolsRunner,
+          isCancelled: () => _cancelled,
+          onStepStart: (step) {
+            currentStep = step;
+            stepStartedAt = DateTime.now();
+          },
+          onRetryStatus: (status) {
+            handleReasoningText(status);
+          },
+          onToolEvent: handleToolEvent,
+          onAssistantText: handleAssistantText,
+          onReasoningText: handleReasoningText,
+          onUsage: handleUsage,
+        );
+      }
+
+      if (model?.provider == 'OpenRouter') {
         refreshOpenRouterLimits();
       }
 
@@ -1017,7 +1158,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         final cleanedAnswer = _stripFakeToolMarkers(finalAnswer);
         final effectiveAnswer = cleanedAnswer.trim().isNotEmpty
             ? cleanedAnswer
-            : 'Модель вернула пустой ответ. Попробуйте повторить запрос или сменить модель.';
+            : 'Модель вернула пустой ответ. Попробуйте повторить запрос или сменить движок/модель.';
         _updateTurn(
           turnId,
           (turn) => turn.copyWith(

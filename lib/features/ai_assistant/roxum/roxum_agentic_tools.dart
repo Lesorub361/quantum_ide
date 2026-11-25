@@ -171,12 +171,12 @@ class RoxumAgenticTools {
       ),
       _toolDef(
         'editFile',
-        'Replaces a target code snippet in a file with replacement text (supports flexible whitespace matching and returns inline compiler diagnostics).',
+        'Replaces a UNIQUE target code snippet in a file with replacement text (supports flexible whitespace matching, rejects ambiguous multi-match snippets, and returns errors-only inline compiler diagnostics). Include 2-3 surrounding lines when a line could appear multiple times.',
         {
           'filePath': {'type': 'string', 'description': 'Path to the file.'},
           'oldText': {
             'type': 'string',
-            'description': 'Target text to replace.',
+            'description': 'Unique target snippet with surrounding context.',
           },
           'newText': {'type': 'string', 'description': 'Replacement text.'},
         },
@@ -184,17 +184,24 @@ class RoxumAgenticTools {
       ),
       _toolDef(
         'multiEditFile',
-        'Applies multiple sequential edits to a single file in ONE atomic call (like OpenCode multiedit) and returns inline compiler diagnostics.',
+        'Applies multiple sequential edits to a single file in ONE atomic call (like OpenCode multiedit) and returns errors-only inline compiler diagnostics.',
         {
           'filePath': {'type': 'string', 'description': 'Path to the file.'},
           'edits': {
             'type': 'array',
-            'description': 'Ordered list of {oldText, newText} replacements.',
+            'description':
+                'Native JSON array (NOT a JSON string) of {oldText, newText} objects.',
             'items': {
               'type': 'object',
               'properties': {
-                'oldText': {'type': 'string', 'description': 'Target snippet.'},
-                'newText': {'type': 'string', 'description': 'Replacement snippet.'},
+                'oldText': {
+                  'type': 'string',
+                  'description': 'Unique target snippet.',
+                },
+                'newText': {
+                  'type': 'string',
+                  'description': 'Replacement snippet.',
+                },
               },
               'required': ['oldText', 'newText'],
             },
@@ -722,7 +729,10 @@ class RoxumAgenticTools {
         workingDirectory: workspacePath,
         timeout: const Duration(seconds: 75),
       );
-      final compact = McpService.formatCompactAnalyzerDiagnostics(res.combined);
+      final compact = McpService.formatCompactAnalyzerDiagnostics(
+        res.combined,
+        errorsOnly: true,
+      );
       final withSnippets = await McpService.appendErrorSourceSnippets(
         workspacePath,
         compact,
@@ -736,7 +746,10 @@ class RoxumAgenticTools {
         workingDirectory: workspacePath,
         timeout: const Duration(seconds: 60),
       );
-      final compact = McpService.formatCompactAnalyzerDiagnostics(res.combined);
+      final compact = McpService.formatCompactAnalyzerDiagnostics(
+        res.combined,
+        errorsOnly: true,
+      );
       return RoxumToolExecutionResult(
         success: true,
         output: compact.isEmpty ? 'Summary: 0 error(s). No issues found.' : compact,
@@ -893,6 +906,7 @@ class RoxumAgenticTools {
               if (res.combined.trim().isNotEmpty) {
                 final compact = McpService.formatCompactAnalyzerDiagnostics(
                   res.combined,
+                  errorsOnly: true,
                 );
                 final fullDiag = await McpService.appendErrorSourceSnippets(
                   workspacePath,
@@ -1007,33 +1021,68 @@ class RoxumAgenticTools {
     );
   }
 
-  /// OpenCode-style multi-stage matcher:
-  /// 1) Exact match
-  /// 2) CRLF->LF normalized exact match
-  /// 3) Line-trimmed contiguous block match (tolerates indentation drift)
-  String? _applySmartReplacement(
+  /// OpenCode-style multi-stage matcher with ambiguity guard:
+  /// 1) Exact match (rejects if >1 occurrence)
+  /// 2) CRLF->LF normalized exact match (rejects if >1 occurrence)
+  /// 3) Line-trimmed contiguous block match (tolerates indentation drift; rejects if >1 match)
+  ({String? updated, String? error}) _applySmartReplacement(
     String source,
     String oldText,
     String newText,
   ) {
-    if (oldText.isEmpty) return null;
-    if (source.contains(oldText)) {
-      return source.replaceFirst(oldText, newText);
+    if (oldText.isEmpty) {
+      return (updated: null, error: 'oldText cannot be empty.');
     }
+
+    List<int> findSubstringLines(String text, String needle) {
+      final hits = <int>[];
+      var pos = 0;
+      while (true) {
+        final idx = text.indexOf(needle, pos);
+        if (idx < 0) break;
+        final lineNum = '\n'.allMatches(text.substring(0, idx)).length + 1;
+        hits.add(lineNum);
+        pos = idx + needle.length;
+        if (hits.length >= 6) break;
+      }
+      return hits;
+    }
+
+    final exactHits = findSubstringLines(source, oldText);
+    if (exactHits.length == 1) {
+      return (updated: source.replaceFirst(oldText, newText), error: null);
+    }
+    if (exactHits.length > 1) {
+      return (
+        updated: null,
+        error:
+            'Ambiguous oldText: matched ${exactHits.length}+ times (lines ${exactHits.join(', ')}). Include 2-3 surrounding lines for a unique match.',
+      );
+    }
+
     final normSource = source.replaceAll('\r\n', '\n');
     final normOld = oldText.replaceAll('\r\n', '\n');
     final normNew = newText.replaceAll('\r\n', '\n');
-    if (normSource.contains(normOld)) {
-      return normSource.replaceFirst(normOld, normNew);
+    final normHits = findSubstringLines(normSource, normOld);
+    if (normHits.length == 1) {
+      return (updated: normSource.replaceFirst(normOld, normNew), error: null);
+    }
+    if (normHits.length > 1) {
+      return (
+        updated: null,
+        error:
+            'Ambiguous oldText: matched ${normHits.length}+ times (lines ${normHits.join(', ')}). Include 2-3 surrounding lines for a unique match.',
+      );
     }
 
     final srcLines = normSource.split('\n');
     final oldLines = normOld.split('\n');
-    // Strip trailing empty line if model added an extra trailing newline
     if (oldLines.length > 1 && oldLines.last.trim().isEmpty) {
       oldLines.removeLast();
     }
-    if (oldLines.isEmpty || oldLines.length > srcLines.length) return null;
+    if (oldLines.isEmpty || oldLines.length > srcLines.length) {
+      return (updated: null, error: null);
+    }
 
     final matchIndices = <int>[];
     for (var i = 0; i <= srcLines.length - oldLines.length; i++) {
@@ -1057,9 +1106,17 @@ class RoxumAgenticTools {
         ...newLines,
         ...srcLines.sublist(idx + oldLines.length),
       ];
-      return rebuilt.join('\n');
+      return (updated: rebuilt.join('\n'), error: null);
     }
-    return null;
+    if (matchIndices.length > 1) {
+      final linesDesc = matchIndices.take(6).map((i) => i + 1).join(', ');
+      return (
+        updated: null,
+        error:
+            'Ambiguous oldText: matched ${matchIndices.length} times (lines $linesDesc). Include 2-3 surrounding lines for a unique match.',
+      );
+    }
+    return (updated: null, error: null);
   }
 
   Future<RoxumToolExecutionResult> _editFile(
@@ -1082,8 +1139,14 @@ class RoxumAgenticTools {
       );
     }
     final original = await file.readAsString();
-    final updated = _applySmartReplacement(original, oldText, newText);
-    if (updated == null) {
+    final match = _applySmartReplacement(original, oldText, newText);
+    if (match.updated == null) {
+      if (match.error != null) {
+        return RoxumToolExecutionResult(
+          success: false,
+          output: '${match.error} (${_relativePath(path)})',
+        );
+      }
       final hint = _closestLineHint(original, oldText);
       return RoxumToolExecutionResult(
         success: false,
@@ -1092,7 +1155,7 @@ class RoxumAgenticTools {
     }
     final syntaxWarn = await _recordAndWrite(
       path,
-      updated,
+      match.updated!,
       existedBefore: true,
       originalContent: original,
     );
@@ -1104,6 +1167,29 @@ class RoxumAgenticTools {
       success: true,
       output: 'Updated $rel.$syntaxWarn$pubNote',
     );
+  }
+
+  List<dynamic> _parseMultiEditsArg(Object? rawEdits) {
+    if (rawEdits is List) return rawEdits;
+    if (rawEdits is Map) return [rawEdits];
+    if (rawEdits is String) {
+      final t = rawEdits.trim();
+      if (t.isEmpty) return const [];
+      for (final candidate in <String>[
+        t,
+        if (t.startsWith('[') && t.endsWith(')}'))
+          '${t.substring(0, t.length - 2)}]',
+        if (t.startsWith('[') && t.endsWith('}') && !t.endsWith('}]')) '$t]',
+        if (t.startsWith('{') && t.endsWith('}')) '[$t]',
+      ]) {
+        try {
+          final decoded = jsonDecode(candidate);
+          if (decoded is List) return decoded;
+          if (decoded is Map) return [decoded];
+        } catch (_) {}
+      }
+    }
+    return const [];
   }
 
   Future<RoxumToolExecutionResult> _multiEditFile(
@@ -1125,19 +1211,12 @@ class RoxumAgenticTools {
         output: 'File not found: $rel',
       );
     }
-    List<dynamic> editList = const [];
-    if (rawEdits is List) {
-      editList = rawEdits;
-    } else if (rawEdits is String && rawEdits.trim().startsWith('[')) {
-      try {
-        final decoded = jsonDecode(rawEdits);
-        if (decoded is List) editList = decoded;
-      } catch (_) {}
-    }
+    final editList = _parseMultiEditsArg(rawEdits);
     if (editList.isEmpty) {
       return const RoxumToolExecutionResult(
         success: false,
-        output: 'multiEditFile requires a non-empty `edits` array of {oldText, newText}.',
+        output:
+            'multiEditFile requires a native JSON array `edits` of {oldText, newText} objects (NOT a JSON string).',
       );
     }
 
@@ -1161,10 +1240,12 @@ class RoxumAgenticTools {
         failures.add('Edit #${i + 1}: oldText was empty.');
         continue;
       }
-      final next = _applySmartReplacement(working, oldText, newText);
-      if (next != null) {
-        working = next;
+      final match = _applySmartReplacement(working, oldText, newText);
+      if (match.updated != null) {
+        working = match.updated!;
         appliedCount++;
+      } else if (match.error != null) {
+        failures.add('Edit #${i + 1} rejected: ${match.error}');
       } else {
         failures.add(
           'Edit #${i + 1} failed (snippet not found):${_closestLineHint(working, oldText)}',

@@ -165,7 +165,7 @@ class McpClientInstance {
         'capabilities': {
           'roots': {'listChanged': false},
         },
-        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.307'},
+        'clientInfo': {'name': 'QuantumIDE-RoxumAgent', 'version': '1.2.308'},
       }, timeout: const Duration(seconds: 12));
       await _sendNotification('notifications/initialized', const {});
       _isHandshakeDone = true;
@@ -1197,8 +1197,10 @@ class McpClientInstance {
           workingDirectory: workspace,
           timeout: const Duration(seconds: 90),
         );
+        final includeWarnings = args['includeWarnings'] == true;
         final baseDiag = McpService.formatCompactAnalyzerDiagnostics(
           res.combined,
+          errorsOnly: !includeWarnings,
         );
         final diagText = await McpService.appendErrorSourceSnippets(
           workspace,
@@ -2264,7 +2266,10 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
   /// Aggregates repetitive analyzer output (e.g. `dart analyze` / `flutter analyze` / `tsc`)
   /// by `(severity, filePath, errorCode)` so the AI agent receives compact, actionable
   /// diagnostics with exact line numbers and zero duplicate path inflation.
-  static String formatCompactAnalyzerDiagnostics(String rawOutput) {
+  static String formatCompactAnalyzerDiagnostics(
+    String rawOutput, {
+    bool errorsOnly = false,
+  }) {
     final trimmedRaw = rawOutput.trim();
     if (trimmedRaw.isEmpty) return 'No issues found.';
     if (trimmedRaw.contains('No issues found')) {
@@ -2397,8 +2402,15 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
       }
     }
 
+    if (errorsOnly && errorCount == 0) {
+      return 'Summary: 0 error(s) ($warningCount warning(s), $infoCount info(s) omitted).\n'
+          'Compiles cleanly — do NOT waste steps fixing info/deprecation/unused-field lints.';
+    }
+
     int severityRank(String s) => s == 'error' ? 0 : (s == 'warning' ? 1 : 2);
-    final sorted = groups.values.toList()
+    final sorted = groups.values
+        .where((g) => !errorsOnly || g.severity == 'error')
+        .toList()
       ..sort((a, b) {
         final r = severityRank(a.severity).compareTo(severityRank(b.severity));
         if (r != 0) return r;
@@ -2408,8 +2420,10 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
     final totalRaw = errorCount + warningCount + infoCount;
     final out = StringBuffer()
       ..writeln(
-        'Summary: $errorCount error(s), $warningCount warning(s), $infoCount info(s) '
-        '(grouped from $totalRaw raw issues).',
+        errorsOnly
+            ? 'Summary: $errorCount error(s) ($warningCount warning(s), $infoCount info(s) omitted).'
+            : 'Summary: $errorCount error(s), $warningCount warning(s), $infoCount info(s) '
+                  '(grouped from $totalRaw raw issues).',
       );
 
     for (final g in sorted.take(40)) {
@@ -2428,7 +2442,15 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
       }
     }
 
-    for (final extra in otherLines.take(20)) {
+    final filteredExtra = errorsOnly
+        ? otherLines.where(
+            (l) =>
+                l.startsWith('Error:') ||
+                l.contains('error TS') ||
+                l.contains('error •'),
+          )
+        : otherLines;
+    for (final extra in filteredExtra.take(20)) {
       out.writeln(extra);
     }
 

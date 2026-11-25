@@ -1,5 +1,6 @@
 // Ported & adapted from roxum-ide (MIT License) - https://github.com/heckmon/roxum-ide
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:dio_smart_retry/dio_smart_retry.dart';
@@ -324,6 +325,7 @@ class _ParsedTurn {
   final List<({String id, String name, Map<String, dynamic> args})> toolCalls;
   final Map<String, dynamic> rawAssistantMessage;
   final RoxumUsageStats usage;
+  final String? finishReason;
 
   const _ParsedTurn({
     required this.text,
@@ -331,6 +333,7 @@ class _ParsedTurn {
     required this.toolCalls,
     required this.rawAssistantMessage,
     this.usage = const RoxumUsageStats(),
+    this.finishReason,
   });
 }
 
@@ -492,9 +495,9 @@ class RoxumAiClient {
         if (m.contains('claude-sonnet') || m.contains('claude-3.7') || m.contains('claude-3.5')) return 1;
         if (m.contains('deepseek-chat') || m.contains('deepseek-v3')) return 2;
         if (m.contains('gemini-2.5') || m.contains('gemini-2.0')) return 3;
-        if (m.contains('codestral') || m.contains('gpt-4o') || m.contains('gpt-4.1')) return 4;
+        if (m.contains('codestral') || m.contains('devstral') || m.contains('gpt-4o') || m.contains('gpt-4.1')) return 4;
         if (m.contains('llama-3.3-70b') || m.contains('qwen3') || m.contains('deepseek-r1')) return 5;
-        if (m.contains('preview') || m.contains('ernie') || m.contains('vl')) return 9;
+        if (m.contains('preview') || m.contains('ernie') || m.contains('nemotron') || m.contains('vl')) return 9;
         return 7;
       }
 
@@ -943,23 +946,24 @@ class RoxumAiClient {
 
           if (agenticTools != null &&
               cleanAnswer.isEmpty &&
-              executedAnyTool) {
+              (executedAnyTool ||
+                  effectiveTurn.reasoning.isNotEmpty ||
+                  effectiveTurn.finishReason == 'length')) {
             if (!nudgedEmptyAfterTools) {
               nudgedEmptyAfterTools = true;
-              messages.add({
-                'role': 'user',
-                'content':
-                    'Ты остановился после выполнения инструментов и не написал ответ. '
-                    'Если задача не завершена — продолжи вызов инструментов. '
-                    'Если завершена — кратко напиши итог и список изменённых файлов.',
-              });
+              final truncatedHint = effectiveTurn.finishReason == 'length'
+                  ? 'Твой прошлый ответ оборвался по лимиту токенов во время размышлений. Сократи рассуждения и сразу вызови нужный инструмент или дай краткий итог.'
+                  : 'Ты остановился без текста ответа и без вызова инструмента. Если задача не завершена — немедленно вызови следующий инструмент. Если завершена — кратко напиши итог и список изменённых файлов.';
+              messages.add({'role': 'user', 'content': truncatedHint});
               continue;
             }
-            return 'Задача выполнена (см. применённые изменения выше).';
+            return executedAnyTool
+                ? 'Задача выполнена (см. применённые изменения выше).'
+                : 'Модель прервалась на размышлениях без ответа. Попробуйте переключить движок на OpenCode (ACP) или выбрать другую модель.';
           }
 
           if (isRepeatingNudgedText && hasUnresolvedErrors) {
-            return '$cleanAnswer\n\n⚠️ Модель остановилась без вызова инструмента правок (осталось ошибок анализатора: $lastErrorCount). Попробуйте нажать «Продолжить» или выбрать более сильную кодерскую модель (Qwen Coder / DeepSeek V3 / Gemini / Claude).';
+            return '$cleanAnswer\n\n⚠️ Модель остановилась без вызова инструмента правок (осталось ошибок анализатора: $lastErrorCount). Попробуйте переключить движок на OpenCode (ACP) или выбрать более сильную кодерскую модель (Qwen Coder / DeepSeek V3 / Gemini / Claude).';
           }
           return cleanAnswer;
         }
@@ -1128,6 +1132,7 @@ class RoxumAiClient {
         completionTokens: completion,
         totalTokens: prompt + completion,
       ),
+      finishReason: turn.finishReason,
     );
   }
 
@@ -1275,20 +1280,52 @@ class RoxumAiClient {
       }
     }
 
-    // 3. Compact older `role: tool` outputs beyond the most recent 10 messages,
+    // 3. Aggressively compact large `readFile` / `readFilesBatch` outputs older
+    // than 2 steps (4 messages) so huge 900-line reads don't burn 250k+ tokens.
+    final readCutoff = messages.length - 4;
+    for (int i = 1; i < readCutoff; i++) {
+      if (i == latestDiagIdx) continue;
+      final msg = messages[i];
+      if (msg['role'] != 'tool') continue;
+      final name = msg['name']?.toString() ?? '';
+      final isReadTool =
+          name == 'readFile' ||
+          name == 'read' ||
+          name == 'read_file' ||
+          name == 'readFilesBatch';
+      if (!isReadTool) continue;
+      final content = msg['content']?.toString() ?? '';
+      if (content.length > 3000 &&
+          !content.contains('[compacted readFile:') &&
+          !content.contains('[compacted tool output:')) {
+        final headerMatch = RegExp(r'\[File:[^\]]+\]').firstMatch(content);
+        final label = headerMatch?.group(0) ?? name;
+        messages[i] = {
+          ...msg,
+          'content': jsonEncode({
+            'success': true,
+            'output':
+                '$label — [compacted readFile: ${content.length} chars already inspected; re-read a specific startLine/endLine range if needed]',
+          }),
+        };
+      }
+    }
+
+    // 4. Compact other older `role: tool` outputs beyond the most recent 6 messages,
     // EXCEPT `latestDiagIdx` which always stays intact.
-    if (messages.length <= 12) return;
-    final cutoff = messages.length - 10;
+    if (messages.length <= 8) return;
+    final cutoff = messages.length - 6;
     for (int i = 1; i < cutoff; i++) {
       if (i == latestDiagIdx) continue;
       final msg = messages[i];
       if (msg['role'] == 'tool') {
         final content = msg['content']?.toString() ?? '';
-        if (content.length > 2200 &&
+        if (content.length > 1400 &&
             !content.contains('[compacted tool output:') &&
+            !content.contains('[compacted readFile:') &&
             !content.contains('[superseded diagnostics')) {
-          final head = content.substring(0, 1400);
-          final tail = content.substring(content.length - 500);
+          final head = content.substring(0, 700);
+          final tail = content.substring(content.length - 300);
           messages[i] = {
             ...msg,
             'content':
@@ -1452,128 +1489,140 @@ class RoxumAiClient {
     String? finishReason;
 
     var lineCarry = '';
-    await for (final chunk in streamed.stream.transform(utf8.decoder)) {
-      if (isCancelled()) break;
-      final combined = lineCarry + chunk;
-      final lines = combined.split('\n');
-      lineCarry = lines.removeLast();
+    try {
+      await for (final chunk in streamed.stream
+          .timeout(const Duration(seconds: 45))
+          .transform(utf8.decoder)) {
+        if (isCancelled()) break;
+        final combined = lineCarry + chunk;
+        final lines = combined.split('\n');
+        lineCarry = lines.removeLast();
 
-      for (final rawLine in lines) {
-        final line = rawLine.trim();
-        if (!line.startsWith('data:')) continue;
-        final dataStr = line.substring(5).trim();
-        if (dataStr.isEmpty || dataStr == '[DONE]') continue;
+        for (final rawLine in lines) {
+          final line = rawLine.trim();
+          if (!line.startsWith('data:')) continue;
+          final dataStr = line.substring(5).trim();
+          if (dataStr.isEmpty || dataStr == '[DONE]') continue;
 
-        try {
-          final json = jsonDecode(dataStr) as Map<String, dynamic>;
-          final u = (json['usage'] as Map?)?.cast<String, dynamic>();
-          if (u != null) {
-            final pTok = (u['prompt_tokens'] as num?)?.toInt() ?? 0;
-            final cTok = (u['completion_tokens'] as num?)?.toInt() ?? 0;
-            final tTok = (u['total_tokens'] as num?)?.toInt() ?? (pTok + cTok);
-            final cost = (u['cost'] as num?)?.toDouble() ?? 0.0;
-            usage = RoxumUsageStats(
-              promptTokens: pTok,
-              completionTokens: cTok,
-              totalTokens: tTok,
-              costUsd: cost,
-            );
-          }
-
-          final choices = (json['choices'] as List?) ?? const [];
-          if (choices.isEmpty) continue;
-          final firstChoice = choices.first;
-          if (firstChoice is Map && firstChoice['finish_reason'] != null) {
-            finishReason = firstChoice['finish_reason']?.toString();
-          }
-          final delta = (firstChoice is Map ? firstChoice['delta'] as Map? : null)
-              ?.cast<String, dynamic>();
-          if (delta == null) continue;
-
-          final reasoning = delta['reasoning']?.toString();
-          final reasoningContent = delta['reasoning_content']?.toString();
-          final rDelta = (reasoning != null && reasoning.isNotEmpty)
-              ? reasoning
-              : ((reasoningContent != null && reasoningContent.isNotEmpty)
-                    ? reasoningContent
-                    : delta['thought']?.toString());
-          if (rDelta != null && rDelta.isNotEmpty) {
-            reasoningBuf.write(rDelta);
-            onReasoningText?.call(reasoningBuf.toString());
-          }
-          final rDetails = delta['reasoning_details'];
-          if ((rDelta == null || rDelta.isEmpty) && rDetails is List) {
-            final buf = StringBuffer();
-            for (final item in rDetails) {
-              if (item is Map) {
-                final t =
-                    item['text']?.toString() ?? item['summary']?.toString();
-                if (t != null && t.isNotEmpty) buf.write(t);
-              }
+          try {
+            final json = jsonDecode(dataStr) as Map<String, dynamic>;
+            final u = (json['usage'] as Map?)?.cast<String, dynamic>();
+            if (u != null) {
+              final pTok = (u['prompt_tokens'] as num?)?.toInt() ?? 0;
+              final cTok = (u['completion_tokens'] as num?)?.toInt() ?? 0;
+              final tTok = (u['total_tokens'] as num?)?.toInt() ?? (pTok + cTok);
+              final cost = (u['cost'] as num?)?.toDouble() ?? 0.0;
+              usage = RoxumUsageStats(
+                promptTokens: pTok,
+                completionTokens: cTok,
+                totalTokens: tTok,
+                costUsd: cost,
+              );
             }
-            if (buf.isNotEmpty) {
-              reasoningBuf.write(buf.toString());
+
+            final choices = (json['choices'] as List?) ?? const [];
+            if (choices.isEmpty) continue;
+            final firstChoice = choices.first;
+            if (firstChoice is Map && firstChoice['finish_reason'] != null) {
+              finishReason = firstChoice['finish_reason']?.toString();
+            }
+            final delta =
+                (firstChoice is Map ? firstChoice['delta'] as Map? : null)
+                    ?.cast<String, dynamic>();
+            if (delta == null) continue;
+
+            final reasoning = delta['reasoning']?.toString();
+            final reasoningContent = delta['reasoning_content']?.toString();
+            final rDelta = (reasoning != null && reasoning.isNotEmpty)
+                ? reasoning
+                : ((reasoningContent != null && reasoningContent.isNotEmpty)
+                      ? reasoningContent
+                      : delta['thought']?.toString());
+            if (rDelta != null && rDelta.isNotEmpty) {
+              reasoningBuf.write(rDelta);
               onReasoningText?.call(reasoningBuf.toString());
             }
-          }
-
-          final cDelta = delta['content']?.toString();
-          if (cDelta != null && cDelta.isNotEmpty) {
-            contentBuf.write(cDelta);
-            final split = _splitThinkTags(contentBuf.toString());
-            if (split.reasoning.isNotEmpty && reasoningBuf.isEmpty) {
-              onReasoningText?.call(split.reasoning);
-            }
-            onAssistantText(split.answer);
-          }
-
-          final tcList = delta['tool_calls'];
-          if (tcList is List) {
-            for (final item in tcList) {
-              if (item is! Map) continue;
-              final rawId = item['id']?.toString() ?? '';
-              int idx;
-              if (item['index'] is num) {
-                idx = (item['index'] as num).toInt();
-              } else if (rawId.isNotEmpty) {
-                final existingIdx = toolBuffers.entries
-                    .where((e) => e.value.id.toString() == rawId)
-                    .map((e) => e.key)
-                    .firstOrNull;
-                idx =
-                    existingIdx ??
-                    (toolBuffers.isEmpty
-                        ? 0
-                        : (toolBuffers.keys.reduce((a, b) => a > b ? a : b) +
-                              1));
-              } else {
-                idx = toolBuffers.isEmpty
-                    ? 0
-                    : toolBuffers.keys.reduce((a, b) => a > b ? a : b);
+            final rDetails = delta['reasoning_details'];
+            if ((rDelta == null || rDelta.isEmpty) && rDetails is List) {
+              final buf = StringBuffer();
+              for (final item in rDetails) {
+                if (item is Map) {
+                  final t =
+                      item['text']?.toString() ?? item['summary']?.toString();
+                  if (t != null && t.isNotEmpty) buf.write(t);
+                }
               }
-              final entry = toolBuffers.putIfAbsent(
-                idx,
-                () => (
-                  id: StringBuffer(),
-                  name: StringBuffer(),
-                  args: StringBuffer(),
-                ),
-              );
-              if (rawId.isNotEmpty && entry.id.isEmpty) entry.id.write(rawId);
-              final fn = item['function'] as Map?;
-              if (fn != null) {
-                if (fn['name'] != null) entry.name.write(fn['name'].toString());
-                final rawArgChunk = fn['arguments'];
-                if (rawArgChunk is Map) {
-                  entry.args.write(jsonEncode(rawArgChunk));
-                } else if (rawArgChunk != null) {
-                  entry.args.write(rawArgChunk.toString());
+              if (buf.isNotEmpty) {
+                reasoningBuf.write(buf.toString());
+                onReasoningText?.call(reasoningBuf.toString());
+              }
+            }
+
+            final cDelta = delta['content']?.toString();
+            if (cDelta != null && cDelta.isNotEmpty) {
+              contentBuf.write(cDelta);
+              final split = _splitThinkTags(contentBuf.toString());
+              if (split.reasoning.isNotEmpty && reasoningBuf.isEmpty) {
+                onReasoningText?.call(split.reasoning);
+              }
+              onAssistantText(split.answer);
+            }
+
+            final tcList = delta['tool_calls'];
+            if (tcList is List) {
+              for (final item in tcList) {
+                if (item is! Map) continue;
+                final rawId = item['id']?.toString() ?? '';
+                int idx;
+                if (item['index'] is num) {
+                  idx = (item['index'] as num).toInt();
+                } else if (rawId.isNotEmpty) {
+                  final existingIdx = toolBuffers.entries
+                      .where((e) => e.value.id.toString() == rawId)
+                      .map((e) => e.key)
+                      .firstOrNull;
+                  idx =
+                      existingIdx ??
+                      (toolBuffers.isEmpty
+                          ? 0
+                          : (toolBuffers.keys.reduce((a, b) => a > b ? a : b) +
+                                1));
+                } else {
+                  idx = toolBuffers.isEmpty
+                      ? 0
+                      : toolBuffers.keys.reduce((a, b) => a > b ? a : b);
+                }
+                final entry = toolBuffers.putIfAbsent(
+                  idx,
+                  () => (
+                    id: StringBuffer(),
+                    name: StringBuffer(),
+                    args: StringBuffer(),
+                  ),
+                );
+                if (rawId.isNotEmpty && entry.id.isEmpty) {
+                  entry.id.write(rawId);
+                }
+                final fn = item['function'] as Map?;
+                if (fn != null) {
+                  if (fn['name'] != null) {
+                    entry.name.write(fn['name'].toString());
+                  }
+                  final rawArgChunk = fn['arguments'];
+                  if (rawArgChunk is Map) {
+                    entry.args.write(jsonEncode(rawArgChunk));
+                  } else if (rawArgChunk != null) {
+                    entry.args.write(rawArgChunk.toString());
+                  }
                 }
               }
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
       }
+    } on TimeoutException {
+      finishReason ??= 'stream_timeout';
+      onRetryStatus?.call('Поток модели прервался по таймауту (45с)...');
     }
 
     final calls = <({String id, String name, Map<String, dynamic> args})>[];
@@ -1636,6 +1685,7 @@ class RoxumAiClient {
         if (rawCalls.isNotEmpty) 'tool_calls': rawCalls,
       },
       usage: usage,
+      finishReason: finishReason,
     );
   }
 
@@ -1790,7 +1840,7 @@ class RoxumAiClient {
           'contents': _toGeminiContents(nonSystem),
           'generationConfig': {
             'temperature': temp,
-            'maxOutputTokens': 8192,
+            'maxOutputTokens': 16384,
           },
           if (systemPrompts.isNotEmpty)
             'systemInstruction': {
@@ -1815,7 +1865,7 @@ class RoxumAiClient {
         return {
           'model': model.model,
           'messages': messages,
-          'max_tokens': 8192,
+          'max_tokens': 16384,
           if (!isOpenAiReasoner) 'temperature': temp,
           if (tools.isNotEmpty) 'tools': tools,
           if (tools.isNotEmpty) 'tool_choice': 'auto',
@@ -1834,7 +1884,7 @@ class RoxumAiClient {
   }
 
   static final _imminentActionPromiseRe = RegExp(
-    r'(исправлю|сейчас\s+(исправлю|обновлю|создам|заменю|проверю|перепишу)|давайте\s+исправим|вношу\s+правки|применяю\s+изменения|let\s+me\s+(fix|edit|update|create|apply)|i\s+will\s+now\s+(fix|edit|update|write))\s*[:.…]*$',
+    r'(исправлю|сейчас\s+(исправлю|обновлю|создам|заменю|проверю|перепишу|удалю)|давайте\s+исправим|вношу\s+правки|применяю\s+изменения|let\s+me\s+(fix|edit|update|create|apply|remove|clean|refactor|check|add|build|implement)|i\s+will\s+now\s+(fix|edit|update|write|remove))\s*[:.…]*$',
     caseSensitive: false,
   );
 

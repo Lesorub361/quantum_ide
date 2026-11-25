@@ -6,6 +6,8 @@ import 'package:quantum_ide/core/services/agent_toolbox.dart';
 import 'package:quantum_ide/core/services/mcp_catalog.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:acp_dart/acp_dart.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_acp_bridge.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_skill_loader.dart';
@@ -508,6 +510,85 @@ Always use fixed timestep for physics updates.
         );
         expect(matchedPreview, contains('Flutter Widget Previews (@Preview)'));
         expect(matchedPreview, contains('package:flutter/widget_previews.dart'));
+      },
+    );
+
+    test(
+      'RoxumAcpBridge resolves ACP model IDs and engine identifiers accurately',
+      () {
+        expect(RoxumAgentEngine.fromId('opencodeAcp'), equals(RoxumAgentEngine.opencodeAcp));
+        expect(RoxumAgentEngine.fromId('unknown'), equals(RoxumAgentEngine.builtIn));
+
+        final available = [
+          ModelInfo(
+            modelId: 'openrouter/qwen/qwen3-coder:free',
+            name: 'Qwen3 Coder',
+          ),
+          ModelInfo(
+            modelId: 'deepseek/deepseek-chat',
+            name: 'DeepSeek Chat',
+          ),
+        ];
+        expect(
+          RoxumAcpBridge.resolveAcpModelId(
+            'openrouter:qwen/qwen3-coder:free',
+            available,
+          ),
+          equals('openrouter/qwen/qwen3-coder:free'),
+        );
+        expect(
+          RoxumAcpBridge.resolveAcpModelId('deepseek:deepseek-chat', available),
+          equals('deepseek/deepseek-chat'),
+        );
+      },
+    );
+
+    test(
+      'McpService.formatCompactAnalyzerDiagnostics(errorsOnly: true) suppresses info/warning spam at 0 errors',
+      () {
+        const raw = '''
+  warning • Unused field _tick • lib/main.dart:195:7 • unused_field
+  info • 'withOpacity' is deprecated • lib/main.dart:585:49 • deprecated_member_use
+  info • Prefer final fields • lib/main.dart:172:7 • prefer_final_fields
+''';
+        final compact = McpService.formatCompactAnalyzerDiagnostics(
+          raw,
+          errorsOnly: true,
+        );
+        expect(compact, contains('Summary: 0 error(s)'));
+        expect(compact, contains('Compiles cleanly'));
+        expect(compact, isNot(contains('deprecated_member_use')));
+        expect(compact, isNot(contains('unused_field')));
+      },
+    );
+
+    test(
+      'RoxumAiClient.compactMessagesForTokenSavings aggressively compacts old large readFile outputs',
+      () {
+        final hugeRead = jsonEncode({
+          'success': true,
+          'output':
+              '[File: lib/main.dart #L1-922 of 922 lines]\n${List.filled(180, 'final x = 1234567890; // sample code line').join('\n')}',
+        });
+        final messages = <Map<String, dynamic>>[
+          {'role': 'system', 'content': 'sys'},
+          {'role': 'user', 'content': 'fix'},
+          {
+            'role': 'tool',
+            'tool_call_id': 'read_1',
+            'name': 'readFile',
+            'content': hugeRead,
+          },
+          {'role': 'assistant', 'content': 'step 1'},
+          {'role': 'tool', 'tool_call_id': 'e1', 'name': 'editFile', 'content': 'ok'},
+          {'role': 'assistant', 'content': 'step 2'},
+          {'role': 'tool', 'tool_call_id': 'e2', 'name': 'editFile', 'content': 'ok'},
+        ];
+        RoxumAiClient.compactMessagesForTokenSavings(messages);
+        final compacted = messages[2]['content'].toString();
+        expect(compacted, contains('[compacted readFile:'));
+        expect(compacted, contains('[File: lib/main.dart #L1-922 of 922 lines]'));
+        expect(compacted.length, lessThan(400));
       },
     );
   });
