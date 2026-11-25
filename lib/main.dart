@@ -13,6 +13,7 @@ import 'package:quantum_ide/core/services/quick_actions_service.dart';
 import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 import 'package:quantum_ide/core/services/network_inspector_service.dart';
 import 'package:quantum_ide/core/services/live_telemetry_service.dart';
+import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 import 'app.dart';
 
 void main() async {
@@ -39,6 +40,14 @@ void main() async {
       await LogService.init(tempDir.path);
     } catch (e) {
       debugPrint('LogService init error: $e');
+    }
+
+    // Disable Android's Phantom Process Killer as early as possible.
+    // PRoot spawns many child processes; on Android 12+ the system trims them
+    // ("Killing PhantomProcessRecord") unless max_phantom_processes is raised.
+    // Works via Shizuku or via root (Magisk/KernelSU/APatch) fallback.
+    if (!kIsWeb && Platform.isAndroid) {
+      unawaited(ShizukuBridge.instance.boostForBuild());
     }
 
     // Initialize Quick Actions (App Shortcuts)

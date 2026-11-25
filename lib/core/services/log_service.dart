@@ -21,6 +21,14 @@ class LogService {
   static Timer? _flushTimer;
   static const Duration _flushInterval = Duration(seconds: 2);
 
+  /// Mirroring every log line to stdout duplicates all messages into Android
+  /// logcat (hundreds of lines per minute during a build) and noticeably slows
+  /// down logcat readers / the App Logs panel. Logs are still written to
+  /// app_cache.log, kept in memory and streamed to the UI.
+  /// Enable explicitly with: --dart-define=QI_MIRROR_STDOUT=true
+  static const bool _mirrorToStdout =
+      bool.fromEnvironment('QI_MIRROR_STDOUT', defaultValue: false);
+
   static Future<void> init(String cacheDir) async {
     _cacheDir = cacheDir;
     await _updateLogFile();
@@ -109,9 +117,11 @@ class LogService {
 
     _logStreamController.add(formattedLine);
 
-    try {
-      stdout.writeln(formattedLine);
-    } catch (_) {}
+    if (_mirrorToStdout) {
+      try {
+        stdout.writeln(formattedLine);
+      } catch (_) {}
+    }
 
     if (forwardToTalker) {
       _isForwardingToTalker = true;

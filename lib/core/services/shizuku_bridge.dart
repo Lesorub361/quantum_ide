@@ -133,25 +133,57 @@ class ShizukuBridge {
   /// (Avoids `am kill-all` / `drop_caches` so the soft IME keyboard and hot build cache stay alive.)
   Future<void> boostForBuild() async {
     if (!Platform.isAndroid) return;
-    if (!isAvailable) {
-      await initialize();
-      if (!isAvailable) return;
+    if (!isAvailable) await initialize();
+
+    final cmds = <String>[
+      'device_config set_sync_disabled_for_tests persistent 2>/dev/null || true',
+      'device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null || true',
+      'settings put global settings_enable_monitor_phantom_procs false 2>/dev/null || true',
+      'dumpsys deviceidle whitelist +com.example.quantum_ide >/dev/null 2>&1 || true',
+      'cmd appops set com.example.quantum_ide RUN_IN_BACKGROUND allow 2>/dev/null || true',
+      'cmd appops set com.example.quantum_ide RUN_ANY_IN_BACKGROUND allow 2>/dev/null || true',
+    ];
+    if (_uid == 0) {
+      cmds.add('sysctl -w vm.swappiness=20 >/dev/null 2>&1 || true');
     }
-    try {
-      final cmds = <String>[
-        'device_config set_sync_disabled_for_tests persistent 2>/dev/null || true',
-        'device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null || true',
-        'settings put global settings_enable_monitor_phantom_procs false 2>/dev/null || true',
-        'dumpsys deviceidle whitelist +com.example.quantum_ide >/dev/null 2>&1 || true',
-        'cmd appops set com.example.quantum_ide RUN_IN_BACKGROUND allow 2>/dev/null || true',
-        'cmd appops set com.example.quantum_ide RUN_ANY_IN_BACKGROUND allow 2>/dev/null || true',
-      ];
-      if (_uid == 0) {
-        cmds.add('sysctl -w vm.swappiness=20 >/dev/null 2>&1 || true');
+    final script = cmds.join('; ');
+
+    if (isAvailable) {
+      try {
+        await execute('sh', ['-c', script]);
+      } catch (e) {
+        debugPrint('Shizuku boostForBuild failed: $e');
       }
-      await execute('sh', ['-c', cmds.join('; ')]);
-    } catch (e) {
-      debugPrint('Shizuku boostForBuild skipped: $e');
+      return;
+    }
+
+    // Shizuku is not available on many rooted devices (Magisk/KernelSU/APatch).
+    // Fall back to plain `su` so the Phantom Process Killer is still disabled.
+    for (final suBin in const [
+      'su',
+      '/system/bin/su',
+      '/system/xbin/su',
+      '/sbin/su',
+      '/data/adb/magisk/su',
+      '/data/adb/ksu/bin/su',
+      '/data/adb/ap/bin/su',
+    ]) {
+      try {
+        final probe = await Process.run(suBin, ['-c', 'id'])
+            .timeout(const Duration(seconds: 4));
+        if (probe.exitCode != 0 ||
+            !'${probe.stdout}'.contains('uid=0')) continue;
+
+        final res = await Process.run(suBin, ['-c', script])
+            .timeout(const Duration(seconds: 8));
+        try {
+          LogService.log(
+              '[RootBoost] phantom killer disabled via $suBin (rc=${res.exitCode})');
+        } catch (_) {}
+        break;
+      } catch (e) {
+        debugPrint('RootBoost via $suBin skipped: $e');
+      }
     }
   }
 }

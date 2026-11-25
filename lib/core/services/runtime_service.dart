@@ -4372,9 +4372,9 @@ if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
     if [ -x /usr/local/bin/aapt2-arm64 ] && (/usr/local/bin/aapt2-arm64 compile --help 2>&1 | grep -q -- '--source-path'); then
         cp -f /usr/local/bin/aapt2-arm64 /usr/bin/aapt2
         chmod +x /usr/bin/aapt2
-    elif [ -x /usr/local/bin/quantum-heal-x64 ]; then
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
     fi
+    # NOTE: do NOT call quantum-heal-x64 here. It downloads amd64 glibc and
+    # spawns curl/dpkg, which is only needed for Flutter release AOT builds.
 fi
 
 # Always auto-heal terminfo database if missing xterm-256color or broken
@@ -4696,11 +4696,17 @@ if [ -d "/root/flutter/.git" ]; then
     fi
 fi
 
-# Ensure QEMU user static & x86_64 glibc dynamic linker are available for Flutter release builds
-if [ -x /usr/local/bin/quantum-heal-x64 ]; then
-    /usr/local/bin/quantum-heal-x64 2>/dev/null || true
-elif [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
-    (apt-get update -y && apt-get install -y qemu-user-static) 2>/dev/null || true
+# x86_64 glibc / Box64 / QEMU are ONLY needed for Flutter RELEASE AOT builds.
+# Running quantum-heal-x64 on every fresh setup downloads a ~30 MB amd64 deb
+# and spawns curl/dpkg processes, which is a large part of the "many processes"
+# and CPU load seen on ARM64 devices. Build scripts already call it explicitly
+# right before a release build, so skip it during initial setup.
+if [ -f /root/.quantum_flutter_release_requested ] || [ "$1" = "--force-x64" ]; then
+    if [ -x /usr/local/bin/quantum-heal-x64 ]; then
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+    elif [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
+        (apt-get update -y && apt-get install -y qemu-user-static) 2>/dev/null || true
+    fi
 fi
 if [ -x /usr/local/bin/quantum-patch-ndk ]; then
     /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
