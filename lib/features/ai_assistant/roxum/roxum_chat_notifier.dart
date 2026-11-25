@@ -5,25 +5,23 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
-import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/talker_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_acp_bridge.dart';
-import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_skill_loader.dart';
-import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/agent/data/agent_engine.dart';
 import 'package:quantum_ide/features/agent/domain/agent_event.dart';
 import 'package:quantum_ide/features/agent/domain/agent_tool.dart';
+import 'package:quantum_ide/core/models/chat_models.dart';
+import 'package:quantum_ide/features/agent/data/built_in_tools.dart';
+import 'package:quantum_ide/features/agent/domain/agent_tool.dart' as ps;
+import 'package:quantum_ide/features/mcp/application/mcp_controller.dart';
+import 'package:quantum_ide/features/providers/data/roxum_provider_adapter.dart';
+import 'package:quantum_ide/features/providers/domain/provider_types.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
-
-/// Feature flag for the PocketStrike-style ReAct engine.
-/// Disable with: --dart-define=QI_USE_NEW_AGENT=false to return to the legacy loop.
-const bool useNewAgentEngine =
-    bool.fromEnvironment('QI_USE_NEW_AGENT', defaultValue: true);
 
 enum RoxumChatMode { ask, agent }
 
@@ -1031,32 +1029,22 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           isCancelled: () => _cancelled,
         );
       } else {
-        final baseTools = state.chatMode == RoxumChatMode.agent
-            ? RoxumAgenticTools.buildOpenAiTools(state.toolSelections)
-            : const <Map<String, dynamic>>[];
-        List<Map<String, dynamic>> mcpTools = const [];
-        if (state.chatMode == RoxumChatMode.agent &&
-            ref.read(mcpServiceProvider).any((s) => s.isEnabled)) {
-          try {
-            final rawMcp = await ref
-                .read(mcpServiceProvider.notifier)
-                .getAvailableMcpTools()
-                .timeout(const Duration(seconds: 12));
-            RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
-            final filteredMcp = _selectRelevantMcpTools(
-              rawMcp: rawMcp,
-              prompt: trimmed,
-              hasNativeFs: baseTools.any((t) {
-                final fnName =
-                    (t['function'] as Map?)?['name']?.toString() ?? '';
-                return fnName == 'readFile' || fnName == 'writeFile';
-              }),
-            );
-            mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(filteredMcp);
-            RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
-          } catch (_) {}
-        }
-        final toolsSchema = <Map<String, dynamic>>[...baseTools, ...mcpTools];
+        // PocketStrike tool stack: built-in mobile tools + live MCP tools.
+        final ideTools = state.chatMode == RoxumChatMode.agent
+            ? BuiltInTools.all(allowedRoots: const <String>[])
+            : const <ps.AgentTool>[];
+        final enabledIds = ref.read(mcpServersProvider).value
+                ?.where((server) => server.enabled)
+                .map((server) => server.id)
+                .toSet() ??
+            <String>{};
+        final agentTools = <ps.AgentTool>[
+          ...ideTools,
+          ...ref
+              .read(mcpConnectionsProvider.notifier)
+              .manager
+              .toolsForServers(enabledIds),
+        ];
 
         final projectBlocks = _loadProjectContextBlocks(workspace);
         final matchedSkillsBlock = RoxumSkillLoader.buildMatchedSkillsBlock(
@@ -1130,193 +1118,98 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           {'role': 'user', 'content': currentUserContent},
         ];
 
-        final toolsRunner = state.chatMode == RoxumChatMode.agent
-            ? RoxumAgenticTools(
-                ref,
-                pendingEdits: pendingCopy,
-                onPendingEditsChanged: handlePendingEditsChanged,
-              )
-            : null;
-
-        if (useNewAgentEngine && toolsRunner != null) {
-          // PocketStrike-style ReAct engine: UI-agnostic, no ad-hoc nudges.
-          final engineTools = <AgentTool>[];
-          for (final spec in toolsSchema) {
-            final fn = (spec['function'] as Map?) ?? const {};
-            final name = fn['name']?.toString() ?? '';
-            if (name.isEmpty) continue;
-            final description = fn['description']?.toString() ?? name;
-            final rawSchema =
-                (fn['parameters'] as Map?) ?? const <String, dynamic>{};
-            final schema = Map<String, dynamic>.from(rawSchema);
-            engineTools.add(
-              AgentTool(
-                name: name,
-                description: description,
-                inputSchema: schema,
-                risk: name.startsWith('mcp__')
-                    ? ToolRisk.external
-                    : (name.contains('write') ||
-                            name.contains('delete') ||
-                            name.contains('runCommand'))
-                        ? ToolRisk.destructive
-                        : ToolRisk.safe,
-                run: (args) async {
-                  final res = await toolsRunner.execute(name, args);
-                  return res.output;
+        // PocketStrike ReAct engine via our provider adapter.
+        final answerBuffer = StringBuffer();
+        final callRecordIds = <String, String>{};
+        final turnMessages = history
+            .map(
+              (m) => ChatMessage(
+                id: m['id']?.toString() ?? '',
+                role: switch (m['role']?.toString()) {
+                  'system' => MessageRole.system,
+                  'user' => MessageRole.user,
+                  'tool' => MessageRole.tool,
+                  _ => MessageRole.assistant,
                 },
+                content: m['content']?.toString() ?? '',
+                toolCallId: m['tool_call_id']?.toString(),
+                toolName: m['name']?.toString(),
               ),
-            );
-          }
+            )
+            .toList();
+        final adapter = RoxumProviderAdapter(
+          client: _client,
+          model: model!,
+          type: ProviderType.fromId((model!.provider).toLowerCase()),
+        );
 
-          // Diagnostics first: the model must not read a 1000-line file just to
-          // discover two syntax errors. Feed a compact analyzer summary into the
-          // conversation before the ReAct loop starts.
-          final engineHistory = List<Map<String, dynamic>>.from(history);
-          try {
-            final diag = await toolsRunner.execute(
-              'getLspDiagnostics',
-              const <String, dynamic>{},
-            );
-            final diagText = diag.output.trim();
-            if (diagText.isNotEmpty) {
-              final compact = diagText.length > 4000
-                  ? '${diagText.substring(0, 4000)}\n... [truncated]'
-                  : diagText;
-              engineHistory.insert(0, {
-                'role': 'system',
-                'content':
-                    'Static analysis of the workspace (already executed):\n$compact\n'
-                    'Use this to locate errors. Call readFile only with the exact '
-                    'startLine/endLine range you need.',
-              });
-            }
-          } catch (_) {}
-
-          final answerBuffer = StringBuffer();
-          // Keep one UI record per provider tool call. Started/Completed events
-          // carry the same callId so we update the row instead of adding a
-          // duplicate "[RUNNING]" + "[OK]" pair (seen in chat exports).
-          final callRecordIds = <String, String>{};
-          final engine = AgentEngine(maxSteps: 48);
-          await for (final event in engine.run(
-            runTurn: ({
-              required messages,
-              required toolSpecs,
-              required onText,
-              required onReasoning,
-              required isCancelled,
-            }) async {
-              final turn = await _client.streamTurnForAgent(
-                model: model!,
-                messages: messages,
-                toolSpecs: toolSpecs,
-                onText: onText,
-                onReasoning: onReasoning,
-                isCancelled: isCancelled,
-              );
-              return AgentTurnResult(
-                text: turn.text,
-                reasoning: turn.reasoning,
-                toolCalls: turn.toolCalls
-                    .map(
-                      (c) => (
-                        id: c.id,
-                        name: c.name,
-                        args: c.args,
-                      ),
-                    )
-                    .toList(),
-              );
-            },
-            history: engineHistory,
-            tools: engineTools,
-            policy: ConfirmationPolicy.destructiveOnly,
-            requestConfirmation: (tool, call) async {
-              // Existing UI confirmation sheet is wired in handleToolEvent for
-              // the legacy loop; the new engine currently auto-approves.
-              return ConfirmResult.allow;
-            },
-            isCancelled: () => _cancelled,
-          )) {
-            switch (event) {
-              case AgentStepEvent(:final step):
-                currentStep = step;
-                stepStartedAt = DateTime.now();
-              case AgentStatusEvent(:final message):
-                handleReasoningText(message);
-              case AgentReasoningEvent(:final text):
-                handleReasoningText(text);
-              case AgentTextDeltaEvent(:final text):
-                answerBuffer.write(text);
-                handleAssistantText(text);
-              case AgentToolCallStartedEvent(
-                  :final callId,
-                  :final name,
-                  :final args
-                ):
-                final recordId =
-                    callRecordIds.putIfAbsent(
-                      callId,
-                      () => DateTime.now().microsecondsSinceEpoch.toString(),
-                    );
-                handleToolEvent(
-                  RoxumToolCallRecord(
-                    id: recordId,
-                    name: name,
-                    arguments: args,
-                  ),
-                );
-              case AgentToolCallCompletedEvent(
-                  :final callId,
-                  :final name,
-                  :final output,
-                  :final isError
-                ):
-                final recordId =
-                    callRecordIds.putIfAbsent(
-                      callId,
-                      () => DateTime.now().microsecondsSinceEpoch.toString(),
-                    );
-                handleToolEvent(
-                  RoxumToolCallRecord(
-                    id: recordId,
-                    name: name,
-                    arguments: const {},
-                    isRunning: false,
-                    success: !isError,
-                    output: output,
-                  ),
-                );
-              case AgentRunErrorEvent(:final message):
-                handleReasoningText('Error: $message');
-              case AgentRunFinishedEvent():
-                break;
-              default:
-                break;
-            }
-          }
-          finalAnswer = answerBuffer.toString();
-        } else {
-          finalAnswer = await _client.runAgentLoop(
-            model: model!,
-            historyMessages: history,
-            tools: toolsSchema,
-            agenticTools: toolsRunner,
-            isCancelled: () => _cancelled,
-            onStepStart: (step) {
-              currentStep = step;
-              stepStartedAt = DateTime.now();
-            },
-            onRetryStatus: (status) {
+        await for (final event in AgentEngine(maxSteps: 48).run(
+          provider: adapter,
+          history: turnMessages,
+          model: model!.model,
+          params: GenerationParams(systemPrompt: systemPrompt),
+          tools: agentTools,
+          policy: ConfirmationPolicy.destructiveOnly,
+          requestConfirmation: (tool, call) async => ConfirmResult.allow,
+        )) {
+          switch (event) {
+            case AgentStatusEvent(:final status):
               handleReasoningText(status);
-            },
-            onToolEvent: handleToolEvent,
-            onAssistantText: handleAssistantText,
-            onReasoningText: handleReasoningText,
-            onUsage: handleUsage,
-          );
+            case AgentTextDeltaEvent(:final text):
+              answerBuffer.write(text);
+              handleAssistantText(text);
+            case AgentToolCallStartedEvent(:final call):
+              final recordId = callRecordIds.putIfAbsent(
+                call.id,
+                () => DateTime.now().microsecondsSinceEpoch.toString(),
+              );
+              handleToolEvent(
+                RoxumToolCallRecord(
+                  id: recordId,
+                  name: call.name,
+                  arguments: call.argumentsJson.isEmpty
+                      ? const {}
+                      : (() {
+                          try {
+                            return Map<String, dynamic>.from(
+                              jsonDecode(call.argumentsJson) as Map,
+                            );
+                          } catch (_) {
+                            return <String, dynamic>{};
+                          }
+                        })(),
+                ),
+              );
+            case AgentToolCallCompletedEvent(
+                :final call,
+                :final result,
+                :final isError
+              ):
+              final recordId = callRecordIds.putIfAbsent(
+                call.id,
+                () => DateTime.now().microsecondsSinceEpoch.toString(),
+              );
+              handleToolEvent(
+                RoxumToolCallRecord(
+                  id: recordId,
+                  name: call.name,
+                  arguments: const {},
+                  isRunning: false,
+                  success: !isError,
+                  output: result,
+                ),
+              );
+            case AgentRunErrorEvent(:final message):
+              handleReasoningText('Error: $message');
+            case AgentAssistantMessageEvent(:final message):
+              answerBuffer.write(message.content);
+            case AgentRunFinishedEvent():
+              break;
+            default:
+              break;
+          }
         }
+        finalAnswer = answerBuffer.toString();
       }
 
       if (model?.provider == 'OpenRouter') {

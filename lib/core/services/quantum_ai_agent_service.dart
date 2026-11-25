@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/core/services/agent_toolbox.dart';
-import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
@@ -2384,14 +2383,6 @@ final quantumAiAgentServiceProvider =
         );
       }
 
-      final mcpBridge = McpBridge(
-        listTools: () =>
-            ref.read(mcpServiceProvider.notifier).getAvailableMcpTools(),
-        call: (server, tool, args) => ref
-            .read(mcpServiceProvider.notifier)
-            .executeMcpTool(server, tool, args),
-        internetAccess: () =>
-            ref.read(mcpServiceProvider.notifier).internetAccess,
-      );
+      final mcpBridge = McpBridge.empty();
       return QuantumAiAgentService(runtime, settings, ws, agentCtx, mcpBridge);
     });

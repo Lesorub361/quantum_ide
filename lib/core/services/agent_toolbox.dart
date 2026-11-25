@@ -32,6 +32,16 @@ class McpBridge {
   final Future<Map<String, dynamic>> Function(String server, String tool, Map<String, dynamic> args) call;
   final bool Function() internetAccess;
   const McpBridge({required this.listTools, required this.call, required this.internetAccess});
+
+  /// No MCP servers configured (PocketStrike MCP is wired separately).
+  static McpBridge empty() => McpBridge(
+        listTools: () async => const [],
+        call: (server, tool, args) async => {
+          'isError': true,
+          'content': 'MCP bridge is not configured in this agent path.',
+        },
+        internetAccess: () => false,
+      );
 }
 
 class ToolCall {

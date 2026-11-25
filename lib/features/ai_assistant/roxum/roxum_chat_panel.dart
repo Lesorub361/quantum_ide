@@ -10,18 +10,15 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:path/path.dart' as p;
-import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/token_counter_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_acp_bridge.dart';
-import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_modern_cards.dart';
-import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
@@ -308,7 +305,6 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     final chatState = ref.watch(roxumChatProvider);
     final settings = ref.watch(settingsProvider);
     final editorState = ref.watch(editorProvider);
-    final mcpServers = ref.watch(mcpServiceProvider);
     final models = ref.read(roxumChatProvider.notifier).availableModels(settings);
     final session = chatState.currentSession;
 
@@ -355,7 +351,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     final showActiveFileChip =
         activeFilePath != null && activeFilePath != _dismissedActiveFilePath;
 
-    final enabledMcpCount = mcpServers.where((s) => s.isEnabled).length;
+    final enabledMcpCount = 0;
     final hasOpenRouterKey = settings.openrouterApiKey.trim().isNotEmpty;
 
     final panelTheme = Theme.of(context).copyWith(
@@ -3974,398 +3970,23 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     mistralCtrl.dispose();
   }
 
+
   Future<void> _showMcpServersDialog(
     BuildContext context,
     Color accentColor,
   ) async {
-    final isNarrow = MediaQuery.sizeOf(context).width < 600;
-
-    Widget buildMcpBody(BuildContext modalCtx) {
-      return Consumer(
-        builder: (ctx, modalRef, _) {
-          final servers = modalRef.watch(mcpServiceProvider);
-          final mcpNotifier = modalRef.read(mcpServiceProvider.notifier);
-          final runtime = modalRef.read(runtimeServiceProvider);
-          final rawWorkspacePath =
-              modalRef.read(workspaceProvider).currentPath ?? '.';
-          final effectiveWorkspacePath =
-              (Platform.isAndroid && !runtime.useNativeRootMode)
-                  ? runtime.toProotPath(rawWorkspacePath)
-                  : rawWorkspacePath;
-          final presets = McpService.topPresets(
-            workspacePath: effectiveWorkspacePath,
-          );
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      LucideIcons.blocks,
-                      size: 18,
-                      color: servers.any((s) => s.isEnabled)
-                          ? const Color(0xFF22C55E)
-                          : accentColor,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'MCP-серверы (Агент + Flutter)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  children: [
-                    SwitchListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      value: mcpNotifier.internetAccess,
-                      onChanged: (val) => mcpNotifier.setInternetAccess(val),
-                      title: const Text(
-                        'Доступ MCP к интернету и документации',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                      subtitle: const Text(
-                        'Разрешить web_search_docs, fetch_url_markdown и Context7',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                    ),
-                    const Divider(height: 16),
-                    if (servers.isNotEmpty) ...[
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Подключённые серверы',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          FutureBuilder<List<Map<String, dynamic>>>(
-                            future: mcpNotifier.getAvailableMcpTools(),
-                            builder: (context, snap) {
-                              final count = snap.data?.length;
-                              if (count == null) {
-                                return const SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 1.5,
-                                  ),
-                                );
-                              }
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF22C55E)
-                                      .withValues(alpha: 0.16),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '$count активных инструментов',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF22C55E),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      for (final s in servers)
-                        ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: Switch(
-                            value: s.isEnabled,
-                            onChanged: (_) => modalRef
-                                .read(mcpServiceProvider.notifier)
-                                .toggleServer(s.name),
-                          ),
-                          title: Text(s.name),
-                          subtitle: Text(
-                            s.type == McpServerType.stdio
-                                ? '${s.command} ${s.args.join(' ')}'
-                                : s.url,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(LucideIcons.trash_2, size: 17),
-                            onPressed: () => modalRef
-                                .read(mcpServiceProvider.notifier)
-                                .removeServer(s.name),
-                          ),
-                        ),
-                      const Divider(height: 20),
-                    ],
-                    const Text(
-                      'Топ MCP-серверов (добавить в 1 клик)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    for (final preset in presets)
-                      Builder(
-                        builder: (_) {
-                          final added = servers
-                              .any((s) => s.name == preset.config.name);
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            child: ListTile(
-                              dense: true,
-                              title: Text(
-                                preset.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              subtitle: Text(
-                                preset.description,
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                              trailing: added
-                                  ? const Icon(
-                                      Icons.check_circle,
-                                      color: Color(0xFF22C55E),
-                                      size: 18,
-                                    )
-                                  : FilledButton.tonal(
-                                      onPressed: () => modalRef
-                                          .read(mcpServiceProvider.notifier)
-                                          .addServer(preset.config),
-                                      child: const Text('Добавить'),
-                                    ),
-                            ),
-                          );
-                        },
-                      ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Wrap(
-                  alignment: WrapAlignment.end,
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: () =>
-                          _showAddCustomMcpDialog(modalCtx, modalRef),
-                      icon: const Icon(LucideIcons.plus, size: 15),
-                      label: Text(AppLocalizations.of(context)!.addCustomMcp),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(modalCtx).pop(),
-                      child: Text(AppLocalizations.of(context)!.close),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      );
-    }
-
-    if (isNarrow) {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (sheetCtx) {
-          final maxHeight = MediaQuery.sizeOf(sheetCtx).height * 0.85;
-          return SizedBox(
-            height: maxHeight,
-            child: buildMcpBody(sheetCtx),
-          );
-        },
-      );
-    } else {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogCtx) => Dialog(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480, maxHeight: 540),
-            child: buildMcpBody(dialogCtx),
-          ),
-        ),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('MCP servers are configured in Settings → MCP')),
+    );
   }
 
   Future<void> _showAddCustomMcpDialog(
     BuildContext context,
-    WidgetRef modalRef,
+    WidgetRef ref,
   ) async {
-    final nameCtrl = TextEditingController();
-    final cmdCtrl = TextEditingController();
-    final argsCtrl = TextEditingController();
-    final urlCtrl = TextEditingController();
-    var serverType = McpServerType.stdio;
-    String? errorText;
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocalState) => AlertDialog(
-          title: const Text('Новый MCP-сервер', style: TextStyle(fontSize: 16)),
-          content: SizedBox(
-            width: 390,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Название (например, my-mcp)',
-                      isDense: true,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SegmentedButton<McpServerType>(
-                    segments: const [
-                      ButtonSegment(
-                        value: McpServerType.stdio,
-                        label: Text('stdio (команда)'),
-                      ),
-                      ButtonSegment(
-                        value: McpServerType.sse,
-                        label: Text('SSE (URL)'),
-                      ),
-                    ],
-                    selected: {serverType},
-                    onSelectionChanged: (s) {
-                      setLocalState(() {
-                        serverType = s.first;
-                        errorText = null;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  if (serverType == McpServerType.stdio) ...[
-                    TextField(
-                      controller: cmdCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Команда (например, npx или uvx)',
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: argsCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Аргументы через пробел',
-                        hintText: '-y @modelcontextprotocol/server-memory',
-                        isDense: true,
-                      ),
-                    ),
-                  ] else
-                    TextField(
-                      controller: urlCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'SSE URL (например, http://localhost:3000/sse)',
-                        isDense: true,
-                      ),
-                    ),
-                  if (errorText != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      errorText!,
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(AppLocalizations.of(ctx)!.cancel),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = nameCtrl.text.trim();
-                final cmd = cmdCtrl.text.trim();
-                final url = urlCtrl.text.trim();
-                if (name.isEmpty) {
-                  setLocalState(() => errorText = 'Укажите название сервера');
-                  return;
-                }
-                if (serverType == McpServerType.stdio && cmd.isEmpty) {
-                  setLocalState(() => errorText = 'Укажите команду запуска');
-                  return;
-                }
-                if (serverType == McpServerType.sse && url.isEmpty) {
-                  setLocalState(() => errorText = 'Укажите URL сервера');
-                  return;
-                }
-                final args = argsCtrl.text
-                    .trim()
-                    .split(RegExp(r'\s+'))
-                    .where((e) => e.isNotEmpty)
-                    .toList();
-                modalRef.read(mcpServiceProvider.notifier).addServer(
-                      McpServerConfig(
-                        name: name,
-                        type: serverType,
-                        command: serverType == McpServerType.stdio ? cmd : '',
-                        args: serverType == McpServerType.stdio ? args : const [],
-                        url: serverType == McpServerType.sse ? url : '',
-                      ),
-                    );
-                Navigator.of(ctx).pop();
-              },
-              child: const Text('Сохранить'),
-            ),
-          ],
-        ),
-      ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('MCP servers are configured in Settings → MCP')),
     );
-    nameCtrl.dispose();
-    cmdCtrl.dispose();
-    argsCtrl.dispose();
-    urlCtrl.dispose();
   }
+
 }

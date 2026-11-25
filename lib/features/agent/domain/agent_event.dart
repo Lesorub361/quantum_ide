@@ -1,12 +1,58 @@
-/// UI-agnostic events emitted by [AgentEngine].
-/// The chat layer renders a timeline from these; the engine never touches widgets.
+import '../../../core/models/chat_models.dart';
+
+/// One step in an agent run, shown in the terminal-styled timeline and
+/// persisted to the AgentRuns table as JSON.
+class AgentStep {
+  const AgentStep({
+    required this.type,
+    required this.timestamp,
+    this.text,
+    this.toolName,
+    this.argumentsJson,
+    this.result,
+    this.isError = false,
+  });
+
+  /// thought | toolCall | observation | denied | error | status
+  final String type;
+  final DateTime timestamp;
+  final String? text;
+  final String? toolName;
+  final String? argumentsJson;
+  final String? result;
+  final bool isError;
+
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'timestamp': timestamp.toIso8601String(),
+        if (text != null) 'text': text,
+        if (toolName != null) 'toolName': toolName,
+        if (argumentsJson != null) 'argumentsJson': argumentsJson,
+        if (result != null) 'result': result,
+        'isError': isError,
+      };
+
+  factory AgentStep.fromJson(Map<String, dynamic> json) => AgentStep(
+        type: json['type'] as String,
+        timestamp:
+            DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+                DateTime.now(),
+        text: json['text'] as String?,
+        toolName: json['toolName'] as String?,
+        argumentsJson: json['argumentsJson'] as String?,
+        result: json['result'] as String?,
+        isError: json['isError'] as bool? ?? false,
+      );
+}
+
+/// Live events emitted by the agent engine while running.
 sealed class AgentEvent {
   const AgentEvent();
 }
 
 class AgentStatusEvent extends AgentEvent {
-  const AgentStatusEvent(this.message);
-  final String message;
+  const AgentStatusEvent(this.status);
+  final String status;
 }
 
 class AgentTextDeltaEvent extends AgentEvent {
@@ -14,40 +60,32 @@ class AgentTextDeltaEvent extends AgentEvent {
   final String text;
 }
 
-class AgentReasoningEvent extends AgentEvent {
-  const AgentReasoningEvent(this.text);
-  final String text;
-}
-
-class AgentStepEvent extends AgentEvent {
-  const AgentStepEvent(this.step);
-  final int step;
-}
-
 class AgentToolCallStartedEvent extends AgentEvent {
-  const AgentToolCallStartedEvent(this.callId, this.name, this.args);
-  final String callId;
-  final String name;
-  final Map<String, dynamic> args;
+  const AgentToolCallStartedEvent(this.call);
+  final ToolCallInfo call;
 }
 
 class AgentToolCallCompletedEvent extends AgentEvent {
-  const AgentToolCallCompletedEvent(
-    this.callId,
-    this.name,
-    this.output,
-    this.isError,
-  );
-  final String callId;
-  final String name;
-  final String output;
+  const AgentToolCallCompletedEvent(this.call, this.result, this.isError);
+  final ToolCallInfo call;
+  final String result;
   final bool isError;
 }
 
 class AgentToolCallDeniedEvent extends AgentEvent {
-  const AgentToolCallDeniedEvent(this.callId, this.name);
-  final String callId;
-  final String name;
+  const AgentToolCallDeniedEvent(this.call);
+  final ToolCallInfo call;
+}
+
+/// The assistant turn is complete (no more tool calls).
+class AgentAssistantMessageEvent extends AgentEvent {
+  const AgentAssistantMessageEvent(this.message);
+  final ChatMessage message;
+}
+
+class AgentUsageEvent extends AgentEvent {
+  const AgentUsageEvent(this.usage);
+  final UsageInfo usage;
 }
 
 class AgentRunErrorEvent extends AgentEvent {
