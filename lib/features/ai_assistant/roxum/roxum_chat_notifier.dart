@@ -21,9 +21,9 @@ import 'package:quantum_ide/features/agent/domain/agent_tool.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 
 /// Feature flag for the PocketStrike-style ReAct engine.
-/// Enable with: --dart-define=QI_USE_NEW_AGENT=true
+/// Disable with: --dart-define=QI_USE_NEW_AGENT=false to return to the legacy loop.
 const bool useNewAgentEngine =
-    bool.fromEnvironment('QI_USE_NEW_AGENT', defaultValue: false);
+    bool.fromEnvironment('QI_USE_NEW_AGENT', defaultValue: true);
 
 enum RoxumChatMode { ask, agent }
 
