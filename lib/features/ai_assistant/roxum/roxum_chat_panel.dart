@@ -17,6 +17,8 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_acp_bridge.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_modern_cards.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';

@@ -1881,3 +1881,20 @@ done
     );
   }
 }
+
+
+/// Compatibility shim for the removed legacy MCP service. Diagnostics helpers
+/// are pass-through now; MCP is handled by PocketStrike's manager.
+class McpService {
+  static String formatCompactAnalyzerDiagnostics(
+    String text, {
+    bool errorsOnly = false,
+  }) =>
+      text;
+  static Future<String> appendErrorSourceSnippets(
+    String workspacePath,
+    String text, {
+    int maxSnippets = 6,
+  }) async =>
+      text;
+}

@@ -8,6 +8,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class RoxumThinkingCard extends StatefulWidget {
