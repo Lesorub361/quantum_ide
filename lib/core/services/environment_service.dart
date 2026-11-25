@@ -50,16 +50,28 @@ class EnvironmentService extends StateNotifier<EnvironmentState> {
 
     final tools = <ToolStatus>[];
 
-    tools.add(await _checkTool(runtime, 'dart', '--version'));
-    tools.add(await _checkTool(runtime, 'git', '--version'));
-    tools.add(await _checkTool(runtime, 'flutter', '--version'));
-    tools.add(await _checkTool(runtime, 'adb', '--version'));
-    tools.add(await _checkTool(runtime, 'clang', '--version'));
-    tools.add(await _checkTool(runtime, 'cmake', '--version'));
-    tools.add(await _checkTool(runtime, 'ninja', '--version'));
+    // Run version checks in parallel and with hard timeouts. `flutter --version`
+    // can hang forever inside PRoot on low-RAM devices (Dart VM stalls), which
+    // previously left the UI stuck on "Checking environment..." indefinitely.
+    tools.addAll(await Future.wait([
+      _checkTool(runtime, 'dart', '--version'),
+      _checkTool(runtime, 'git', '--version'),
+      _checkTool(runtime, 'flutter', '--version'),
+      _checkTool(runtime, 'adb', '--version'),
+      _checkTool(runtime, 'clang', '--version'),
+      _checkTool(runtime, 'cmake', '--version'),
+      _checkTool(runtime, 'ninja', '--version'),
+    ]));
 
     // Check Android SDK platform health
-    tools.add(await _checkAndroidSdkHealth(runtime, l10n));
+    tools.add(await _checkAndroidSdkHealth(runtime, l10n).timeout(
+          const Duration(seconds: 12),
+          onTimeout: () => ToolStatus(
+            name: 'Android SDK platforms',
+            isInstalled: false,
+            error: 'check timed out',
+          ),
+        ));
 
     if (Platform.isAndroid) {
       tools.add(ToolStatus(
@@ -175,8 +187,26 @@ class EnvironmentService extends StateNotifier<EnvironmentState> {
     String versionArgs,
   ) async {
     try {
-      final result =
-          await runtime.runCommand('$name $versionArgs').catchError((e) => '');
+      // `timeout` guarantees a hung flutter/dart process cannot block startup.
+      final result = await runtime
+          .runCommand('timeout 8 $name $versionArgs 2>&1')
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => '__QI_TIMEOUT__',
+          )
+          .catchError((e) => '');
+
+      if (result == '__QI_TIMEOUT__') {
+        // Kill only our own spawned check process (same UID, no root needed).
+        runtime
+            .runCommand('pkill -9 -f "$name $versionArgs" 2>/dev/null || true')
+            .catchError((_) => '');
+        return ToolStatus(
+          name: name,
+          isInstalled: true,
+          version: 'check timed out (possibly slow environment)',
+        );
+      }
       if (result.isNotEmpty) {
         return ToolStatus(
           name: name,
