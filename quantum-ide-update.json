@@ -1,16 +1,16 @@
 {
-  "versionCode": 324,
-  "versionName": "1.2.308",
-  "notes": "## 🚀 QuantumIDE v1.2.308 — Интеграция OpenCode, Gemini CLI и Claude Code по протоколу ACP (`acp_dart`)\n\n### ⚡ Настоящие кодинг-агенты 2026 прямо в интерфейсе чата\n- **Официальный стандарт Agent Client Protocol (`acp_dart ^0.5.0`)**: теперь QuantumIDE подключает напрямую настоящие CLI-движки уровня Zed/JetBrains — **OpenCode (`opencode acp`)**, **Gemini CLI (`gemini --experimental-acp`)** и **Claude Code (`claude-code-acp`)** — прямо в красивый чат с живыми diff-ами, таймлайном, мыслями и автообновлением редактора.\n- **Автообнаружение и установка в 1 клик**: если `opencode` уже установлен в вашей среде PRoot/Root/Desktop, QuantumIDE автоматически его находит и подключает с вашими API-ключами из настроек; если нет — в меню движков есть кнопка **«Установить»** в 1 клик.\n- **Улучшение встроенного движка Roxum Built-in (Dart)**: диагностика ошибок в режиме `errorsOnly` (больше нет бесконечной погони за `info`/`warning` при `0 error(s)`), защита от неоднозначной замены в `editFile`, таймаут 45с на зависание SSE-стрима, `max_tokens: 16384` для reasoning-моделей и агрессивное сжатие больших `readFile` (-75% токенов).",
+  "versionCode": 325,
+  "versionName": "1.2.309",
+  "notes": "## QuantumIDE v1.2.309 — исправления производительности на Android\n- Phantom Process Killer отключается через root (Magisk/KernelSU/APatch), если нет Shizuku; применяется сразу при старте.\n-_setup-arm64 больше не скачивает x86_64 glibc при каждом запуске — только перед Flutter Release-сборкой.\n- Логи больше не дублируются в Android logcat по умолчанию.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.308/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.309/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.308",
-  "buildNumber": 324,
-  "tag_name": "v1.2.308",
-  "releaseNotes": "Интеграция настоящих ИИ-агентов OpenCode, Gemini CLI и Claude Code через официальный Agent Client Protocol (acp_dart) с авто-подхватом ключей и установкой в 1 клик, а также ускорение и errorsOnly-диагностика встроенного движка Roxum."
+  "version": "1.2.309",
+  "buildNumber": 325,
+  "tag_name": "v1.2.309",
+  "releaseNotes": "Исправления производительности: root-fallback для Phantom Process Killer, отложенная загрузка x86_64 glibc, меньше спама в logcat."
 }
