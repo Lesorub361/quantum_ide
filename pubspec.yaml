@@ -1,7 +1,7 @@
 name: quantum_ide
 description: "QuantumIDE - Next-generation AI-powered mobile & desktop IDE with OpenCode-grade autonomous agent, built with Flutter."
 publish_to: 'none'
-version: 1.2.309+325
+version: 1.2.310+326
 
 environment:
   sdk: ^3.11.4
