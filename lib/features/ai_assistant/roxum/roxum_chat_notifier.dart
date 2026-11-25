@@ -1143,7 +1143,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         final adapter = RoxumProviderAdapter(
           client: _client,
           model: model!,
-          type: ProviderType.fromId((model!.provider).toLowerCase()),
+          type: ProviderType.custom,
         );
 
         await for (final event in AgentEngine(maxSteps: 48).run(
