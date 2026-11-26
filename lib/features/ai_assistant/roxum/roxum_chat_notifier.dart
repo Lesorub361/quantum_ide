@@ -774,7 +774,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final runToken = ++_activeRunToken;
     state = state.copyWith(
       isGenerating: true,
-      selectedModelId: model?.id ?? state.selectedModelId,
+      selectedModelId: model.id,
     );
 
     final workspace = ref.read(workspaceProvider).currentPath ?? '';
@@ -1029,7 +1029,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         model: model.model,
         params: GenerationParams(systemPrompt: systemPrompt),
         tools: agentTools,
-        policy: ConfirmationPolicy.autonomous,
+        policy: ps.ConfirmationPolicy.autonomous,
         cancelToken: cancelToken,
         requestConfirmation: (tool, call) async => ConfirmResult.allow,
       )) {
