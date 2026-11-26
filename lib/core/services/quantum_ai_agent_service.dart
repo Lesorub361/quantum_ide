@@ -479,9 +479,7 @@ class QuantumAiAgentService extends ChangeNotifier {
       if (idx >= 0) {
         _sessions[idx].title = title;
         _sessions[idx].updatedAt = DateTime.now();
-        final dir = _getSessionsDirectory();
-        final file = File(p.join(dir.path, '$sessionId.json'));
-        await file.writeAsString(jsonEncode(_sessions[idx].toJson()));
+        await _sessionStore.save(_getWorkspacePath(), _sessions[idx]);
       }
       if (_currentSessionId == sessionId) {
         _currentSessionTitle = title;
