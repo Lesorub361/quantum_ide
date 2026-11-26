@@ -58,10 +58,17 @@ class OpenAiCompatibleProvider implements AIProvider {
     return '$clean/models';
   }
 
+  bool get _isOpenRouter =>
+      type == ProviderType.openrouter || _cleanBaseUrl.contains('openrouter.ai');
+
   Map<String, String> get _headers => {
         if (apiKey != null && apiKey!.trim().isNotEmpty)
           'Authorization': 'Bearer ${apiKey!.trim()}',
         'Content-Type': 'application/json',
+        if (_isOpenRouter) ...{
+          'HTTP-Referer': 'https://github.com/Lesorub361/quantum_ide',
+          'X-Title': 'Quantum IDE',
+        },
       };
 
   /// Converts internal messages into OpenAI wire format.
@@ -128,7 +135,11 @@ class OpenAiCompatibleProvider implements AIProvider {
       'temperature': request.params.temperature,
       'top_p': request.params.topP,
       'max_tokens': request.params.maxTokens,
-      if (type == ProviderType.openai) ...{
+      if (type == ProviderType.openai ||
+          type == ProviderType.openrouter ||
+          type == ProviderType.groq ||
+          type == ProviderType.nvidia ||
+          _isOpenRouter) ...{
         'stream_options': {'include_usage': true},
       },
       if (type.supportsPenalties) ...{
