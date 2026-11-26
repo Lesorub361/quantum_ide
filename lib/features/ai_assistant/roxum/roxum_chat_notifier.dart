@@ -1098,7 +1098,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           case AgentUsageEvent(:final usage):
             final pTok = usage.promptTokens ?? 0;
             final cTok = usage.completionTokens ?? 0;
-            final total = usage.totalTokens;
+            final total = usage.total;
             if (total > 0) {
               handleUsage(
                 RoxumUsageStats(
