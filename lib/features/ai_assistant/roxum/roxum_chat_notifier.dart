@@ -399,12 +399,45 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       updatedAt: DateTime.now(),
     );
     _restoreSessions(prefsKey);
+    Future.microtask(_restoreToolSelections);
     Future.microtask(refreshAllModels);
     return RoxumChatState(
       sessions: [initialSession],
       currentSessionId: initialId,
       toolSelections: normalizeAgenticToolSelections(null),
     );
+  }
+
+  static const String _toolSelectionsPrefsKey = 'roxum_tool_selections_v1';
+
+  Future<void> _restoreToolSelections() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_toolSelectionsPrefsKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        final mapped = <String, bool>{
+          for (final entry in decoded.entries)
+            if (entry.value is bool)
+              entry.key.toString(): entry.value as bool,
+        };
+        state = state.copyWith(
+          toolSelections: normalizeAgenticToolSelections(mapped),
+        );
+      }
+    } catch (e) {
+      TalkerService.warning(
+        '[RoxumChat] Failed to restore tool selections: $e',
+      );
+    }
+  }
+
+  Future<void> _persistToolSelections(Map<String, bool> selections) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_toolSelectionsPrefsKey, jsonEncode(selections));
+    } catch (_) {}
   }
 
   Future<void> _restoreSessions(String prefsKey) async {
@@ -455,6 +488,13 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final next = Map<String, bool>.from(state.toolSelections);
     next[toolName] = enabled;
     state = state.copyWith(toolSelections: next);
+    _persistToolSelections(next);
+  }
+
+  void resetToolSelections() {
+    final defaults = normalizeAgenticToolSelections(null);
+    state = state.copyWith(toolSelections: defaults);
+    _persistToolSelections(defaults);
   }
 
   void createNewSession() {
@@ -955,7 +995,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
                 '   - Keyboard events: NEVER use `RawKeyEvent`, `RawKeyDownEvent`, `RawKeyboardListener`, `Focus(onKey: ...)`, or `KeyboardListener`! Use ONLY `Focus(autofocus: true, onKeyEvent: (node, event) { if (event is KeyDownEvent) { ... } return KeyEventResult.handled; })` with `import \'package:flutter/services.dart\';`.\n'
                 '   - Colors & Const: `Color` has NO `*` operator — use `Color.lerp(...)` or `.withValues(alpha: ...)`. Never put `\${...}` string interpolation or runtime getters inside `const` widgets (`const Text(...)`).\n'
                 '   - Packages: Add packages via `runCommand` (`flutter pub add <pkg>`). If `pubspec.yaml` has broken/non-existent dependencies or SDK constraints causing analyzer errors, fix `pubspec.yaml` and run `flutter pub get`.\n'
-                '7) HONEST SUMMARY: In your final answer, concisely report ONLY the files actually created/modified and verification status.'
+                '7) HONEST SUMMARY: In your final answer, concisely report ONLY the files actually created/modified and verification status. NEVER call a tool named `finish` or `done` — to finish, simply reply with plain text and no tool calls.'
                 '$projectBlocks'
                 '$matchedSkillsBlock\n'
                 'Always respond in the user\'s language.'

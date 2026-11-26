@@ -3055,14 +3055,26 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                     final runtime = innerRef.read(runtimeServiceProvider);
                     return Column(
                       children: [
-                        const Padding(
-                          padding: EdgeInsets.all(14),
-                          child: Text(
-                            'Инструменты и Ядро Roxum Agent',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Инструменты и Ядро Roxum Agent',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => innerRef
+                                    .read(roxumChatProvider.notifier)
+                                    .resetToolSelections(),
+                                child: const Text('Сброс'),
+                              ),
+                            ],
                           ),
                         ),
                         const Divider(height: 1),
@@ -3108,27 +3120,77 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                           const Divider(height: 1),
                         ],
                         Expanded(
-                          child: ListView.builder(
-                            controller: scrollCtrl,
-                            itemCount: agenticToolSpecs.length,
-                            itemBuilder: (_, i) {
-                              final spec = agenticToolSpecs[i];
-                              final enabled =
-                                  liveState.toolSelections[spec.name] ?? true;
-                              return SwitchListTile(
-                                value: enabled,
-                                onChanged: (v) => innerRef
-                                    .read(roxumChatProvider.notifier)
-                                    .toggleTool(spec.name, v),
-                                title: Text(
-                                  spec.label,
-                                  style: const TextStyle(fontSize: 13.5),
-                                ),
-                                subtitle: Text(
-                                  spec.description,
-                                  style: const TextStyle(fontSize: 11.5),
-                                ),
-                                dense: true,
+                          child: Builder(
+                            builder: (_) {
+                              final coreSpecs = agenticToolSpecs
+                                  .where((s) => s.defaultEnabled)
+                                  .toList();
+                              final extraSpecs = agenticToolSpecs
+                                  .where((s) => !s.defaultEnabled)
+                                  .toList();
+                              return ListView(
+                                controller: scrollCtrl,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                                    child: Text(
+                                      'ОСНОВНЫЕ ИНСТРУМЕНТЫ IDE',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.6,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                  for (final spec in coreSpecs)
+                                    SwitchListTile(
+                                      value: liveState.toolSelections[spec.name] ??
+                                          spec.defaultEnabled,
+                                      onChanged: (v) => innerRef
+                                          .read(roxumChatProvider.notifier)
+                                          .toggleTool(spec.name, v),
+                                      title: Text(
+                                        spec.label,
+                                        style: const TextStyle(fontSize: 13.5),
+                                      ),
+                                      subtitle: Text(
+                                        spec.description,
+                                        style: const TextStyle(fontSize: 11.5),
+                                      ),
+                                      dense: true,
+                                    ),
+                                  const Padding(
+                                    padding: EdgeInsets.fromLTRB(16, 14, 16, 4),
+                                    child: Text(
+                                      'ДОПОЛНИТЕЛЬНЫЕ ИНСТРУМЕНТЫ',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.6,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                  for (final spec in extraSpecs)
+                                    SwitchListTile(
+                                      value: liveState.toolSelections[spec.name] ??
+                                          spec.defaultEnabled,
+                                      onChanged: (v) => innerRef
+                                          .read(roxumChatProvider.notifier)
+                                          .toggleTool(spec.name, v),
+                                      title: Text(
+                                        spec.label,
+                                        style: const TextStyle(fontSize: 13.5),
+                                      ),
+                                      subtitle: Text(
+                                        spec.description,
+                                        style: const TextStyle(fontSize: 11.5),
+                                      ),
+                                      dense: true,
+                                    ),
+                                  const SizedBox(height: 16),
+                                ],
                               );
                             },
                           ),
@@ -3664,97 +3726,259 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
   ) async {
     final urlCtrl = TextEditingController();
     final nameCtrl = TextEditingController(text: 'my-mcp');
-    var transport = 'http';
-    final servers = ref.read(mcpServersProvider).value ?? const [];
-    final connections = ref.read(mcpConnectionsProvider);
+    var transport = 'streamableHttp';
+
+    const codingPresets = <({
+      String id,
+      String name,
+      String description,
+      String url,
+      String transport,
+    })>[
+      (
+        id: 'preset_context7',
+        name: 'Context7 Docs',
+        description: 'Актуальная документация Flutter, Dart, JS, Python и др.',
+        url: 'https://mcp.context7.com/mcp',
+        transport: 'streamableHttp',
+      ),
+      (
+        id: 'preset_deepwiki',
+        name: 'DeepWiki (GitHub)',
+        description: 'Изучение архитектуры и документации любых GitHub-репозиториев.',
+        url: 'https://mcp.deepwiki.com/mcp',
+        transport: 'streamableHttp',
+      ),
+      (
+        id: 'preset_fetch',
+        name: 'Fetch Web Scraper',
+        description: 'Извлечение Markdown и текста с веб-страниц и доков.',
+        url: 'https://api.smithery.ai/mcp/v1/fetch',
+        transport: 'streamableHttp',
+      ),
+      (
+        id: 'preset_github',
+        name: 'GitHub Code & Repos',
+        description: 'Поиск по коду, issues, PR и файлам на GitHub.',
+        url: 'https://api.smithery.ai/mcp/v1/github',
+        transport: 'streamableHttp',
+      ),
+      (
+        id: 'preset_brave',
+        name: 'Brave Web Search',
+        description: 'Живой поиск по сети и технической документации.',
+        url: 'https://api.smithery.ai/mcp/v1/brave-search',
+        transport: 'streamableHttp',
+      ),
+      (
+        id: 'preset_thinking',
+        name: 'Sequential Thinking',
+        description: 'Пошаговое планирование для сложных архитектурных задач.',
+        url: 'https://api.smithery.ai/mcp/v1/sequential-thinking',
+        transport: 'streamableHttp',
+      ),
+    ];
 
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('MCP servers'),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (servers.isEmpty)
-                  const Text('No MCP servers configured yet.')
-                else
-                  for (final server in servers)
-                    ListTile(
-                      dense: true,
-                      leading: Icon(
-                        connections[server.id]?.status.name == 'connected'
-                            ? Icons.check_circle
-                            : Icons.circle_outlined,
-                        color: connections[server.id]?.status.name == 'connected'
-                            ? Colors.green
-                            : Colors.grey,
+      builder: (ctx) => Consumer(
+        builder: (ctx, dialogRef, _) {
+          final servers = dialogRef.watch(mcpServersProvider).value ?? const [];
+          final connections = dialogRef.watch(mcpConnectionsProvider);
+          final configuredUrls = {for (final s in servers) s.url.trim()};
+
+          return AlertDialog(
+            title: const Text('MCP серверы'),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (servers.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'Нет подключённых MCP серверов. Выберите готовый из списка ниже или добавьте свой URL.',
+                          style: TextStyle(fontSize: 12.5, color: Colors.grey),
+                        ),
+                      )
+                    else ...[
+                      const Text(
+                        'ПОДКЛЮЧЁННЫЕ',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: Colors.grey,
+                        ),
                       ),
-                      title: Text(server.name),
-                      subtitle: Text(
-                        '${server.url} (${connections[server.id]?.status.name ?? server.transport})',
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () =>
-                            ref.read(mcpActionsProvider).deleteServer(server.id),
-                      ),
-                    ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                ),
-                TextField(
-                  controller: urlCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'URL (Streamable HTTP / SSE)',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                StatefulBuilder(
-                  builder: (ctx, setState) => Row(
-                    children: [
-                      for (final t in ['http', 'sse'])
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(t),
-                            selected: transport == t,
-                            onSelected: (_) => setState(() => transport = t),
-                          ),
+                      const SizedBox(height: 4),
+                      for (final server in servers)
+                        Builder(
+                          builder: (_) {
+                            final conn = connections[server.id];
+                            final statusName = conn?.status.name ?? 'idle';
+                            final isConnected = statusName == 'connected';
+                            final isError = statusName == 'error';
+                            final toolCount = conn?.tools.length ?? 0;
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(
+                                isConnected
+                                    ? Icons.check_circle
+                                    : (isError
+                                        ? Icons.error_outline
+                                        : Icons.circle_outlined),
+                                color: isConnected
+                                    ? Colors.green
+                                    : (isError ? Colors.redAccent : Colors.grey),
+                              ),
+                              title: Text(server.name),
+                              subtitle: Text(
+                                isConnected
+                                    ? '${server.url} • $toolCount инстр.'
+                                    : (conn?.errorMessage != null
+                                        ? '${server.url} • ${conn!.errorMessage}'
+                                        : '${server.url} ($statusName)'),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Переподключить',
+                                    icon: const Icon(Icons.refresh, size: 18),
+                                    onPressed: () => dialogRef
+                                        .read(mcpConnectionsProvider.notifier)
+                                        .reconnect(server),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Удалить',
+                                    icon: const Icon(Icons.delete_outline, size: 18),
+                                    onPressed: () => dialogRef
+                                        .read(mcpActionsProvider)
+                                        .deleteServer(server.id),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
                     ],
-                  ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'ГОТОВЫЕ MCP ДЛЯ КОДИНГА',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    for (final preset in codingPresets)
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          preset.name,
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          preset.description,
+                          style: const TextStyle(fontSize: 11.5),
+                        ),
+                        trailing: configuredUrls.contains(preset.url)
+                            ? const Text(
+                                'Добавлен ✓',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              )
+                            : TextButton(
+                                onPressed: () => dialogRef
+                                    .read(mcpActionsProvider)
+                                    .saveServer(
+                                      id: preset.id,
+                                      name: preset.name,
+                                      url: preset.url,
+                                      transport: preset.transport,
+                                      connectNow: true,
+                                    ),
+                                child: const Text('Добавить'),
+                              ),
+                      ),
+                    const Divider(height: 20),
+                    const Text(
+                      'ДОБАВИТЬ СВОЙ URL',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(labelText: 'Название'),
+                    ),
+                    TextField(
+                      controller: urlCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'URL (Streamable HTTP / SSE)',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    StatefulBuilder(
+                      builder: (ctx, setState) => Row(
+                        children: [
+                          for (final t in ['streamableHttp', 'sse'])
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(t == 'streamableHttp' ? 'http' : 'sse'),
+                                selected: transport == t,
+                                onSelected: (_) => setState(() => transport = t),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final url = urlCtrl.text.trim();
-              if (url.isEmpty) return;
-              await ref.read(mcpActionsProvider).saveServer(
-                    id: DateTime.now().microsecondsSinceEpoch.toString(),
-                    name: nameCtrl.text.trim().isEmpty ? 'mcp' : nameCtrl.text.trim(),
-                    url: url,
-                    transport: transport,
-                    connectNow: true,
-                  );
-              if (ctx.mounted) Navigator.of(ctx).pop();
-            },
-            child: const Text('Add'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Закрыть'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final url = urlCtrl.text.trim();
+                  if (url.isEmpty) return;
+                  await dialogRef.read(mcpActionsProvider).saveServer(
+                        id: DateTime.now().microsecondsSinceEpoch.toString(),
+                        name: nameCtrl.text.trim().isEmpty
+                            ? 'mcp'
+                            : nameCtrl.text.trim(),
+                        url: url,
+                        transport: transport,
+                        connectNow: true,
+                      );
+                  urlCtrl.clear();
+                },
+                child: const Text('Добавить URL'),
+              ),
+            ],
+          );
+        },
       ),
     );
     urlCtrl.dispose();
