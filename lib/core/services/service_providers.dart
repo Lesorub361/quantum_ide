@@ -10,6 +10,8 @@ import 'marketplace_service.dart';
 import 'runtime_service.dart';
 import 'collaboration_service.dart';
 import 'ghost_qa_service.dart';
+import 'live_telemetry_service.dart';
+import 'shizuku_bridge.dart';
 export 'quantum_plugin_service.dart';
 export 'adb_device_service.dart';
 
@@ -74,5 +76,15 @@ final marketplaceServiceProvider = StateNotifierProvider<MarketplaceService, Mar
 /// Provider for GhostQAService (Autonomous AI Screen & QA Testing Engine)
 final ghostQAServiceProvider = Provider<GhostQAService>((ref) {
   return GhostQAService.instance;
+});
+
+/// Provider for ShizukuBridge (elevated ADB / root bridge)
+final shizukuBridgeProvider = Provider<ShizukuBridge>((ref) {
+  return ShizukuBridge.instance;
+});
+
+/// Provider for LiveTelemetryService (runtime logs, metrics, terminal monitoring)
+final liveTelemetryServiceProvider = Provider<LiveTelemetryService>((ref) {
+  return LiveTelemetryService.instance;
 });
 

@@ -3,12 +3,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/constants/native_channels.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 
 enum MicroVMState { unavailable, available, starting, running, stopping, stopped, error }
 
 class MicroVMService extends ChangeNotifier {
-  static const _channel = MethodChannel('com.example.quantum_ide/native');
+  static const _channel = MethodChannel(NativeChannels.native);
 
   final RuntimeService _runtime;
   MicroVMState _state = MicroVMState.unavailable;

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'inference_engine.dart';
+import 'package:quantum_ide/core/constants/native_channels.dart';
 import 'package:quantum_ide/core/utils/resumable_downloader.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 // model_catalog_service types are used only via re-export in local_models_dialog; no direct import needed here
@@ -284,7 +285,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
       
       if (!kIsWeb && Platform.isAndroid) {
         // Use MethodChannel to get total RAM on Android
-        const channel = MethodChannel('com.example.quantum_ide/device_info');
+        const channel = MethodChannel(NativeChannels.deviceInfo);
         try {
           final result = await channel.invokeMethod('getDeviceInfo');
           if (result is Map) {
@@ -300,7 +301,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
         }
       } else if (!kIsWeb && Platform.isIOS) {
         // iOS: estimate from device model via MethodChannel
-        const channel = MethodChannel('com.example.quantum_ide/device_info');
+        const channel = MethodChannel(NativeChannels.deviceInfo);
         try {
           final result = await channel.invokeMethod('getDeviceInfo');
           if (result is Map) {
@@ -413,7 +414,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
 
   Future<String> get modelsDir async => _getModelsDir();
 
-  static const _downloadChannel = MethodChannel('com.example.quantum_ide/download');
+  static const _downloadChannel = MethodChannel(NativeChannels.download);
   static const _downloadEventChannel = EventChannel('com.example.quantum_ide/download_progress');
   final Map<String, int> _nativeDownloadIds = {};
 
@@ -947,7 +948,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
   /// Get device model string for Tensor SoC detection
   Future<String> _getDeviceModel() async {
     try {
-      const channel = MethodChannel('com.example.quantum_ide/native');
+      const channel = MethodChannel(NativeChannels.native);
       final result = await channel.invokeMethod<String>('getDeviceModel');
       return result ?? '';
     } catch (_) {

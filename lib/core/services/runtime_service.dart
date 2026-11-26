@@ -7,13 +7,20 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
+import 'package:quantum_ide/core/constants/native_channels.dart';
+import 'package:quantum_ide/core/services/runtime/cleanup_category.dart';
+import 'package:quantum_ide/core/services/runtime/runtime_command_queue.dart';
+import 'package:quantum_ide/core/services/runtime/runtime_network_config.dart';
+import 'package:quantum_ide/core/services/runtime/system_junk_cleaner.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
 import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+export 'package:quantum_ide/core/services/runtime/cleanup_category.dart';
+
 class RuntimeService extends ChangeNotifier {
-  static const _channel = MethodChannel('com.example.quantum_ide/native');
+  static const _channel = MethodChannel(NativeChannels.native);
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
@@ -43,9 +50,7 @@ class RuntimeService extends ChangeNotifier {
         '/usr/local/bin/aapt2-arm64',
       ];
 
-  static const int _maxConcurrentCommands = 3;
-  int _runningCommands = 0;
-  final List<Completer<void>> _commandQueue = [];
+  final RuntimeCommandQueue _commandQueue = RuntimeCommandQueue(maxConcurrent: 3);
 
   // High-performance pre-built ARM64 Core rootfs (Ubuntu 24.04 + GLIBC 2.39 + Flutter 3.50.0)
   static const String ubuntu2404RootfsUrl =
@@ -498,23 +503,9 @@ class RuntimeService extends ChangeNotifier {
     }
   }
 
-  Future<void> _acquireCommandSlot() async {
-    if (_runningCommands < _maxConcurrentCommands) {
-      _runningCommands++;
-      return;
-    }
-    final completer = Completer<void>();
-    _commandQueue.add(completer);
-    await completer.future;
-    _runningCommands++;
-  }
+  Future<void> _acquireCommandSlot() => _commandQueue.acquire();
 
-  void _releaseCommandSlot() {
-    _runningCommands--;
-    if (_commandQueue.isNotEmpty) {
-      _commandQueue.removeAt(0).complete();
-    }
-  }
+  void _releaseCommandSlot() => _commandQueue.release();
 
   /// Translates an Android host path to its PRoot guest path (`/root/projects/...`),
   /// or returns [hostPath] unchanged on Desktop or Native Root Kernel mode.
@@ -1221,22 +1212,22 @@ class RuntimeService extends ChangeNotifier {
       }
 
       final resolvPath = p.join(configDirPath, 'resolv.conf');
-      await _writeResolvConf(resolvPath);
+      await RuntimeNetworkConfig.writeResolvConf(resolvPath);
 
       // Also ensure tmp/resolv.conf (used by init-host bind mount) is correct
       final tmpResolvPath = p.join(_filesDir, 'tmp', 'resolv.conf');
-      await _writeResolvConf(tmpResolvPath);
+      await RuntimeNetworkConfig.writeResolvConf(tmpResolvPath);
 
       // 3b. Ensure /etc/hosts and /etc/nsswitch.conf provide localhost resolution
       //     (required by Go binaries like `agy` so they don't query `localhost` on 8.8.8.8:53).
-      await _writeHostsFile(p.join(configDirPath, 'hosts'));
-      await _writeHostsFile(p.join(_filesDir, 'tmp', 'hosts'));
-      await _writeNsswitchConf(p.join(configDirPath, 'nsswitch.conf'));
-      await _writeNsswitchConf(p.join(_filesDir, 'tmp', 'nsswitch.conf'));
+      await RuntimeNetworkConfig.writeHostsFile(p.join(configDirPath, 'hosts'));
+      await RuntimeNetworkConfig.writeHostsFile(p.join(_filesDir, 'tmp', 'hosts'));
+      await RuntimeNetworkConfig.writeNsswitchConf(p.join(configDirPath, 'nsswitch.conf'));
+      await RuntimeNetworkConfig.writeNsswitchConf(p.join(_filesDir, 'tmp', 'nsswitch.conf'));
       final guestEtcDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'etc'));
       if (await guestEtcDir.exists()) {
-        await _writeHostsFile(p.join(guestEtcDir.path, 'hosts'), onlyIfMissingLocalhost: true);
-        await _writeNsswitchConf(p.join(guestEtcDir.path, 'nsswitch.conf'), onlyIfMissingFiles: true);
+        await RuntimeNetworkConfig.writeHostsFile(p.join(guestEtcDir.path, 'hosts'), onlyIfMissingLocalhost: true);
+        await RuntimeNetworkConfig.writeNsswitchConf(p.join(guestEtcDir.path, 'nsswitch.conf'), onlyIfMissingFiles: true);
       }
 
       // 4. Set permissions for tmp
@@ -1252,102 +1243,15 @@ class RuntimeService extends ChangeNotifier {
     }
   }
 
-  /// Writes a valid hosts file with `127.0.0.1 localhost`, replacing broken symlinks first.
-  Future<void> _writeHostsFile(String path, {bool onlyIfMissingLocalhost = false}) async {
-    try {
-      final dir = Directory(p.dirname(path));
-      if (!await dir.exists()) await dir.create(recursive: true);
-
-      final isLink = FileSystemEntity.typeSync(path, followLinks: false) == FileSystemEntityType.link;
-      if (isLink) {
-        await Link(path).delete();
-      } else if (onlyIfMissingLocalhost && await File(path).exists()) {
-        final existing = await File(path).readAsString().catchError((_) => '');
-        if (RegExp(r'127\.0\.0\.1\s+localhost').hasMatch(existing)) {
-          return;
-        }
-      }
-
-      await File(path).writeAsString(
-        '127.0.0.1 localhost localhost.localdomain quantum-ide\n'
-        '::1 localhost ip6-localhost ip6-loopback\n',
-        flush: true,
-      );
-      await Process.run('chmod', ['644', path]).catchError((_) => ProcessResult(0, 0, '', ''));
-    } catch (e) {
-      debugPrint('Warning: Failed to write hosts at $path: $e');
-    }
-  }
-
-  /// Writes an nsswitch.conf that prefers `files` before `dns` so `localhost` resolves locally.
-  Future<void> _writeNsswitchConf(String path, {bool onlyIfMissingFiles = false}) async {
-    try {
-      final dir = Directory(p.dirname(path));
-      if (!await dir.exists()) await dir.create(recursive: true);
-
-      final isLink = FileSystemEntity.typeSync(path, followLinks: false) == FileSystemEntityType.link;
-      if (isLink) {
-        await Link(path).delete();
-      } else if (onlyIfMissingFiles && await File(path).exists()) {
-        final existing = await File(path).readAsString().catchError((_) => '');
-        if (RegExp(r'^\s*hosts:\s*files\b', multiLine: true).hasMatch(existing)) {
-          return;
-        }
-      }
-
-      await File(path).writeAsString(
-        'passwd: files\n'
-        'group: files\n'
-        'shadow: files\n'
-        'hosts: files dns\n'
-        'networks: files\n'
-        'protocols: files\n'
-        'services: files\n'
-        'ethers: files\n'
-        'rpc: files\n',
-        flush: true,
-      );
-      await Process.run('chmod', ['644', path]).catchError((_) => ProcessResult(0, 0, '', ''));
-    } catch (e) {
-      debugPrint('Warning: Failed to write nsswitch.conf at $path: $e');
-    }
-  }
-
-  /// Writes a correct resolv.conf, removing broken symlinks first.
-  /// This is critical because Ubuntu rootfs may ship with a symlink to
-  /// /run/systemd/resolve/stub-resolv.conf which doesn't exist on Android,
-  /// causing all DNS resolution inside PRoot to fail silently.
-  Future<void> _writeResolvConf(String path) async {
-    try {
-      final dir = Directory(p.dirname(path));
-      if (!await dir.exists()) await dir.create(recursive: true);
-
-      // If it's a symlink (broken or not), delete it first
-      final link = Link(path);
-      if (await link.exists() || FileSystemEntity.typeSync(path) == FileSystemEntityType.link) {
-        await link.delete();
-        debugPrint('resolv.conf: removed broken symlink at $path');
-      }
-
-      await File(path).writeAsString(
-        'nameserver 8.8.8.8\nnameserver 1.1.1.1\n',
-        flush: true,
-      );
-      debugPrint('resolv.conf: written at $path');
-    } catch (e) {
-      debugPrint('Warning: Failed to write resolv.conf at $path: $e');
-    }
-  }
-
   Future<void> _ensureBinaries() async {
     try {
       // Ensure resolv.conf, hosts, and nsswitch.conf exist in tmp (used by init-host bind mounts)
       // Always rewrite on cold start to heal broken symlinks or missing localhost mappings.
       final tmpDir = Directory(p.join(_filesDir, 'tmp'));
       if (!await tmpDir.exists()) await tmpDir.create(recursive: true);
-      await _writeResolvConf(p.join(tmpDir.path, 'resolv.conf'));
-      await _writeHostsFile(p.join(tmpDir.path, 'hosts'));
-      await _writeNsswitchConf(p.join(tmpDir.path, 'nsswitch.conf'));
+      await RuntimeNetworkConfig.writeResolvConf(p.join(tmpDir.path, 'resolv.conf'));
+      await RuntimeNetworkConfig.writeHostsFile(p.join(tmpDir.path, 'hosts'));
+      await RuntimeNetworkConfig.writeNsswitchConf(p.join(tmpDir.path, 'nsswitch.conf'));
     } catch (e) {
       debugPrint('Warning: Failed to ensure resolv/hosts in tmp: $e');
     }
@@ -2559,9 +2463,9 @@ fi
         return;
       }
       try {
-        final decompressedBytes = gzBytes!.length > 2 && gzBytes[0] == 0x1f && gzBytes[1] == 0x8b
-            ? gzip.decode(gzBytes!)
-            : gzBytes!;
+        final decompressedBytes = gzBytes.length > 2 && gzBytes[0] == 0x1f && gzBytes[1] == 0x8b
+            ? gzip.decode(gzBytes)
+            : gzBytes;
         _installAapt2ToTargets(decompressedBytes);
       } catch (ee) {
         debugPrint('[AAPT2] Warning: Failed to process downloaded aapt2: $ee');
@@ -5020,164 +4924,20 @@ echo "=== QuantumIDE ARM64 Environment Configuration Finished ==="
   /// Scans common cache and temporary directories inside the Linux environment
   /// and returns categories with their sizes in kilobytes.
   Future<List<CleanupCategory>> scanSystemJunk({String? activeProjectGuestPath}) async {
-    final categories = <CleanupCategory>[
-      const CleanupCategory(
-        id: 'gradle_caches',
-        title: 'Кэш сборок Gradle',
-        subtitle: '~/.gradle/caches, ~/.gradle/.tmp (перекачается при сборке)',
-        paths: ['/root/.gradle/caches', '/root/.gradle/.tmp', '/root/.gradle/daemon'],
-        defaultSelected: true,
-      ),
-      const CleanupCategory(
-        id: 'gradle_wrapper',
-        title: 'Дистрибутивы Gradle Wrapper',
-        subtitle: '~/.gradle/wrapper (старые версии Gradle)',
-        paths: ['/root/.gradle/wrapper'],
-        defaultSelected: true,
-      ),
-      const CleanupCategory(
-        id: 'dart_server',
-        title: 'Кэш анализатора Dart',
-        subtitle: '~/.dartServer (пересоздаётся автоматически)',
-        paths: ['/root/.dartServer'],
-        defaultSelected: true,
-      ),
-      const CleanupCategory(
-        id: 'npm_cache',
-        title: 'Кэш npm / Node.js',
-        subtitle: '~/.npm',
-        paths: ['/root/.npm'],
-        defaultSelected: true,
-      ),
-      const CleanupCategory(
-        id: 'apt_cache',
-        title: 'Архивы пакетов APT',
-        subtitle: '/var/cache/apt/archives (*.deb)',
-        paths: ['/var/cache/apt/archives'],
-        isAptClean: true,
-        defaultSelected: true,
-      ),
-      const CleanupCategory(
-        id: 'tmp_junk',
-        title: 'Временные файлы и остатки сборок',
-        subtitle: '/tmp/*, ~/rootfs-build, ~/.cache',
-        paths: ['/root/rootfs-build', '/root/.cache'],
-        isTmpClean: true,
-        defaultSelected: true,
-      ),
-      if (activeProjectGuestPath != null && activeProjectGuestPath.isNotEmpty)
-        CleanupCategory(
-          id: 'project_build',
-          title: 'Артефакты сборки проекта (build/)',
-          subtitle: '$activeProjectGuestPath/build',
-          paths: ['$activeProjectGuestPath/build'],
-          defaultSelected: true,
-        ),
-      const CleanupCategory(
-        id: 'pub_cache',
-        title: 'Кэш пакетов Dart / Flutter (.pub-cache)',
-        subtitle: '~/.pub-cache (потребуется flutter pub get)',
-        paths: ['/root/.pub-cache'],
-        defaultSelected: false,
-      ),
-    ];
-
-    final scriptLines = <String>[];
-    for (final cat in categories) {
-      if (cat.isTmpClean) {
-        scriptLines.add(
-          'KB_${cat.id}=\$(du -sk /tmp /root/rootfs-build /root/.cache 2>/dev/null | awk \'{s+=\$1} END {print s+0}\'); '
-          'echo "${cat.id}=\$KB_${cat.id}"',
-        );
-      } else {
-        final quoted = cat.paths.map((p) => '"$p"').join(' ');
-        scriptLines.add(
-          'KB_${cat.id}=\$(du -sk $quoted 2>/dev/null | awk \'{s+=\$1} END {print s+0}\'); '
-          'echo "${cat.id}=\$KB_${cat.id}"',
-        );
-      }
-    }
-
-    final out = await runCommand(scriptLines.join('; '));
-    final sizes = <String, int>{};
-    for (final line in out.split('\n')) {
-      final parts = line.trim().split('=');
-      if (parts.length == 2) {
-        sizes[parts[0]] = int.tryParse(parts[1]) ?? 0;
-      }
-    }
-
-    return categories
-        .map((c) => c.copyWith(sizeKb: sizes[c.id] ?? 0))
-        .toList();
+    final categories = SystemJunkCleaner.defaultCategories(
+      activeProjectGuestPath: activeProjectGuestPath,
+    );
+    final out = await runCommand(SystemJunkCleaner.buildScanScript(categories));
+    return SystemJunkCleaner.applyScanOutput(categories, out);
   }
 
   /// Deletes the selected [CleanupCategory] items and returns total freed KB.
   Future<int> cleanSystemJunk(List<CleanupCategory> selected) async {
-    int freedKb = 0;
-    final cmds = <String>[];
-
-    for (final cat in selected) {
-      if (cat.sizeKb <= 0) continue;
-      freedKb += cat.sizeKb;
-      if (cat.isAptClean) {
-        cmds.add('apt-get clean 2>/dev/null || rm -rf /var/cache/apt/archives/*.deb');
-      } else if (cat.isTmpClean) {
-        cmds.add(
-          'rm -rf /root/rootfs-build /root/.cache '
-          '/tmp/box64 /tmp/llama.cpp /tmp/yandex_* /tmp/.bun-* '
-          '/tmp/flutter_tools.* /tmp/kotlin-daemon.* /tmp/kotlin-compiler-* '
-          '/tmp/dsh-spill-* /tmp/preserved_home /tmp/pubspec*.bak '
-          '/tmp/dart_analyze_output*.txt /tmp/analyze.txt /tmp/q_frame_*.png '
-          '/tmp/tmp.* /tmp/aapt2 /tmp/gradle_shadow /tmp/opencode /tmp/kilo '
-          '/tmp/node-compile-cache /tmp/v8-compile-cache-0 2>/dev/null || true',
-        );
-      } else {
-        final quoted = cat.paths.map((p) => '"$p"').join(' ');
-        cmds.add('rm -rf $quoted 2>/dev/null || true');
-      }
+    final plan = SystemJunkCleaner.buildCleanPlan(selected);
+    if (plan.commands.isNotEmpty) {
+      await runCommand(plan.commands.join(' && '));
     }
-
-    if (cmds.isNotEmpty) {
-      await runCommand(cmds.join(' && '));
-    }
-    return freedKb;
-  }
-}
-
-/// Represents a cleanable cache/temp category in the Linux environment.
-class CleanupCategory {
-  final String id;
-  final String title;
-  final String subtitle;
-  final List<String> paths;
-  final int sizeKb;
-  final bool defaultSelected;
-  final bool isAptClean;
-  final bool isTmpClean;
-
-  const CleanupCategory({
-    required this.id,
-    required this.title,
-    required this.subtitle,
-    required this.paths,
-    this.sizeKb = 0,
-    this.defaultSelected = true,
-    this.isAptClean = false,
-    this.isTmpClean = false,
-  });
-
-  CleanupCategory copyWith({int? sizeKb}) {
-    return CleanupCategory(
-      id: id,
-      title: title,
-      subtitle: subtitle,
-      paths: paths,
-      sizeKb: sizeKb ?? this.sizeKb,
-      defaultSelected: defaultSelected,
-      isAptClean: isAptClean,
-      isTmpClean: isTmpClean,
-    );
+    return plan.freedKb;
   }
 }
 

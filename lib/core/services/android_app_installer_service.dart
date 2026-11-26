@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/constants/native_channels.dart';
 import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 
 final androidAppInstallerServiceProvider = Provider<AndroidAppInstallerService>((ref) {
@@ -23,7 +24,7 @@ class InstallResult {
 }
 
 class AndroidAppInstallerService {
-  static const _channel = MethodChannel('com.example.quantum_ide/native');
+  static const _channel = MethodChannel(NativeChannels.native);
 
   /// Installs an APK using Shizuku silent `pm install` when available,
   /// otherwise falls back to Android's native PackageInstaller.

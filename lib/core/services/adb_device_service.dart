@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/constants/native_channels.dart';
 import 'package:quantum_ide/models/adb_device.dart';
 import 'runtime_service.dart';
 
@@ -54,7 +55,7 @@ class AdbDeviceState {
 
 class AdbDeviceService extends StateNotifier<AdbDeviceState> {
   final Ref _ref;
-  static const MethodChannel _nativeChannel = MethodChannel('com.example.quantum_ide/native');
+  static const MethodChannel _nativeChannel = MethodChannel(NativeChannels.native);
   Timer? _pollingTimer;
   bool _isRefreshing = false;
   bool _hasInitialServerStarted = false;

@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:quantum_ide/core/constants/native_channels.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
 
 class ShizukuBridge {
   static final ShizukuBridge instance = ShizukuBridge._();
   ShizukuBridge._();
 
-  static const _channel = MethodChannel('com.example.quantum_ide/native');
+  static const _channel = MethodChannel(NativeChannels.native);
 
   final ValueNotifier<int> statusVersion = ValueNotifier<int>(0);
 

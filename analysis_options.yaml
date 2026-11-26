@@ -20,8 +20,9 @@ analyzer:
     use_build_context_synchronously: warning
     # Internal package API usage is a bug
     implementation_imports: error
-    # Uncancelled subscriptions are resource leaks
+    # Uncancelled subscriptions and unclosed sinks are resource leaks
     cancel_subscriptions: warning
+    close_sinks: warning
     # Style rules — keep as info (not errors)
     prefer_final_locals: info
     prefer_single_quotes: info

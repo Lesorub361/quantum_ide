@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/services/lsp/lsp_frame_parser.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
@@ -45,7 +47,7 @@ class LspService {
   final Map<String, Future<bool>?> _startingServers = {};
   final Map<String, String> _runningProjectPaths = {};
   final Map<String, DateTime> _lastStartFailure = {};
-  final Map<String, String> _stdoutBuffers = {};
+  final Map<String, LspFrameParser> _frameParsers = {};
   final Map<String, bool> _binaryAvailabilityCache = {};
   int _id = 1;
   final Map<int, Completer> _pendingRequests = {};
@@ -254,7 +256,7 @@ class LspService {
         debugPrint('LSP [$key] stdin error: $err');
       });
 
-      process.stdout.transform(utf8.decoder).listen((data) => _handleOutputForServer(key, data));
+      process.stdout.listen((bytes) => _handleOutputBytesForServer(key, bytes));
       process.stderr.transform(utf8.decoder).listen((error) {
         debugPrint('LSP [$key] Error: $error');
       });
@@ -287,55 +289,27 @@ class LspService {
     return completer.future;
   }
 
-  void _handleOutputForServer(String key, String data) {
-    _stdoutBuffers[key] = (_stdoutBuffers[key] ?? '') + data;
-    _processBuffer(key);
+  void _handleOutputBytesForServer(String key, List<int> bytes) {
+    final parser = _frameParsers.putIfAbsent(key, LspFrameParser.new);
+    final payloads = parser.addBytes(bytes);
+    for (final jsonContent in payloads) {
+      unawaited(_decodeAndDispatch(key, jsonContent));
+    }
   }
 
-  void _processBuffer(String key) {
-    var buffer = _stdoutBuffers[key] ?? '';
-    if (buffer.isEmpty) return;
-
-    while (true) {
-      final headerEndIndex = buffer.indexOf('\r\n\r\n');
-      if (headerEndIndex == -1) break;
-
-      final header = buffer.substring(0, headerEndIndex);
-      final contentLengthIndex = header.indexOf('Content-Length:');
-      
-      if (contentLengthIndex == -1) {
-        // Skip junk
-        buffer = buffer.substring(headerEndIndex + 4);
-        continue;
+  Future<void> _decodeAndDispatch(String key, String jsonContent) async {
+    try {
+      // Offload large LSP payloads (e.g. workspace symbols or big diagnostics)
+      // to a background isolate to keep UI frames smooth.
+      final dynamic json = jsonContent.length > 16384
+          ? await Isolate.run(() => jsonDecode(jsonContent))
+          : jsonDecode(jsonContent);
+      if (json is Map<String, dynamic>) {
+        _handleMessage(json);
       }
-
-      final lengthStr = header.substring(contentLengthIndex + 15).trim().split('\r\n').first;
-      final contentLength = int.tryParse(lengthStr);
-      
-      if (contentLength == null) {
-        buffer = buffer.substring(headerEndIndex + 4);
-        continue;
-      }
-
-      final contentStartIndex = headerEndIndex + 4;
-      if (buffer.length < contentStartIndex + contentLength) break;
-
-      final jsonContent = buffer.substring(contentStartIndex, contentStartIndex + contentLength);
-      buffer = buffer.substring(contentStartIndex + contentLength);
-      _stdoutBuffers[key] = buffer;
-
-      // Offload JSON decoding to a microtask or compute if it was huge, 
-      // but here microtask is usually enough for the event loop.
-      try {
-        final json = jsonDecode(jsonContent);
-        if (json is Map<String, dynamic>) {
-          _handleMessage(json);
-        }
-      } catch (e) {
-        debugPrint('LSP [$key]: Failed to parse JSON-RPC content: $e');
-      }
+    } catch (e) {
+      debugPrint('LSP [$key]: Failed to parse JSON-RPC content: $e');
     }
-    _stdoutBuffers[key] = buffer;
   }
 
   void _handleMessage(Map<String, dynamic> json) {
@@ -883,7 +857,7 @@ class LspService {
     _startingServers.clear();
     _runningProjectPaths.clear();
     _lastStartFailure.clear();
-    _stdoutBuffers.clear();
+    _frameParsers.clear();
     for (final completer in _pendingRequests.values) {
       if (!completer.isCompleted) completer.complete(null);
     }
