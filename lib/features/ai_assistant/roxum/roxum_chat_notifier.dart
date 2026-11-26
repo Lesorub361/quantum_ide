@@ -691,7 +691,13 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
   String _loadProjectContextBlocks(String workspace) {
     if (workspace.isEmpty) return '';
     final buf = StringBuffer();
-    for (final rel in const ['.quantum/AGENTS.md', 'AGENTS.md', 'GEMINI.md']) {
+    for (final rel in const [
+      '.quantum/AGENTS.md',
+      'AGENTS.md',
+      'GEMINI.md',
+      'CLAUDE.md',
+      '.cursorrules',
+    ]) {
       try {
         final f = File('$workspace/$rel');
         if (f.existsSync()) {
@@ -1282,6 +1288,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           risk: isDestructive ? ps.ToolRisk.destructive : ps.ToolRisk.safe,
           run: (args) async {
             final res = await agenticRunner.execute(name, args);
+            if (!res.success && !res.output.trimLeft().startsWith('Error')) {
+              return 'Error: ${res.output}';
+            }
             return res.output;
           },
         ),

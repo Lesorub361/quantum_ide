@@ -41,6 +41,7 @@ class AgentEngine {
   }) async* {
     final messages = List<ChatMessage>.from(history);
     final approved = Set<String>.from(sessionApproved);
+    final recentSignatures = <String>[];
     var cancelled = false;
 
     for (var step = 0; step < maxSteps; step++) {
@@ -58,7 +59,7 @@ class AgentEngine {
       String? streamError;
 
       await for (final event in provider.streamMessage(ChatRequest(
-        messages: messages,
+        messages: _compactMessagesForModel(messages),
         model: model,
         params: params,
         tools: tools.map((t) => t.toSpec()).toList(),
@@ -166,13 +167,37 @@ class AgentEngine {
             }
           }
 
-          // --- Execute ---
-          try {
-            final args = _decodeArgs(call.argumentsJson);
-            observation = await tool.run(args);
-          } catch (e) {
-            observation = 'Error running ${tool.name}: $e';
+          // --- Loop guard (3 identical consecutive calls) ---
+          final signature = '${call.name}::${call.argumentsJson.trim()}';
+          recentSignatures.add(signature);
+          if (recentSignatures.length > 3) {
+            recentSignatures.removeAt(0);
+          }
+          final isLooping = recentSignatures.length == 3 &&
+              recentSignatures.every((s) => s == signature);
+
+          if (isLooping) {
+            observation =
+                'Loop detected: "${tool.name}" was called 3 times in a row '
+                'with identical arguments. Stop repeating this call, analyze '
+                'the previous output, and try a different approach or respond.';
             isError = true;
+          } else {
+            // --- Execute ---
+            final decoded = _decodeArgsStrict(call.argumentsJson);
+            if (decoded.error != null) {
+              observation =
+                  'Error: invalid JSON arguments for "${tool.name}": '
+                  '${decoded.error}';
+              isError = true;
+            } else {
+              try {
+                observation = await tool.run(decoded.args);
+              } catch (e) {
+                observation = 'Error running ${tool.name}: $e';
+                isError = true;
+              }
+            }
           }
         }
 
@@ -197,7 +222,7 @@ class AgentEngine {
       final finalBuffer = StringBuffer();
       try {
         await for (final event in provider.streamMessage(ChatRequest(
-          messages: messages,
+          messages: _compactMessagesForModel(messages),
           model: model,
           params: params,
           tools: const [],
@@ -206,6 +231,8 @@ class AgentEngine {
           if (event is TextDeltaEvent) {
             finalBuffer.write(event.text);
             yield AgentTextDeltaEvent(event.text);
+          } else if (event is UsageEvent) {
+            yield AgentUsageEvent(event.usage);
           }
         }
         if (finalBuffer.isNotEmpty) {
@@ -223,12 +250,57 @@ class AgentEngine {
     yield AgentRunFinishedEvent(cancelled);
   }
 
-  static Map<String, dynamic> _decodeArgs(String json) {
+  /// Compacts older long tool observations so multi-step runs don't overflow
+  /// the model's context window while keeping the latest steps intact.
+  static List<ChatMessage> _compactMessagesForModel(
+    List<ChatMessage> messages,
+  ) {
+    if (messages.length <= 6) return messages;
+    final cutoff = messages.length - 6;
+    const maxOldToolChars = 2400;
+    const keepHead = 1000;
+    const keepTail = 600;
+
+    return [
+      for (var i = 0; i < messages.length; i++)
+        if (i < cutoff &&
+            messages[i].role == MessageRole.tool &&
+            messages[i].content.length > maxOldToolChars)
+          ChatMessage(
+            id: messages[i].id,
+            role: messages[i].role,
+            content:
+                '${messages[i].content.substring(0, keepHead)}\n'
+                '...[compacted ${messages[i].content.length - keepHead - keepTail} chars to preserve context]...\n'
+                '${messages[i].content.substring(messages[i].content.length - keepTail)}',
+            toolCallId: messages[i].toolCallId,
+            toolName: messages[i].toolName,
+            createdAt: messages[i].createdAt,
+          )
+        else
+          messages[i],
+    ];
+  }
+
+  static ({Map<String, dynamic> args, String? error}) _decodeArgsStrict(
+    String json,
+  ) {
+    final trimmed = json.trim();
+    if (trimmed.isEmpty) return (args: const {}, error: null);
     try {
-      final decoded = jsonDecode(json);
-      return decoded is Map<String, dynamic> ? decoded : const {};
-    } on FormatException {
-      return const {};
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) {
+        return (args: decoded, error: null);
+      }
+      if (decoded is Map) {
+        return (args: Map<String, dynamic>.from(decoded), error: null);
+      }
+      return (
+        args: const {},
+        error: 'Expected a JSON object, got ${decoded.runtimeType}.',
+      );
+    } on FormatException catch (e) {
+      return (args: const {}, error: e.message);
     }
   }
 }
