@@ -1204,8 +1204,16 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
               );
             case AgentRunErrorEvent(:final message):
               handleReasoningText('Error: $message');
+              if (answerBuffer.isEmpty) {
+                answerBuffer.write('Error: $message');
+              }
             case AgentAssistantMessageEvent(:final message):
-              answerBuffer.write(message.content);
+              // AgentEngine streams the final answer as deltas AND emits the
+              // assembled message. Do not append it twice.
+              if (answerBuffer.isEmpty) {
+                answerBuffer.write(message.content);
+                handleAssistantText(message.content);
+              }
             case AgentRunFinishedEvent():
               break;
             default:

@@ -19,6 +19,7 @@ import 'package:quantum_ide/features/ai_assistant/roxum/roxum_acp_bridge.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
+import 'package:quantum_ide/features/mcp/application/mcp_controller.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_modern_cards.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
@@ -3977,18 +3978,109 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     BuildContext context,
     Color accentColor,
   ) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('MCP servers are configured in Settings → MCP')),
+    final urlCtrl = TextEditingController();
+    final nameCtrl = TextEditingController(text: 'my-mcp');
+    var transport = 'http';
+    final servers = ref.read(mcpServersProvider).value ?? const [];
+    final connections = ref.read(mcpConnectionsProvider);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('MCP servers'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (servers.isEmpty)
+                  const Text('No MCP servers configured yet.')
+                else
+                  for (final server in servers)
+                    ListTile(
+                      dense: true,
+                      leading: Icon(
+                        connections[server.id]?.status.name == 'connected'
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                        color: connections[server.id]?.status.name == 'connected'
+                            ? Colors.green
+                            : Colors.grey,
+                      ),
+                      title: Text(server.name),
+                      subtitle: Text(
+                        '${server.url} (${connections[server.id]?.status.name ?? server.transport})',
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () =>
+                            ref.read(mcpActionsProvider).deleteServer(server.id),
+                      ),
+                    ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
+                TextField(
+                  controller: urlCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'URL (Streamable HTTP / SSE)',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                StatefulBuilder(
+                  builder: (ctx, setState) => Row(
+                    children: [
+                      for (final t in ['http', 'sse'])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(t),
+                            selected: transport == t,
+                            onSelected: (_) => setState(() => transport = t),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final url = urlCtrl.text.trim();
+              if (url.isEmpty) return;
+              await ref.read(mcpActionsProvider).saveServer(
+                    id: DateTime.now().microsecondsSinceEpoch.toString(),
+                    name: nameCtrl.text.trim().isEmpty ? 'mcp' : nameCtrl.text.trim(),
+                    url: url,
+                    transport: transport,
+                    connectNow: true,
+                  );
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
     );
+    urlCtrl.dispose();
+    nameCtrl.dispose();
   }
 
   Future<void> _showAddCustomMcpDialog(
     BuildContext context,
     WidgetRef ref,
-  ) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('MCP servers are configured in Settings → MCP')),
-    );
-  }
+  ) async =>
+      _showMcpServersDialog(context, Theme.of(context).primaryColor);
 
 }
