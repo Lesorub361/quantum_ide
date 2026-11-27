@@ -1,7 +1,7 @@
 name: quantum_ide
 description: "QuantumIDE - Next-generation AI-powered mobile & desktop IDE with OpenCode-grade autonomous agent, built with Flutter."
 publish_to: 'none'
-version: 1.3.7+338
+version: 1.3.8+339
 
 environment:
   sdk: ^3.11.4
@@ -15,6 +15,7 @@ dependencies:
   go_router: ^14.8.1
   re_editor: ^0.10.0
   re_highlight: ^0.0.3
+  code_forge: ^11.0.0
   path_provider: ^2.1.5
   file_picker: ^13.3.3
   permission_handler: ^11.4.0

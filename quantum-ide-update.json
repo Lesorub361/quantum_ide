@@ -1,16 +1,16 @@
 {
-  "versionCode": 338,
-  "versionName": "1.3.7",
-  "notes": "## 🚀 QuantumIDE v1.3.7 — Оптимизация памяти LSP и рендера Impeller\n- **Dart LSP (`dartaotruntime`):** добавлено ограничение `--old_gen_heap_size=256`, чтобы сервер анализа не раздувался до 450+ MB RAM на больших проектах.\n- **Рендер (`GlassCard`):** отключён тяжёлый `BackdropFilter` по умолчанию для снижения нагрузки на `saveLayer` / `EGL mtrack` под Impeller.\n- **UI-поток (`EditorPage`):** `workspaceProvider` переведён на точечный `.select((w) => w.currentPath)`, чтобы лишние изменения состояния не перестраивали весь редактор.",
+  "versionCode": 339,
+  "versionName": "1.3.8",
+  "notes": "## 🚀 QuantumIDE v1.3.8 — Движок `code_forge` для больших файлов\n- **CodeForge:** подключён пакет `code_forge: ^11.0.0` (структура данных Rope + рендеринг через `RenderBox` и `ParagraphBuilder`).\n- **Умное переключение (`StableEditorWidget`):** крупные файлы автоматически открываются через `CodeForgeEditorWidget` с двусторонней синхронизацией контроллера и подсветкой `re_highlight`, что убирает фризы при скролле и редактировании.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.3.7/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.3.8/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.3.7",
-  "buildNumber": 338,
-  "tag_name": "v1.3.7",
-  "releaseNotes": "Лимит памяти Dart LSP (--old_gen_heap_size=256), отключение тяжёлого BackdropFilter в GlassCard и точечный .select() в EditorPage."
+  "version": "1.3.8",
+  "buildNumber": 339,
+  "tag_name": "v1.3.8",
+  "releaseNotes": "Подключён code_forge (^11.0.0) с Rope-движком для плавной работы с большими файлами."
 }

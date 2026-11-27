@@ -12,6 +12,7 @@ import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/code_crafter_ai_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/code_crafter_editor_wrapper.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/code_forge_editor_widget.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart'
     hide CodeKeywordPrompt;
@@ -1147,13 +1148,16 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget>
     final applyHighlighting = performanceService.shouldApplySyntaxHighlighting(
       file.controller,
     );
-    if (performanceService.isLargeFile(file.controller)) {
+    final isLarge = performanceService.isLargeFile(file.controller);
+    if (isLarge) {
       performanceService.optimizeForLargeFile(file.controller);
     }
 
     Widget editorWidget = settings.useCodeCrafterEditor
         ? CodeCrafterEditorWrapper(file: file)
-        : CodeEditor(
+        : isLarge
+            ? CodeForgeEditorWidget(file: file)
+            : CodeEditor(
       controller: file.controller,
       scrollController: _scrollController,
       wordWrap: settings.wordWrap,
