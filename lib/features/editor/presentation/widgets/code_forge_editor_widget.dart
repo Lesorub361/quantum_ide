@@ -138,7 +138,8 @@ class _CodeForgeEditorWidgetState
   @override
   Widget build(BuildContext context) {
     final fontSize = ref.watch(settingsProvider.select((s) => s.fontSize));
-    final fontFamily = ref.watch(settingsProvider.select((s) => s.fontFamily));
+    final fontFamily =
+        ref.watch(settingsProvider.select((s) => s.editorFontFamily));
 
     return CodeForge(
       controller: _forgeController,
