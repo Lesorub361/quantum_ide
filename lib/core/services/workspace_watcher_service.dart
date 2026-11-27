@@ -31,11 +31,19 @@ final workspaceWatcherProvider = Provider.autoDispose<void>((ref) {
             path.contains('/.dart_tool/') ||
             path.contains('\\.dart_tool\\') ||
             path.contains('/node_modules/') ||
-            path.contains('\\node_modules\\')) {
+            path.contains('\\node_modules\\') ||
+            path.contains('/build/') ||
+            path.contains('\\build\\') ||
+            path.contains('/.gradle/') ||
+            path.contains('\\.gradle\\') ||
+            path.contains('/.pub-cache/') ||
+            path.contains('\\.pub-cache\\') ||
+            path.contains('/ephemeral/') ||
+            path.contains('\\ephemeral\\')) {
           return;
         }
         debounce?.cancel();
-        debounce = Timer(const Duration(milliseconds: 450), () {
+        debounce = Timer(const Duration(milliseconds: 1200), () {
           try {
             ref.read(fileTreeRefreshProvider.notifier).state++;
             ref.read(fileExplorerProvider.notifier).scanDirectory(workspacePath);

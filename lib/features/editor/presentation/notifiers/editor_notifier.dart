@@ -345,14 +345,16 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         }
       }
       
-      final raf = file.openSync(mode: FileMode.read);
-      final checkLimit = raf.lengthSync() < 8192 ? raf.lengthSync() : 8192;
-      final buffer = Uint8List(checkLimit);
-      raf.readIntoSync(buffer);
-      raf.closeSync();
-      
-      for (int i = 0; i < buffer.length; i++) {
-        if (buffer[i] == 0) return null;
+      final raf = await file.open(mode: FileMode.read);
+      try {
+        final len = await raf.length();
+        final checkLimit = len < 8192 ? len : 8192;
+        final buffer = await raf.read(checkLimit);
+        for (int i = 0; i < buffer.length; i++) {
+          if (buffer[i] == 0) return null;
+        }
+      } finally {
+        await raf.close();
       }
       
       return await file.readAsString();
@@ -885,9 +887,15 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       _workspaceWatcherSubscription = Directory(workspacePath).watch().listen(
         (event) {
           final eventPath = event.path;
+          final norm = p.normalize(eventPath);
+          // Only reload files that are currently open in an editor tab;
+          // avoids reading & running FastSyntaxEngine on closed build/cache files.
+          final isOpenTab = state.openFiles.any((f) => p.normalize(f.path) == norm);
+          if (!isOpenTab) return;
+
           _watcherDebouncers[eventPath]?.cancel();
           _watcherDebouncers[eventPath] = Timer(
-            const Duration(milliseconds: 350),
+            const Duration(milliseconds: 500),
             () {
               _watcherDebouncers.remove(eventPath);
               reloadFileFromDisk(eventPath);

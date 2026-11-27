@@ -250,12 +250,12 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   void _startUpdates() {
     _updateStats(fetchProcesses: false);
-    // Адаптивный интервал: во время сборки обновляем каждые 2 с (точная нагрузка),
-    // в простое — раз в 6 с, чтобы показатели всегда были свежими без лишней нагрузки.
+    // Адаптивный интервал: во время сборки обновляем каждые 2 с,
+    // в простое — раз в 10 с, чтобы не нагружать UI и батарею.
     var tick = 0;
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       tick++;
-      if (LiveTelemetryService.instance.isBuilding || tick % 3 == 0) {
+      if (LiveTelemetryService.instance.isBuilding || tick % 5 == 0) {
         _updateStats(fetchProcesses: false);
       }
     });

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -106,53 +107,66 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
     state = state.copyWith(isIndexing: true, error: null);
 
     try {
-      final List<IndexSymbol> allSymbols = [];
-      final List<String> allFiles = [];
-      final List<Directory> queue = [Directory(workspaceRoot)];
-      int processedCount = 0;
-      int parsedFileCount = 0;
-
-      while (queue.isNotEmpty && allFiles.length < 1500) {
-        final currentDir = queue.removeLast();
-        try {
-          final List<FileSystemEntity> entities = await currentDir.list(recursive: false, followLinks: false).toList();
-          for (final entity in entities) {
-            final name = p.basename(entity.path);
-            if (_ignoredDirs.contains(name) || name.startsWith('.')) {
-              continue;
-            }
-
-            if (entity is File) {
-              allFiles.add(entity.path);
-              final ext = p.extension(entity.path).toLowerCase();
-              if (parsedFileCount < 250 &&
-                  (ext == '.dart' || ext == '.js' || ext == '.ts' || ext == '.py' || ext == '.go')) {
-                final stat = await entity.stat();
-                if (stat.size <= 180 * 1024) {
-                  parsedFileCount++;
-                  final symbols = await _parseFile(entity);
-                  allSymbols.addAll(symbols);
-                }
-              }
-            } else if (entity is Directory) {
-              queue.add(entity);
-            }
-
-            processedCount++;
-            if (processedCount % 15 == 0) {
-              await Future.delayed(const Duration(milliseconds: 2));
-            }
-          }
-        } catch (_) {
-          // ignore directory access errors
-        }
-        await Future.delayed(const Duration(milliseconds: 1));
+      final result = await Isolate.run(() => _scanWorkspaceWorker(workspaceRoot));
+      // Guard against stale results if the user switched/closed the workspace.
+      if (ref.read(workspaceProvider).currentPath != workspaceRoot) {
+        state = state.copyWith(isIndexing: false);
+        return;
       }
-
-      state = state.copyWith(isIndexing: false, symbols: allSymbols, files: allFiles);
+      state = state.copyWith(
+        isIndexing: false,
+        symbols: result.symbols,
+        files: result.files,
+      );
     } catch (e) {
       state = state.copyWith(isIndexing: false, error: 'Indexing error: $e');
     }
+  }
+
+  static Future<({List<IndexSymbol> symbols, List<String> files})>
+      _scanWorkspaceWorker(String workspaceRoot) async {
+    final List<IndexSymbol> allSymbols = [];
+    final List<String> allFiles = [];
+    final List<Directory> queue = [Directory(workspaceRoot)];
+    int parsedFileCount = 0;
+
+    while (queue.isNotEmpty && allFiles.length < 1500) {
+      final currentDir = queue.removeLast();
+      try {
+        final List<FileSystemEntity> entities =
+            await currentDir.list(recursive: false, followLinks: false).toList();
+        for (final entity in entities) {
+          final name = p.basename(entity.path);
+          if (_ignoredDirs.contains(name) || name.startsWith('.')) {
+            continue;
+          }
+
+          if (entity is File) {
+            allFiles.add(entity.path);
+            final ext = p.extension(entity.path).toLowerCase();
+            if (parsedFileCount < 250 &&
+                (ext == '.dart' ||
+                    ext == '.js' ||
+                    ext == '.ts' ||
+                    ext == '.py' ||
+                    ext == '.go')) {
+              final stat = await entity.stat();
+              if (stat.size <= 180 * 1024) {
+                parsedFileCount++;
+                final symbols = await _parseFile(entity);
+                allSymbols.addAll(symbols);
+              }
+            }
+          } else if (entity is Directory) {
+            queue.add(entity);
+          }
+        }
+      } catch (_) {
+        // ignore directory access errors
+      }
+    }
+
+    return (symbols: allSymbols, files: allFiles);
   }
 
   Future<void> indexFile(String filePath) async {
@@ -189,7 +203,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
     } catch (_) {}
   }
 
-  Future<List<IndexSymbol>> _parseFile(File file) async {
+  static Future<List<IndexSymbol>> _parseFile(File file) async {
     final List<IndexSymbol> symbols = [];
     try {
       final content = await file.readAsString();
