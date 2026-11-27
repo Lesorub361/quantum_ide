@@ -202,7 +202,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             activeFile.path.toLowerCase().endsWith('.markdown'));
 
     final settings = ref.watch(settingsProvider);
-    final workspacePath = ref.watch(workspaceProvider).currentPath;
+    final workspacePath = ref.watch(
+      workspaceProvider.select((w) => w.currentPath),
+    );
     final panelState = ref.watch(panelProvider);
     final panelNotifier = ref.read(panelProvider.notifier);
 

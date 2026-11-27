@@ -1,16 +1,16 @@
 {
-  "versionCode": 337,
-  "versionName": "1.3.6",
-  "notes": "## ⚡ QuantumIDE v1.3.6 — Устранение лагов UI на больших проектах\n- **SymbolIndexer:** обход проекта (до 1500 файлов) и парсинг символов полностью вынесены в фоновый `Isolate.run` — интерфейс больше не фризит при открытии проекта.\n- **EditorNotifier:** убран синхронный `openSync`/`readIntoSync` при открытии файлов; файловый вотчер теперь перезагружает только реально открытые вкладки (без лишнего анализа закрытых файлов).\n- **WorkspaceWatcher:** игнорирование `build/`, `.gradle/`, `.pub-cache/`, `ephemeral/` и увеличенный debounce (`1200 ms`).\n- **SystemStats:** опрос в простое снижен до 1 раза в 10 с.",
+  "versionCode": 338,
+  "versionName": "1.3.7",
+  "notes": "## 🚀 QuantumIDE v1.3.7 — Оптимизация памяти LSP и рендера Impeller\n- **Dart LSP (`dartaotruntime`):** добавлено ограничение `--old_gen_heap_size=256`, чтобы сервер анализа не раздувался до 450+ MB RAM на больших проектах.\n- **Рендер (`GlassCard`):** отключён тяжёлый `BackdropFilter` по умолчанию для снижения нагрузки на `saveLayer` / `EGL mtrack` под Impeller.\n- **UI-поток (`EditorPage`):** `workspaceProvider` переведён на точечный `.select((w) => w.currentPath)`, чтобы лишние изменения состояния не перестраивали весь редактор.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.3.6/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.3.7/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.3.6",
-  "buildNumber": 337,
-  "tag_name": "v1.3.6",
-  "releaseNotes": "Устранены фризы UI на больших проектах: индексация символов в Isolate.run, асинхронное чтение файлов, фильтрация вотчеров и снижение фоновой нагрузки."
+  "version": "1.3.7",
+  "buildNumber": 338,
+  "tag_name": "v1.3.7",
+  "releaseNotes": "Лимит памяти Dart LSP (--old_gen_heap_size=256), отключение тяжёлого BackdropFilter в GlassCard и точечный .select() в EditorPage."
 }

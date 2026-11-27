@@ -466,6 +466,7 @@ class LspService {
       if (await hostAot.exists() && await hostSnapshot.exists()) {
         return [
           '/root/flutter/bin/cache/dart-sdk/bin/dartaotruntime',
+          '--old_gen_heap_size=256',
           '/root/flutter/bin/cache/dart-sdk/bin/snapshots/analysis_server_aot.dart.snapshot',
           '--lsp',
         ];

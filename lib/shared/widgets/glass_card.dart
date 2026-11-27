@@ -12,7 +12,7 @@ class GlassCard extends StatelessWidget {
     this.padding,
     this.margin,
     this.borderRadius,
-    this.blur = true,
+    this.blur = false,
     this.color,
     this.border,
     this.shadow = false,
@@ -45,7 +45,7 @@ class GlassCard extends StatelessWidget {
       child: child,
     );
 
-    if (blur) {
+    if (blur && tokens.blurSigma > 0) {
       content = ClipRRect(
         borderRadius: radius,
         child: BackdropFilter(
@@ -55,6 +55,11 @@ class GlassCard extends StatelessWidget {
           ),
           child: content,
         ),
+      );
+    } else if (radius != BorderRadius.zero) {
+      content = ClipRRect(
+        borderRadius: radius,
+        child: content,
       );
     }
 
