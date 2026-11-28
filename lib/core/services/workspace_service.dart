@@ -150,7 +150,7 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     state = state.copyWith(clearCurrentPath: true);
 
     // Perform centralized cleanup of other modules
-    await ref.read(lspServiceProvider).stop();
+    ref.read(lspServiceProvider).stop();
     ref.read(editorProvider.notifier).clearWorkspace();
     ref.read(terminalTabsProvider.notifier).closeAllSessions();
     ref.read(gitProvider.notifier).refreshStatus();
