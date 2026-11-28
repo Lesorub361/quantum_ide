@@ -6,6 +6,7 @@ import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:quantum_ide/core/db/app_database.dart';
 import 'package:quantum_ide/core/models/chat_models.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
@@ -906,7 +907,6 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           ),
         );
         return turn.copyWith(
-          aiResponse: record.isRunning ? '' : turn.aiResponse,
           toolCalls: list,
           timeline: tl,
         );
@@ -967,7 +967,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     try {
       final String finalAnswer;
       final agentTools = state.chatMode == RoxumChatMode.agent
-          ? _buildPocketStrikeTools(
+          ? await _buildPocketStrikeTools(
               workspace: workspace,
               pendingCopy: pendingCopy,
               onPendingEditsChanged: handlePendingEditsChanged,
@@ -1047,6 +1047,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       ];
 
       final answerBuffer = StringBuffer();
+      final stepTextBuffer = StringBuffer();
       final callRecordIds = <String, String>{};
       final turnMessages = history
           .map(
@@ -1081,10 +1082,16 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       )) {
         switch (event) {
           case AgentStatusEvent(:final status):
+            if (status.startsWith('Thinking') && stepTextBuffer.isNotEmpty) {
+              currentStep++;
+              stepTextBuffer.clear();
+              stepStartedAt = DateTime.now();
+            }
             handleReasoningText(status);
           case AgentTextDeltaEvent(:final text):
             answerBuffer.write(text);
-            handleAssistantText(text);
+            stepTextBuffer.write(text);
+            handleAssistantText(stepTextBuffer.toString());
           case AgentToolCallStartedEvent(:final call):
             final recordId = callRecordIds.putIfAbsent(
               call.id,
@@ -1289,11 +1296,11 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     }
   }
 
-  List<ps.AgentTool> _buildPocketStrikeTools({
+  Future<List<ps.AgentTool>> _buildPocketStrikeTools({
     required String workspace,
     required Map<String, RoxumPendingEdit> pendingCopy,
     required void Function(Map<String, RoxumPendingEdit>) onPendingEditsChanged,
-  }) {
+  }) async {
     final agenticRunner = RoxumAgenticTools(
       ref,
       pendingEdits: pendingCopy,
@@ -1337,27 +1344,33 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       );
     }
 
-    final allowedRoots =
-        workspace.isNotEmpty ? <String>[workspace] : const <String>[];
-    for (final builtIn in BuiltInTools.all(allowedRoots: allowedRoots)) {
+    // Keep only non-overlapping safe utilities; file/search/terminal tools
+    // are already provided by RoxumAgenticTools with diff & LSP integration.
+    for (final builtIn in [
+      BuiltInTools.currentTime(),
+      BuiltInTools.calculator(),
+    ]) {
       if (seenNames.add(builtIn.name)) {
         tools.add(builtIn);
       }
     }
 
-    final enabledIds = ref
-            .read(mcpServersProvider)
-            .value
-            ?.where((server) => server.enabled)
-            .map((server) => server.id)
-            .toSet() ??
-        <String>{};
-    tools.addAll(
-      ref
-          .read(mcpConnectionsProvider.notifier)
-          .manager
-          .toolsForServers(enabledIds),
-    );
+    final mcpNotifier = ref.read(mcpConnectionsProvider.notifier);
+    var enabledServers = ref.read(mcpServersProvider).value;
+    enabledServers ??=
+        await ref.read(appDatabaseProvider).mcpServersDao.getEnabled();
+    final enabledIds = enabledServers
+        .where((server) => server.enabled)
+        .map((server) => server.id)
+        .toSet();
+    if (enabledIds.isNotEmpty) {
+      final currentConns = ref.read(mcpConnectionsProvider);
+      final hasUnconnected = enabledIds.any((id) => !currentConns.containsKey(id));
+      if (hasUnconnected) {
+        await mcpNotifier.connectEnabled();
+      }
+    }
+    tools.addAll(mcpNotifier.manager.toolsForServers(enabledIds));
     return tools;
   }
 }

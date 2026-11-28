@@ -152,28 +152,53 @@ class OpenAiCompatibleProvider implements AIProvider {
       },
     };
 
-    final Response<ResponseBody> response;
-    try {
-      response = await _dio.post<ResponseBody>(
-        _chatCompletionsUrl,
-        data: jsonEncode(body),
-        options: Options(
-          headers: _headers,
-          responseType: ResponseType.stream,
-        ),
-        cancelToken: request.cancelToken,
-      );
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.cancel) {
-        yield const StreamDoneEvent();
+    Response<ResponseBody>? response;
+    const maxAttempts = 3;
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        response = await _dio.post<ResponseBody>(
+          _chatCompletionsUrl,
+          data: jsonEncode(body),
+          options: Options(
+            headers: _headers,
+            responseType: ResponseType.stream,
+          ),
+          cancelToken: request.cancelToken,
+        );
+        break;
+      } on DioException catch (e) {
+        if (e.type == DioExceptionType.cancel) {
+          yield const StreamDoneEvent();
+          return;
+        }
+        final status = e.response?.statusCode;
+        final isRetryable = status == 429 ||
+            status == 502 ||
+            status == 503 ||
+            status == 504 ||
+            e.type == DioExceptionType.connectionTimeout ||
+            e.type == DioExceptionType.receiveTimeout;
+        if (isRetryable && attempt + 1 < maxAttempts) {
+          final retryAfter = int.tryParse(
+            e.response?.headers.value('retry-after') ?? '',
+          );
+          final delaySeconds = retryAfter != null && retryAfter > 0 && retryAfter <= 15
+              ? retryAfter
+              : (1 << attempt) * 2;
+          await Future<void>.delayed(Duration(seconds: delaySeconds));
+          if (request.cancelToken?.isCancelled ?? false) {
+            yield const StreamDoneEvent();
+            return;
+          }
+          continue;
+        }
+        final msg = await readDioErrorMessage(e);
+        yield StreamErrorEvent(msg);
         return;
       }
-      final msg = await readDioErrorMessage(e);
-      yield StreamErrorEvent(msg);
-      return;
     }
 
-    final body1 = response.data;
+    final body1 = response?.data;
     if (body1 == null) {
       yield const StreamErrorEvent('Empty response body');
       return;

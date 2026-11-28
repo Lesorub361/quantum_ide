@@ -250,18 +250,20 @@ class AgentEngine {
     yield AgentRunFinishedEvent(cancelled);
   }
 
-  /// Compacts older long tool observations so multi-step runs don't overflow
-  /// the model's context window while keeping the latest steps intact.
+  /// Compacts older long tool observations and trims middle history if total
+  /// context grows too large, while keeping system/user anchor and valid
+  /// assistant(tool_calls)->tool pairing intact.
   static List<ChatMessage> _compactMessagesForModel(
     List<ChatMessage> messages,
   ) {
     if (messages.length <= 6) return messages;
     final cutoff = messages.length - 6;
-    const maxOldToolChars = 2400;
-    const keepHead = 1000;
-    const keepTail = 600;
+    const maxOldToolChars = 1200;
+    const keepHead = 500;
+    const keepTail = 300;
+    const maxTotalChars = 64000;
 
-    return [
+    final compacted = <ChatMessage>[
       for (var i = 0; i < messages.length; i++)
         if (i < cutoff &&
             messages[i].role == MessageRole.tool &&
@@ -279,6 +281,47 @@ class AgentEngine {
           )
         else
           messages[i],
+    ];
+
+    var totalChars = 0;
+    for (final m in compacted) {
+      totalChars += m.content.length;
+    }
+    if (totalChars <= maxTotalChars || compacted.length <= 8) {
+      return compacted;
+    }
+
+    // Preserve system prompt (if any) + earliest user message, and recent 6 messages.
+    var startTrim = 0;
+    while (startTrim < compacted.length &&
+        (compacted[startTrim].role == MessageRole.system ||
+            (startTrim <= 1 && compacted[startTrim].role == MessageRole.user))) {
+      startTrim++;
+    }
+    final keepTailStart = compacted.length - 6;
+    var dropEnd = startTrim;
+    while (totalChars > maxTotalChars && dropEnd < keepTailStart) {
+      // Never orphan a tool message from its preceding assistant tool_calls message.
+      totalChars -= compacted[dropEnd].content.length;
+      dropEnd++;
+      while (dropEnd < keepTailStart &&
+          compacted[dropEnd].role == MessageRole.tool) {
+        totalChars -= compacted[dropEnd].content.length;
+        dropEnd++;
+      }
+    }
+    if (dropEnd <= startTrim) return compacted;
+
+    return [
+      ...compacted.sublist(0, startTrim),
+      ChatMessage(
+        id: 'compacted_summary',
+        role: MessageRole.system,
+        content:
+            '[Earlier ${dropEnd - startTrim} intermediate messages omitted to save tokens.]',
+        createdAt: DateTime.now(),
+      ),
+      ...compacted.sublist(dropEnd),
     ];
   }
 
