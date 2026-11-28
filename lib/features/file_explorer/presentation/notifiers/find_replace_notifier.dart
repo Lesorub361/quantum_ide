@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/utils/workspace_file_walker.dart';
 import 'package:path/path.dart' as p;
 
 class FindReplaceMatch {
@@ -142,7 +144,10 @@ class FindReplaceNotifier extends StateNotifier<FindReplaceState> {
     try {
       final regex = _buildRegex(query);
       if (regex == null) {
-        state = state.copyWith(isSearching: false, error: 'Invalid regex pattern');
+        state = state.copyWith(
+          isSearching: false,
+          error: 'Invalid regex pattern',
+        );
         return;
       }
 
@@ -154,20 +159,26 @@ class FindReplaceNotifier extends StateNotifier<FindReplaceState> {
 
       final results = <FindReplaceFileResult>[];
       final filters = state.fileFilter.isNotEmpty
-        ? state.fileFilter.split(',').map((f) => f.trim().toLowerCase()).where((f) => f.isNotEmpty).toList()
-        : <String>[];
+          ? state.fileFilter
+                .split(',')
+                .map((f) => f.trim().toLowerCase())
+                .where((f) => f.isNotEmpty)
+                .toList()
+          : <String>[];
 
-      final entities = await dir.list(recursive: true).toList();
-
-      for (final entity in entities) {
-        if (entity is! File) continue;
+      await for (final entity in WorkspaceFileWalker.walkTextFiles(
+        workspacePath,
+      )) {
         final relPath = p.relative(entity.path, from: workspacePath);
 
         if (_isSkippableFile(relPath)) continue;
 
         if (filters.isNotEmpty) {
           final ext = p.extension(entity.path).toLowerCase();
-          if (!filters.any((f) => ext == '.$f' || relPath.toLowerCase().contains(f))) continue;
+          if (!filters.any(
+            (f) => ext == '.$f' || relPath.toLowerCase().contains(f),
+          ))
+            continue;
         }
 
         try {
@@ -178,21 +189,25 @@ class FindReplaceNotifier extends StateNotifier<FindReplaceState> {
           for (int i = 0; i < lines.length; i++) {
             final line = lines[i];
             for (final match in regex.allMatches(line)) {
-              matches.add(FindReplaceMatch(
-                lineNumber: i + 1,
-                lineContent: line,
-                startOffset: match.start,
-                endOffset: match.end,
-              ));
+              matches.add(
+                FindReplaceMatch(
+                  lineNumber: i + 1,
+                  lineContent: line,
+                  startOffset: match.start,
+                  endOffset: match.end,
+                ),
+              );
             }
           }
 
           if (matches.isNotEmpty) {
-            results.add(FindReplaceFileResult(
-              filePath: entity.path,
-              fileName: p.basename(entity.path),
-              matches: matches,
-            ));
+            results.add(
+              FindReplaceFileResult(
+                filePath: entity.path,
+                fileName: p.basename(entity.path),
+                matches: matches,
+              ),
+            );
           }
         } catch (_) {}
       }
@@ -229,7 +244,9 @@ class FindReplaceNotifier extends StateNotifier<FindReplaceState> {
   }
 
   Future<void> replaceInCurrentFile(String filePath) async {
-    final fileResult = state.results.where((r) => r.filePath == filePath).firstOrNull;
+    final fileResult = state.results
+        .where((r) => r.filePath == filePath)
+        .firstOrNull;
     if (fileResult == null) return;
 
     try {
@@ -253,9 +270,13 @@ class FindReplaceNotifier extends StateNotifier<FindReplaceState> {
 
   String? getPreview(String filePath, FindReplaceMatch match) {
     final line = match.lineContent;
-    final before = match.startOffset > 0 ? line.substring(0, match.startOffset) : '';
+    final before = match.startOffset > 0
+        ? line.substring(0, match.startOffset)
+        : '';
     final matched = line.substring(match.startOffset, match.endOffset);
-    final after = match.endOffset < line.length ? line.substring(match.endOffset) : '';
+    final after = match.endOffset < line.length
+        ? line.substring(match.endOffset)
+        : '';
     return '$before|$matched|$after';
   }
 
@@ -302,6 +323,7 @@ class FindReplaceNotifier extends StateNotifier<FindReplaceState> {
   }
 }
 
-final findReplaceProvider = StateNotifierProvider<FindReplaceNotifier, FindReplaceState>((ref) {
-  return FindReplaceNotifier(ref);
-});
+final findReplaceProvider =
+    StateNotifierProvider<FindReplaceNotifier, FindReplaceState>((ref) {
+      return FindReplaceNotifier(ref);
+    });

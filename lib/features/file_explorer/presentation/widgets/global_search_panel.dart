@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
+import 'package:quantum_ide/core/utils/workspace_file_walker.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class GlobalSearchPanel extends ConsumerStatefulWidget {
@@ -47,11 +49,11 @@ class _FileSearchGroup {
 class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
   final TextEditingController _controller = TextEditingController();
   Timer? _debounceTimer;
-  
+
   bool _caseSensitive = false;
   bool _useRegex = false;
   bool _wholeWord = false;
-  
+
   bool _searching = false;
   List<_FileSearchGroup> _results = [];
   String? _statusKey;
@@ -103,10 +105,8 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
     try {
       final List<_FileSearchGroup> searchResults = [];
       final dir = Directory(workspacePath);
-      
+
       if (await dir.exists()) {
-        final List<FileSystemEntity> entities = await dir.list(recursive: true).toList();
-        
         // Prepare regex
         RegExp regex;
         if (_useRegex) {
@@ -128,66 +128,48 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           regex = RegExp(escapedQuery, caseSensitive: _caseSensitive);
         }
 
-        for (final entity in entities) {
-          if (entity is File) {
-            final relPath = p.relative(entity.path, from: workspacePath);
-            // Skip binary, lock, builds, or git/gradle folders
-            if (relPath.startsWith('.git/') ||
-                relPath.contains('/.git/') ||
-                relPath.startsWith('.gradle/') ||
-                relPath.contains('/.gradle/') ||
-                relPath.startsWith('.dart_tool/') ||
-                relPath.contains('/.dart_tool/') ||
-                relPath.startsWith('build/') ||
-                relPath.contains('/build/') ||
-                relPath.startsWith('.cxx/') ||
-                relPath.contains('/.cxx/') ||
-                relPath.startsWith('node_modules/') ||
-                relPath.contains('/node_modules/') ||
-                relPath.contains('.flutter-plugins') ||
-                relPath.endsWith('.png') ||
-                relPath.endsWith('.jpg') ||
-                relPath.endsWith('.jpeg') ||
-                relPath.endsWith('.zip') ||
-                relPath.endsWith('.apk') ||
-                relPath.endsWith('.lock') ||
-                relPath.endsWith('.exe')) {
-              continue;
-            }
+        await for (final entity in WorkspaceFileWalker.walkTextFiles(
+          workspacePath,
+        )) {
+          try {
+            final content = await entity.readAsString();
+            final lines = content.split('\n');
+            final List<_SearchMatch> matchesInFile = [];
 
-            try {
-              final content = await entity.readAsString();
-              final lines = content.split('\n');
-              final List<_SearchMatch> matchesInFile = [];
-
-              for (int i = 0; i < lines.length; i++) {
-                final line = lines[i];
-                final iterable = regex.allMatches(line);
-                for (final match in iterable) {
-                  matchesInFile.add(_SearchMatch(
+            for (int i = 0; i < lines.length; i++) {
+              final line = lines[i];
+              final iterable = regex.allMatches(line);
+              for (final match in iterable) {
+                matchesInFile.add(
+                  _SearchMatch(
                     lineNumber: i + 1,
                     lineContent: line,
                     startOffset: match.start,
                     endOffset: match.end,
-                  ));
-                }
+                  ),
+                );
               }
+            }
 
-              if (matchesInFile.isNotEmpty) {
-                searchResults.add(_FileSearchGroup(
+            if (matchesInFile.isNotEmpty) {
+              searchResults.add(
+                _FileSearchGroup(
                   filePath: entity.path,
                   fileName: p.basename(entity.path),
                   matches: matchesInFile,
-                ));
-              }
-            } catch (_) {
-              // Ignore file read errors (e.g. invalid encoding)
+                ),
+              );
             }
+          } catch (_) {
+            // Ignore file read errors (e.g. invalid encoding)
           }
         }
       }
 
-      final int totalMatches = searchResults.fold(0, (sum, group) => sum + group.matches.length);
+      final int totalMatches = searchResults.fold(
+        0,
+        (sum, group) => sum + group.matches.length,
+      );
 
       setState(() {
         _results = searchResults;
@@ -245,23 +227,39 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
                   hintText: l10n.searchPlaceholder,
-                  hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
-                  prefixIcon: const Icon(LucideIcons.search, size: 14, color: Colors.white30),
+                  hintStyle: const TextStyle(
+                    color: Colors.white30,
+                    fontSize: 13,
+                  ),
+                  prefixIcon: const Icon(
+                    LucideIcons.search,
+                    size: 14,
+                    color: Colors.white30,
+                  ),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 10,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
                   ),
                   fillColor: Colors.white.withValues(alpha: 0.05),
                   filled: true,
-                  suffixIcon: _controller.text.isNotEmpty ? IconButton(
-                    icon: const Icon(LucideIcons.x, size: 12, color: Colors.white30),
-                    onPressed: () {
-                      _controller.clear();
-                      _performSearch();
-                    },
-                  ) : null,
+                  suffixIcon: _controller.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(
+                            LucideIcons.x,
+                            size: 12,
+                            color: Colors.white30,
+                          ),
+                          onPressed: () {
+                            _controller.clear();
+                            _performSearch();
+                          },
+                        )
+                      : null,
                 ),
               ),
               const SizedBox(height: 6),
@@ -301,7 +299,10 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                     const SizedBox(
                       width: 12,
                       height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.redAccent),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Colors.redAccent,
+                      ),
                     ),
                 ],
               ),
@@ -310,7 +311,10 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
         ),
         if (resolvedStatus.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 4.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14.0,
+              vertical: 4.0,
+            ),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -355,10 +359,14 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: value ? Colors.redAccent.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.03),
+            color: value
+                ? Colors.redAccent.withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
-              color: value ? Colors.redAccent.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.05),
+              color: value
+                  ? Colors.redAccent.withValues(alpha: 0.4)
+                  : Colors.white.withValues(alpha: 0.05),
               width: 0.8,
             ),
           ),
@@ -394,7 +402,9 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
             child: Row(
               children: [
                 Icon(
-                  group.isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right,
+                  group.isExpanded
+                      ? LucideIcons.chevron_down
+                      : LucideIcons.chevron_right,
                   size: 14,
                   color: Colors.white30,
                 ),
@@ -438,7 +448,9 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           Padding(
             padding: const EdgeInsets.only(left: 18.0),
             child: Column(
-              children: group.matches.map((match) => _buildMatchWidget(group.filePath, match)).toList(),
+              children: group.matches
+                  .map((match) => _buildMatchWidget(group.filePath, match))
+                  .toList(),
             ),
           ),
       ],
@@ -459,18 +471,27 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
       if (prefix.length > 30) {
         prefix = '...${prefix.substring(prefix.length - 27)}';
       }
-      textSpans.add(TextSpan(text: prefix, style: const TextStyle(color: Colors.white54)));
+      textSpans.add(
+        TextSpan(
+          text: prefix,
+          style: const TextStyle(color: Colors.white54),
+        ),
+      );
     }
 
     if (start < end && end <= content.length) {
-      textSpans.add(TextSpan(
-        text: content.substring(start, end),
-        style: const TextStyle(
-          color: Colors.white,
-          backgroundColor: Color(0x7FFF3C3C), // Semi-transparent Mandy Red highlight
-          fontWeight: FontWeight.bold,
+      textSpans.add(
+        TextSpan(
+          text: content.substring(start, end),
+          style: const TextStyle(
+            color: Colors.white,
+            backgroundColor: Color(
+              0x7FFF3C3C,
+            ), // Semi-transparent Mandy Red highlight
+            fontWeight: FontWeight.bold,
+          ),
         ),
-      ));
+      );
     }
 
     if (end < content.length) {
@@ -478,16 +499,19 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
       if (suffix.length > 40) {
         suffix = '${suffix.substring(0, 37)}...';
       }
-      textSpans.add(TextSpan(text: suffix, style: const TextStyle(color: Colors.white54)));
+      textSpans.add(
+        TextSpan(
+          text: suffix,
+          style: const TextStyle(color: Colors.white54),
+        ),
+      );
     }
 
     return InkWell(
       onTap: () async {
-        await ref.read(editorProvider.notifier).openFile(
-          filePath,
-          line: match.lineNumber - 1,
-          column: 0,
-        );
+        await ref
+            .read(editorProvider.notifier)
+            .openFile(filePath, line: match.lineNumber - 1, column: 0);
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
@@ -499,7 +523,11 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
               alignment: Alignment.centerRight,
               child: Text(
                 '${match.lineNumber}:',
-                style: const TextStyle(color: Colors.white30, fontSize: 10, fontFamily: 'monospace'),
+                style: const TextStyle(
+                  color: Colors.white30,
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
             const SizedBox(width: 8),

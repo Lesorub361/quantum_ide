@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/talker_service.dart';
@@ -8,12 +9,14 @@ import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 class LogService {
   static String? _cacheDir;
   static File? _logFile;
-  
+
   static final List<String> _inMemoryLogs = [];
-  static const int _maxInMemoryLines = 1000;
-  
-  static final StreamController<String> _logStreamController = StreamController<String>.broadcast();
-  
+  static const int _maxInMemoryLines = 500;
+  static const int _maxLogFileBytes = 2 * 1024 * 1024; // 2 MB
+
+  static final StreamController<String> _logStreamController =
+      StreamController<String>.broadcast();
+
   static Stream<String> get logStream => _logStreamController.stream;
   static List<String> get logs => List.unmodifiable(_inMemoryLogs);
 
@@ -26,14 +29,16 @@ class LogService {
   /// down logcat readers / the App Logs panel. Logs are still written to
   /// app_cache.log, kept in memory and streamed to the UI.
   /// Enable explicitly with: --dart-define=QI_MIRROR_STDOUT=true
-  static const bool _mirrorToStdout =
-      bool.fromEnvironment('QI_MIRROR_STDOUT', defaultValue: false);
+  static const bool _mirrorToStdout = bool.fromEnvironment(
+    'QI_MIRROR_STDOUT',
+    defaultValue: false,
+  );
 
   static Future<void> init(String cacheDir) async {
     _cacheDir = cacheDir;
     await _updateLogFile();
     _startFlushTimer();
-    log('LogService initialized. App version logs starting.');
+    log('LogService initialized.');
   }
 
   static void _startFlushTimer() {
@@ -50,6 +55,17 @@ class LogService {
     if (file == null) return;
 
     try {
+      if (await file.exists()) {
+        final size = await file.length();
+        if (size > _maxLogFileBytes && _cacheDir != null) {
+          final prevFile = File(p.join(_cacheDir!, 'app_cache.prev.log'));
+          if (await prevFile.exists()) {
+            await prevFile.delete();
+          }
+          await file.rename(prevFile.path);
+        }
+      }
+
       final sink = file.openWrite(mode: FileMode.append);
       for (final line in lines) {
         sink.writeln(line);
@@ -59,34 +75,12 @@ class LogService {
     } catch (_) {}
   }
 
+  /// Records workspace context for telemetry without mutating the user's
+  /// project directory (logs always remain in app cache).
   static Future<void> setWorkspace(String? workspacePath) async {
-    await _flush();
     try {
       LiveTelemetryService.instance.currentWorkspace = workspacePath;
     } catch (_) {}
-    if (workspacePath != null) {
-      try {
-        final qDir = Directory(p.join(workspacePath, '.quantum'));
-        if (!await qDir.exists()) {
-          await qDir.create(recursive: true);
-        }
-        
-        final newLogFile = File(p.join(qDir.path, 'app.log'));
-        
-        if (_logFile != null && await _logFile!.exists()) {
-          final content = await _logFile!.readAsString();
-          await newLogFile.writeAsString(content, mode: FileMode.write);
-          await _logFile!.delete();
-        }
-        
-        _logFile = newLogFile;
-        log('Workspace set to: $workspacePath. Logging redirected to .quantum/app.log');
-      } catch (e) {
-        log('Failed to redirect logs to workspace: $e');
-      }
-    } else {
-      await _updateLogFile();
-    }
   }
 
   static Future<void> _updateLogFile() async {
@@ -106,13 +100,17 @@ class LogService {
     _appendFormatted('[$level] $message', forwardToTalker: false);
   }
 
-  static void _appendFormatted(String message, {required bool forwardToTalker}) {
-    final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
+  static void _appendFormatted(
+    String message, {
+    required bool forwardToTalker,
+  }) {
+    final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS')
+        .format(DateTime.now());
     final formattedLine = '[$timestamp] $message';
 
     _inMemoryLogs.add(formattedLine);
     if (_inMemoryLogs.length > _maxInMemoryLines) {
-      _inMemoryLogs.removeAt(0);
+      _inMemoryLogs.removeRange(0, _inMemoryLogs.length - _maxInMemoryLines);
     }
 
     _logStreamController.add(formattedLine);

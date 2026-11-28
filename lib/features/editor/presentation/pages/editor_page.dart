@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -74,11 +75,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   AppPalette? get _palette {
-    final settings = ref.watch(settingsProvider);
+    final settings = ref.read(settingsProvider);
     return settings.syncAppWithTerminalPalette
         ? resolveConduitPalette(settings.terminalTheme)
         : null;
   }
+
   bool _isDragging = false;
   bool _isSplitMode = false;
   int _splitTabIndex = -1;
@@ -159,22 +161,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
     // Автопроверка необходимых пакетов для проекта
     _checkProjectRequirements(workspacePath);
-
-    // Показываем уведомление об автонастройке .gitignore
-    if (mounted) {
-      final isRu = Localizations.localeOf(context).languageCode == 'ru';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isRu
-                ? 'Проект открыт. Папка .quantum/ автоматически исключена из Git.'
-                : 'Project opened. Folder .quantum/ is automatically ignored in Git.',
-          ),
-          duration: const Duration(seconds: 3),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
   }
 
   @override
@@ -250,7 +236,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     color: _palette?.panel ?? const Color(0xFF0D0F14),
                     border: Border(
                       bottom: BorderSide(
-                        color: _palette?.border ??
+                        color:
+                            _palette?.border ??
                             Colors.white.withValues(alpha: 0.06),
                         width: 0.8,
                       ),
@@ -262,8 +249,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                         child: Breadcrumbs(
                           path: activeFile.path,
                           workspacePath: workspacePath,
-                          backgroundColor: _palette?.panel ??
-                              const Color(0xFF0D0F14),
+                          backgroundColor:
+                              _palette?.panel ?? const Color(0xFF0D0F14),
                           borderColor: Colors.transparent,
                           accentColor: _palette?.accent,
                           textColor: _palette?.foreground,
@@ -275,9 +262,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           size: 13.5,
                           color: Color(0xFF94A3B8),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
                         constraints: const BoxConstraints(),
                         onPressed: () => QuickSwitcherDialog.show(
                           context,
@@ -291,9 +276,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           size: 13.5,
                           color: Color(0xFF94A3B8),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
                         constraints: const BoxConstraints(),
                         onPressed: () => ref
                             .read(editorProvider.notifier)
@@ -306,17 +289,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           size: 13.5,
                           color: Color(0xFF94A3B8),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
                         constraints: const BoxConstraints(),
                         onPressed: () => QuickSwitcherDialog.show(
                           context,
                           initialMode: SwitcherMode.files,
                         ),
-                        tooltip: AppLocalizations.of(
-                          context,
-                        )!.quickSearch,
+                        tooltip: AppLocalizations.of(context)!.quickSearch,
                       ),
                       IconButton(
                         icon: const Icon(
@@ -324,9 +303,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           size: 13.5,
                           color: Color(0xFF94A3B8),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
                         constraints: const BoxConstraints(),
                         onPressed: () => _toggleZenMode(ref),
                         tooltip: 'Режим фокуса (Zen Mode)',
@@ -351,9 +328,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               .openFile(targetPath);
                         }
                       } else {
-                        ref
-                            .read(editorProvider.notifier)
-                            .openFile(file.path);
+                        ref.read(editorProvider.notifier).openFile(file.path);
                       }
                     }
                   },
@@ -431,9 +406,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               .read(leftPanelOpenProvider.notifier)
                               .update((v) => !v);
                         } else {
-                          if (_scaffoldKey
-                                  .currentState
-                                  ?.isDrawerOpen ??
+                          if (_scaffoldKey.currentState?.isDrawerOpen ??
                               false) {
                             _scaffoldKey.currentState?.closeDrawer();
                           } else {
@@ -450,9 +423,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               .read(leftPanelOpenProvider.notifier)
                               .update((v) => !v);
                         } else {
-                          if (_scaffoldKey
-                                  .currentState
-                                  ?.isDrawerOpen ??
+                          if (_scaffoldKey.currentState?.isDrawerOpen ??
                               false) {
                             _scaffoldKey.currentState?.closeDrawer();
                           } else {
@@ -568,9 +539,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       ): () =>
                           panelNotifier.selectTab(PanelTab.problems),
                       // Run project (F5)
-                      const SingleActivator(
-                        LogicalKeyboardKey.f5,
-                      ): () {
+                      const SingleActivator(LogicalKeyboardKey.f5): () {
                         if (currentProject != null) {
                           ref
                               .read(projectServiceProvider.notifier)
@@ -582,18 +551,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     },
                     child: _isSplitMode
                         ? _buildSplitEditor(ref, settings, activeFile)
-                        : _buildSingleEditor(
-                            ref,
-                            settings,
-                            activeFile,
-                          ),
+                        : _buildSingleEditor(ref, settings, activeFile),
                   ),
                 ),
               ),
               if (Platform.isAndroid || Platform.isIOS || !isDesktop)
-                KeyboardAccessoryBar(
-                  controller: activeFile.controller,
-                ),
+                KeyboardAccessoryBar(controller: activeFile.controller),
             ],
           );
 
@@ -656,11 +619,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         final double maxH = constraints.maxHeight;
         return Builder(
           builder: (insetContext) {
-            final double keyboardInset =
-                MediaQuery.viewInsetsOf(insetContext).bottom;
+            final double keyboardInset = MediaQuery.viewInsetsOf(insetContext)
+                .bottom;
             final isKeyboardOpen = keyboardInset > 0;
-            final double availableHeight =
-                (maxH - keyboardInset).safeClamp(120.0, maxH);
+            final double availableHeight = (maxH - keyboardInset).safeClamp(
+              120.0,
+              maxH,
+            );
             final isMobileTerminalWithKeyboard =
                 (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
                 isKeyboardOpen &&
@@ -811,9 +776,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                         ref.watch(leftPanelOpenProvider))
                                     ? const Color(0xFFE2E8F0)
                                     : const Color(0xFF94A3B8),
-                                tooltip: AppLocalizations.of(
-                                  context,
-                                )!.openExplorer,
+                                tooltip: AppLocalizations.of(context)!
+                                    .openExplorer,
                                 onTap: () {
                                   if (isDesktop) {
                                     final isOpen = ref.read(
@@ -884,14 +848,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                           : const Color(0xFF94A3B8),
                                       backgroundColor:
                                           activeFile.isMarkdownPreview
-                                          ? const Color(
-                                              0xFF8B5CF6,
-                                            ).withValues(alpha: 0.15)
+                                          ? const Color(0xFF8B5CF6)
+                                                .withValues(alpha: 0.15)
                                           : null,
                                       borderColor: activeFile.isMarkdownPreview
-                                          ? const Color(
-                                              0xFF8B5CF6,
-                                            ).withValues(alpha: 0.35)
+                                          ? const Color(0xFF8B5CF6)
+                                                .withValues(alpha: 0.35)
                                           : null,
                                       tooltip: activeFile.isMarkdownPreview
                                           ? 'Режим редактора (Код)'
@@ -906,9 +868,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     ),
                                   ],
                                   if (activeFile != null &&
-                                      activeFile.name
-                                          .toLowerCase()
-                                          .endsWith('.dart')) ...[
+                                      activeFile.name.toLowerCase().endsWith(
+                                        '.dart',
+                                      )) ...[
                                     const SizedBox(width: 6),
                                     Builder(
                                       builder: (ctx) {
@@ -922,14 +884,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                               ? const Color(0xFF22D3EE)
                                               : const Color(0xFF94A3B8),
                                           backgroundColor: hasPreviewAnnotation
-                                              ? const Color(
-                                                  0xFF06B6D4,
-                                                ).withValues(alpha: 0.15)
+                                              ? const Color(0xFF06B6D4)
+                                                    .withValues(alpha: 0.15)
                                               : null,
                                           borderColor: hasPreviewAnnotation
-                                              ? const Color(
-                                                  0xFF06B6D4,
-                                                ).withValues(alpha: 0.35)
+                                              ? const Color(0xFF06B6D4)
+                                                    .withValues(alpha: 0.35)
                                               : null,
                                           tooltip: hasPreviewAnnotation
                                               ? 'Запустить Flutter Widget Preview (@Preview)'
@@ -950,23 +910,26 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                                   clear: false,
                                                 );
                                             ref
-                                                .read(
-                                                  floatingPreviewUrlProvider
-                                                      .notifier,
-                                                )
-                                                .state = 'http://127.0.0.1:5175';
+                                                    .read(
+                                                      floatingPreviewUrlProvider
+                                                          .notifier,
+                                                    )
+                                                    .state =
+                                                'http://127.0.0.1:5175';
                                             ref
-                                                .read(
-                                                  floatingPreviewVisibleProvider
-                                                      .notifier,
-                                                )
-                                                .state = true;
+                                                    .read(
+                                                      floatingPreviewVisibleProvider
+                                                          .notifier,
+                                                    )
+                                                    .state =
+                                                true;
                                             ref
-                                                .read(
-                                                  floatingPreviewMinimizedProvider
-                                                      .notifier,
-                                                )
-                                                .state = false;
+                                                    .read(
+                                                      floatingPreviewMinimizedProvider
+                                                          .notifier,
+                                                    )
+                                                    .state =
+                                                false;
                                             ref
                                                 .read(
                                                   floatingPreviewReloadTokenProvider
@@ -978,15 +941,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                                 .selectTab(PanelTab.run);
                                             if (!hasPreviewAnnotation &&
                                                 ctx.mounted) {
-                                              ScaffoldMessenger.maybeOf(
-                                                ctx,
-                                              )?.showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Widget Preview запускается на :5175. Добавьте @Preview из package:flutter/widget_previews.dart для отображения виджета.',
-                                                  ),
-                                                ),
-                                              );
+                                              ScaffoldMessenger.maybeOf(ctx)
+                                                  ?.showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Widget Preview запускается на :5175. Добавьте @Preview из package:flutter/widget_previews.dart для отображения виджета.',
+                                                      ),
+                                                    ),
+                                                  );
                                             }
                                           },
                                         );
@@ -1008,12 +970,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                             panelState.selectedTab ==
                                                 PanelTab.terminal)
                                         ? const Color(0xFF0284C7)
-                                        : const Color(
-                                            0xFF38BDF8,
-                                          ).withValues(alpha: 0.12),
-                                    borderColor: const Color(
-                                      0xFF38BDF8,
-                                    ).withValues(alpha: 0.32),
+                                        : const Color(0xFF38BDF8)
+                                              .withValues(alpha: 0.12),
+                                    borderColor: const Color(0xFF38BDF8)
+                                        .withValues(alpha: 0.32),
                                     tooltip: l10n.terminal,
                                     onTap: () {
                                       if (panelState.isOpened &&
@@ -1038,12 +998,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     backgroundColor:
                                         (canDockSide && isRightAiOpen)
                                         ? const Color(0xFF8B5CF6)
-                                        : const Color(
-                                            0xFF8B5CF6,
-                                          ).withValues(alpha: 0.14),
-                                    borderColor: const Color(
-                                      0xFF8B5CF6,
-                                    ).withValues(alpha: 0.38),
+                                        : const Color(0xFF8B5CF6)
+                                              .withValues(alpha: 0.14),
+                                    borderColor: const Color(0xFF8B5CF6)
+                                        .withValues(alpha: 0.38),
                                     tooltip: 'AI Чат-Агент',
                                     onTap: () => _toggleAiAgent(
                                       context,
@@ -1061,8 +1019,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                       final editorNotifier = ref.read(
                                         editorProvider.notifier,
                                       );
-                                      final files =
-                                          ref.read(editorProvider).openFiles;
+                                      final files = ref
+                                          .read(editorProvider)
+                                          .openFiles;
                                       for (int i = 0; i < files.length; i++) {
                                         if (files[i].isModified) {
                                           await editorNotifier.saveFile(i);
@@ -1130,14 +1089,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 behavior: HitTestBehavior.opaque,
                 onHorizontalDragUpdate: (details) {
                   setState(() {
-                    final nextWidth = (drawerWidth - details.delta.dx).safeClamp(
-                      280.0,
-                      screenWidth,
-                    );
-                    _mobileAiDrawerFraction = (nextWidth / screenWidth).safeClamp(
-                      0.70,
-                      1.0,
-                    );
+                    final nextWidth = (drawerWidth - details.delta.dx)
+                        .safeClamp(280.0, screenWidth);
+                    _mobileAiDrawerFraction = (nextWidth / screenWidth)
+                        .safeClamp(0.70, 1.0);
                   });
                 },
                 child: Container(
@@ -1286,7 +1241,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 width: 6,
                 decoration: BoxDecoration(
                   color: _isResizingLeft
-                      ? (_palette?.accent ?? const Color(0xFF8B5CF6)).withValues(alpha: 0.25)
+                      ? (_palette?.accent ?? const Color(0xFF8B5CF6))
+                            .withValues(alpha: 0.25)
                       : (_palette?.panel ?? const Color(0xFF0D0F14)),
                   border: Border(
                     left: BorderSide(
@@ -1343,7 +1299,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 width: 7,
                 decoration: BoxDecoration(
                   color: _isResizingRight
-                      ? (_palette?.accent ?? const Color(0xFF8B5CF6)).withValues(alpha: 0.28)
+                      ? (_palette?.accent ?? const Color(0xFF8B5CF6))
+                            .withValues(alpha: 0.28)
                       : (_palette?.panel ?? const Color(0xFF0D0F14)),
                   border: Border(
                     left: BorderSide(
@@ -1625,7 +1582,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                                     ),
                                                   );
                                                 }
-                                                if (count == null || count <= 0) {
+                                                if (count == null ||
+                                                    count <= 0) {
                                                   return const SizedBox.shrink();
                                                 }
                                                 return Padding(
@@ -2174,9 +2132,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 (proj) => InkWell(
                   borderRadius: BorderRadius.circular(8),
                   onTap: () {
-                    ref.read(workspaceProvider.notifier).setWorkspace(
-                          proj.path,
-                        );
+                    ref
+                        .read(workspaceProvider.notifier)
+                        .setWorkspace(proj.path);
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -2517,7 +2475,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       ],
     );
   }
-
 }
 
 // ─── Дерево файлов (изолированный StatefulWidget) ───────────────────────────

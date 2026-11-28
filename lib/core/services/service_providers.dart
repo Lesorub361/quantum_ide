@@ -1,14 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'build_diagnostics_service.dart';
 import 'editor_performance_service.dart';
-import 'microvm_service.dart';
-import 'crdt_sync_service.dart';
-import 'docker_service.dart';
-import 'ssh_service.dart';
-import 'mlc_llm_service.dart';
-import 'marketplace_service.dart';
-import 'runtime_service.dart';
-import 'collaboration_service.dart';
 import 'ghost_qa_service.dart';
 import 'live_telemetry_service.dart';
 import 'shizuku_bridge.dart';
@@ -29,50 +22,6 @@ final editorPerformanceServiceProvider = Provider((ref) {
   return service;
 });
 
-/// Provider for MicroVMService (Android 15+ KVM)
-final microvmServiceProvider = ChangeNotifierProvider<MicroVMService>((ref) {
-  final runtime = ref.read(runtimeServiceProvider);
-  final service = MicroVMService(runtime);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
-/// Provider for CrdtSyncService
-final crdtSyncServiceProvider = ChangeNotifierProvider<CrdtSyncService>((ref) {
-  final collaboration = ref.read(collaborationProvider.notifier);
-  final service = CrdtSyncService(collaboration);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
-/// Provider for DockerService
-final dockerServiceProvider = ChangeNotifierProvider<DockerService>((ref) {
-  final service = DockerService(ref);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
-/// Provider for SshService
-final sshServiceProvider = ChangeNotifierProvider<SshService>((ref) {
-  final service = SshService(ref);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
-/// Provider for MlcLlmService
-final mlcLlmServiceProvider = StateNotifierProvider<MlcLlmService, MlcModelState>((ref) {
-  final service = MlcLlmService(ref);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
-/// Provider for MarketplaceService
-final marketplaceServiceProvider = StateNotifierProvider<MarketplaceService, MarketplaceState>((ref) {
-  final service = MarketplaceService(ref);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
 /// Provider for GhostQAService (Autonomous AI Screen & QA Testing Engine)
 final ghostQAServiceProvider = Provider<GhostQAService>((ref) {
   return GhostQAService.instance;
@@ -87,4 +36,3 @@ final shizukuBridgeProvider = Provider<ShizukuBridge>((ref) {
 final liveTelemetryServiceProvider = Provider<LiveTelemetryService>((ref) {
   return LiveTelemetryService.instance;
 });
-

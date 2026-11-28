@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/core/services/lsp/lsp_frame_parser.dart';
@@ -9,7 +10,9 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+
 import '../models/code_diagnostic.dart';
+
 import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/runtime_service.dart';
@@ -24,11 +27,11 @@ final lspServiceProvider = Provider<LspService>((ref) {
   );
   // Start the server
   lsp.start();
-  
+
   ref.onDispose(() {
     lsp.stop();
   });
-  
+
   return lsp;
 });
 
@@ -51,16 +54,23 @@ class LspService {
   final Map<String, bool> _binaryAvailabilityCache = {};
   int _id = 1;
   final Map<int, Completer> _pendingRequests = {};
-  final StreamController<FileDiagnostics> _diagnosticController = StreamController.broadcast();
+  final StreamController<FileDiagnostics> _diagnosticController =
+      StreamController.broadcast();
 
   final Map<String, int> _serverVersions = {};
   final Map<String, Timer> _didChangeTimers = {};
 
-  LspService(this.ref, this.fallbackProjectPath, this.initHostPath, this.filesDirPath);
+  LspService(
+    this.ref,
+    this.fallbackProjectPath,
+    this.initHostPath,
+    this.filesDirPath,
+  );
 
   Stream<FileDiagnostics> get diagnosticsStream => _diagnosticController.stream;
 
-  String get activeProjectPath => ref.read(workspaceProvider).currentPath ?? fallbackProjectPath;
+  String get activeProjectPath =>
+      ref.read(workspaceProvider).currentPath ?? fallbackProjectPath;
 
   Future<bool> _isBinaryAvailable(String command) async {
     if (_binaryAvailabilityCache.containsKey(command)) {
@@ -70,7 +80,9 @@ class LspService {
     if (!Platform.isAndroid && !Platform.isIOS) {
       try {
         final checkCmd = PlatformUtils.whichCommand;
-        final result = await Process.run(checkCmd, [command], runInShell: Platform.isWindows);
+        final result = await Process.run(checkCmd, [
+          command,
+        ], runInShell: Platform.isWindows);
         final available = result.exitCode == 0;
         if (available) {
           _binaryAvailabilityCache[command] = true;
@@ -81,8 +93,10 @@ class LspService {
       final hostSearchDirs = PlatformUtils.commonBinaryDirs;
       for (final dir in hostSearchDirs) {
         if (await File(p.join(dir, command)).exists() ||
-            (Platform.isWindows && await File(p.join(dir, '$command.cmd')).exists()) ||
-            (Platform.isWindows && await File(p.join(dir, '$command.exe')).exists())) {
+            (Platform.isWindows &&
+                await File(p.join(dir, '$command.cmd')).exists()) ||
+            (Platform.isWindows &&
+                await File(p.join(dir, '$command.exe')).exists())) {
           _binaryAvailabilityCache[command] = true;
           return true;
         }
@@ -97,7 +111,14 @@ class LspService {
       p.join(filesDirPath, 'rootfs', 'ubuntu', 'bin'),
       p.join(filesDirPath, 'rootfs', 'ubuntu', 'sbin'),
       p.join(filesDirPath, 'rootfs', 'ubuntu', 'root', 'flutter', 'bin'),
-      p.join(filesDirPath, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'platform-tools'),
+      p.join(
+        filesDirPath,
+        'rootfs',
+        'ubuntu',
+        'root',
+        'android-sdk',
+        'platform-tools',
+      ),
     ];
 
     for (final dir in searchDirs) {
@@ -128,7 +149,7 @@ class LspService {
     if (ext == 'rs') return 'rust';
     if (ext == 'go') return 'go';
     if (ext == 'c' || ext == 'cpp' || ext == 'h' || ext == 'hpp') return 'cpp';
-    return 'dart'; // fallback
+    return '';
   }
 
   Future<void> start() async {
@@ -140,19 +161,28 @@ class LspService {
       try {
         final pid = proc.pid;
         if (!Platform.isWindows) {
-          await Process.run('pkill', ['-9', '-P', '$pid']).catchError((_) => ProcessResult(0, 0, '', ''));
+          await Process.run('pkill', [
+            '-9',
+            '-P',
+            '$pid',
+          ]).catchError((_) => ProcessResult(0, 0, '', ''));
         }
         proc.kill(ProcessSignal.sigkill);
       } catch (_) {}
     }
     if (Platform.isAndroid && key == 'dart') {
       try {
-        await Process.run('pkill', ['-9', '-f', 'language-server']).catchError((_) => ProcessResult(0, 0, '', ''));
+        await Process.run('pkill', [
+          '-9',
+          '-f',
+          'language-server',
+        ]).catchError((_) => ProcessResult(0, 0, '', ''));
       } catch (_) {}
     }
   }
 
   Future<bool> _ensureServerStarted(String key) async {
+    if (key.isEmpty) return false;
     // If server is already starting, wait for it
     if (_startingServers.containsKey(key)) {
       try {
@@ -173,7 +203,9 @@ class LspService {
       if (_runningProjectPaths[key] == currentActivePath) {
         return true;
       }
-      debugPrint('LSP: Workspace changed from ${_runningProjectPaths[key]} to $currentActivePath. Restarting $key server...');
+      debugPrint(
+        'LSP: Workspace changed from ${_runningProjectPaths[key]} to $currentActivePath. Restarting $key server...',
+      );
       await _killServerProcess(key, _processes[key]);
       _processes[key] = null;
       _lastStartFailure.remove(key);
@@ -181,7 +213,8 @@ class LspService {
 
     // Prevent rapid re-spawn loops if server recently failed/timed out
     final lastFail = _lastStartFailure[key];
-    if (lastFail != null && DateTime.now().difference(lastFail).inSeconds < 45) {
+    if (lastFail != null &&
+        DateTime.now().difference(lastFail).inSeconds < 45) {
       return false;
     }
 
@@ -190,7 +223,10 @@ class LspService {
 
     try {
       _runningProjectPaths[key] = currentActivePath;
-      final guestActivePath = PathMapper.mapToGuest(currentActivePath, filesDirPath);
+      final guestActivePath = PathMapper.mapToGuest(
+        currentActivePath,
+        filesDirPath,
+      );
 
       final List<String> commandArgs;
       if (key == 'ts') {
@@ -225,10 +261,11 @@ class LspService {
         commandArgs = await _resolveDartLspCommand();
       }
 
-      final availabilityCheckBinary =
-          key == 'dart' ? 'dart' : commandArgs[0];
+      final availabilityCheckBinary = key == 'dart' ? 'dart' : commandArgs[0];
       if (!await _isBinaryAvailable(availabilityCheckBinary)) {
-        debugPrint('LSP [$key]: Binary $availabilityCheckBinary not found. Skipping start.');
+        debugPrint(
+          'LSP [$key]: Binary $availabilityCheckBinary not found. Skipping start.',
+        );
         _lastStartFailure[key] = DateTime.now();
         completer.complete(false);
         return false;
@@ -238,11 +275,22 @@ class LspService {
       await _killServerProcess(key, null);
 
       Process process;
-      if ((Platform.isAndroid || Platform.isIOS) && initHostPath.isNotEmpty && await File(initHostPath).exists()) {
-        debugPrint('LSP: Starting $key server via init-host at $initHostPath for $guestActivePath');
-        process = await Process.start('sh', [initHostPath, filesDirPath, guestActivePath, ...commandArgs]);
+      if ((Platform.isAndroid || Platform.isIOS) &&
+          initHostPath.isNotEmpty &&
+          await File(initHostPath).exists()) {
+        debugPrint(
+          'LSP: Starting $key server via init-host at $initHostPath for $guestActivePath',
+        );
+        process = await Process.start('sh', [
+          initHostPath,
+          filesDirPath,
+          guestActivePath,
+          ...commandArgs,
+        ]);
       } else {
-        debugPrint('LSP: Starting direct $key server: ${commandArgs.join(' ')} (cwd: $currentActivePath)');
+        debugPrint(
+          'LSP: Starting direct $key server: ${commandArgs.join(' ')} (cwd: $currentActivePath)',
+        );
         process = await Process.start(
           commandArgs[0],
           commandArgs.sublist(1),
@@ -331,17 +379,21 @@ class LspService {
     final uriStr = params['uri'] as String;
     final guestUri = Uri.parse(uriStr);
     final guestPath = guestUri.toFilePath();
-    
+
     // Map back to host path
-    final hostPath = PathMapper.mapToHost(guestPath, filesDirPath, activeWorkspacePath: activeProjectPath);
+    final hostPath = PathMapper.mapToHost(
+      guestPath,
+      filesDirPath,
+      activeWorkspacePath: activeProjectPath,
+    );
 
     final diagnosticsJson = params['diagnostics'] as List;
-    
+
     final diagnostics = diagnosticsJson.map((d) {
       final start = d['range']['start'];
       final end = d['range']['end'];
       final severity = d['severity'] as int;
-      
+
       return CodeDiagnostic(
         range: CodeLineRange(
           index: start['line'] as int,
@@ -358,13 +410,20 @@ class LspService {
 
   CodeDiagnosticSeverity _mapSeverity(int severity) {
     switch (severity) {
-      case 1: return CodeDiagnosticSeverity.error;
-      case 2: return CodeDiagnosticSeverity.warning;
-      default: return CodeDiagnosticSeverity.hint;
+      case 1:
+        return CodeDiagnosticSeverity.error;
+      case 2:
+        return CodeDiagnosticSeverity.warning;
+      default:
+        return CodeDiagnosticSeverity.hint;
     }
   }
 
-  Future<dynamic> _sendRequestForServer(String key, String method, Map<String, dynamic> params) {
+  Future<dynamic> _sendRequestForServer(
+    String key,
+    String method,
+    Map<String, dynamic> params,
+  ) {
     final id = _id++;
     final completer = Completer();
     _pendingRequests[id] = completer;
@@ -392,7 +451,11 @@ class LspService {
     return completer.future;
   }
 
-  void _sendNotificationForServer(String key, String method, Map<String, dynamic> params) {
+  void _sendNotificationForServer(
+    String key,
+    String method,
+    Map<String, dynamic> params,
+  ) {
     final message = jsonEncode({
       'jsonrpc': '2.0',
       'method': method,
@@ -411,21 +474,36 @@ class LspService {
 
   String _getLanguageId(String key) {
     switch (key) {
-      case 'ts': return 'typescript';
-      case 'html': return 'html';
-      case 'css': return 'css';
-      case 'yaml': return 'yaml';
-      case 'json': return 'json';
-      case 'markdown': return 'markdown';
-      case 'vue': return 'vue';
-      case 'php': return 'php';
-      case 'python': return 'python';
-      case 'java': return 'java';
-      case 'kotlin': return 'kotlin';
-      case 'rust': return 'rust';
-      case 'go': return 'go';
-      case 'cpp': return 'cpp';
-      default: return 'dart';
+      case 'ts':
+        return 'typescript';
+      case 'html':
+        return 'html';
+      case 'css':
+        return 'css';
+      case 'yaml':
+        return 'yaml';
+      case 'json':
+        return 'json';
+      case 'markdown':
+        return 'markdown';
+      case 'vue':
+        return 'vue';
+      case 'php':
+        return 'php';
+      case 'python':
+        return 'python';
+      case 'java':
+        return 'java';
+      case 'kotlin':
+        return 'kotlin';
+      case 'rust':
+        return 'rust';
+      case 'go':
+        return 'go';
+      case 'cpp':
+        return 'cpp';
+      default:
+        return 'dart';
     }
   }
 
@@ -442,7 +520,7 @@ class LspService {
         'languageId': _getLanguageId(key),
         'version': _serverVersions[path],
         'text': content,
-      }
+      },
     });
   }
 
@@ -461,7 +539,11 @@ class LspService {
       );
       final hostAot = File(p.join(hostDartSdkBin, 'dartaotruntime'));
       final hostSnapshot = File(
-        p.join(hostDartSdkBin, 'snapshots', 'analysis_server_aot.dart.snapshot'),
+        p.join(
+          hostDartSdkBin,
+          'snapshots',
+          'analysis_server_aot.dart.snapshot',
+        ),
       );
       if (await hostAot.exists() && await hostSnapshot.exists()) {
         return [
@@ -496,13 +578,17 @@ class LspService {
           'version': _serverVersions[path],
         },
         'contentChanges': [
-          {'text': content}
-        ]
+          {'text': content},
+        ],
       });
     });
   }
 
-  Future<List<Location>> getDefinition(String path, int line, int column) async {
+  Future<List<Location>> getDefinition(
+    String path,
+    int line,
+    int column,
+  ) async {
     final key = _getServerKey(path);
     if (!await _ensureServerStarted(key)) return [];
 
@@ -514,7 +600,7 @@ class LspService {
     });
 
     if (result == null) return [];
-    
+
     List<Location> locations = [];
     if (result is List) {
       locations = result.map((l) => _parseLocation(l)).toList();
@@ -525,17 +611,22 @@ class LspService {
     return locations.map((loc) {
       final guestUri = Uri.parse(loc.uri);
       if (guestUri.scheme == 'file') {
-        final hostPath = PathMapper.mapToHost(guestUri.toFilePath(), filesDirPath, activeWorkspacePath: activeProjectPath);
-        return Location(
-          uri: Uri.file(hostPath).toString(),
-          range: loc.range,
+        final hostPath = PathMapper.mapToHost(
+          guestUri.toFilePath(),
+          filesDirPath,
+          activeWorkspacePath: activeProjectPath,
         );
+        return Location(uri: Uri.file(hostPath).toString(), range: loc.range);
       }
       return loc;
     }).toList();
   }
 
-  Future<List<CompletionItem>> getCompletions(String path, int line, int column) async {
+  Future<List<CompletionItem>> getCompletions(
+    String path,
+    int line,
+    int column,
+  ) async {
     final key = _getServerKey(path);
     if (!await _ensureServerStarted(key)) return [];
 
@@ -589,16 +680,18 @@ class LspService {
 
     final map = result as Map<String, dynamic>;
     String contents = '';
-    
+
     final rawContents = map['contents'];
     if (rawContents is String) {
       contents = rawContents;
     } else if (rawContents is List) {
-      contents = rawContents.map((c) {
-        if (c is String) return c;
-        if (c is Map && c.containsKey('value')) return c['value'];
-        return '';
-      }).join('\n');
+      contents = rawContents
+          .map((c) {
+            if (c is String) return c;
+            if (c is Map && c.containsKey('value')) return c['value'];
+            return '';
+          })
+          .join('\n');
     } else if (rawContents is Map && rawContents.containsKey('value')) {
       contents = rawContents['value'];
     }
@@ -620,7 +713,11 @@ class LspService {
     return Hover(contents: contents, range: range);
   }
 
-  Future<List<Location>> getReferences(String path, int line, int column) async {
+  Future<List<Location>> getReferences(
+    String path,
+    int line,
+    int column,
+  ) async {
     final key = _getServerKey(path);
     if (!await _ensureServerStarted(key)) return [];
 
@@ -638,11 +735,12 @@ class LspService {
       final loc = _parseLocation(l as Map<String, dynamic>);
       final guestUri = Uri.parse(loc.uri);
       if (guestUri.scheme == 'file') {
-        final hostPath = PathMapper.mapToHost(guestUri.toFilePath(), filesDirPath, activeWorkspacePath: activeProjectPath);
-        return Location(
-          uri: Uri.file(hostPath).toString(),
-          range: loc.range,
+        final hostPath = PathMapper.mapToHost(
+          guestUri.toFilePath(),
+          filesDirPath,
+          activeWorkspacePath: activeProjectPath,
         );
+        return Location(uri: Uri.file(hostPath).toString(), range: loc.range);
       }
       return loc;
     }).toList();
@@ -654,9 +752,13 @@ class LspService {
 
     final guestPath = PathMapper.mapToGuest(path, filesDirPath);
 
-    final result = await _sendRequestForServer(key, 'textDocument/documentSymbol', {
-      'textDocument': {'uri': Uri.file(guestPath).toString()},
-    });
+    final result = await _sendRequestForServer(
+      key,
+      'textDocument/documentSymbol',
+      {
+        'textDocument': {'uri': Uri.file(guestPath).toString()},
+      },
+    );
 
     if (result == null || result is! List) return [];
 
@@ -684,11 +786,13 @@ class LspService {
                   range: Range(
                     start: Position(
                       line: childMap['range']['start']['line'] as int? ?? 0,
-                      character: childMap['range']['start']['character'] as int? ?? 0,
+                      character:
+                          childMap['range']['start']['character'] as int? ?? 0,
                     ),
                     end: Position(
                       line: childMap['range']['end']['line'] as int? ?? 0,
-                      character: childMap['range']['end']['character'] as int? ?? 0,
+                      character:
+                          childMap['range']['end']['character'] as int? ?? 0,
                     ),
                   ),
                 );
@@ -698,7 +802,13 @@ class LspService {
     }).toList();
   }
 
-  Future<List<CodeAction>> getCodeActions(String path, int startLine, int startColumn, int endLine, int endColumn) async {
+  Future<List<CodeAction>> getCodeActions(
+    String path,
+    int startLine,
+    int startColumn,
+    int endLine,
+    int endColumn,
+  ) async {
     final key = _getServerKey(path);
     if (!await _ensureServerStarted(key)) return [];
 
@@ -710,9 +820,7 @@ class LspService {
         'start': {'line': startLine, 'character': startColumn},
         'end': {'line': endLine, 'character': endColumn},
       },
-      'context': {
-        'diagnostics': [],
-      },
+      'context': {'diagnostics': []},
     });
 
     if (result == null || result is! List) return [];
@@ -735,8 +843,12 @@ class LspService {
         final uriStr = entry.key;
         final guestUri = Uri.parse(uriStr);
         final guestPath = guestUri.toFilePath();
-        final hostPath = PathMapper.mapToHost(guestPath, filesDirPath, activeWorkspacePath: activeProjectPath);
-        
+        final hostPath = PathMapper.mapToHost(
+          guestPath,
+          filesDirPath,
+          activeWorkspacePath: activeProjectPath,
+        );
+
         final edits = entry.value as List;
         _applyTextEdits(hostPath, edits);
       }
@@ -747,12 +859,17 @@ class LspService {
       for (final change in documentChanges) {
         final changeMap = change as Map<String, dynamic>;
         if (changeMap.containsKey('textDocument')) {
-          final textDocument = changeMap['textDocument'] as Map<String, dynamic>;
+          final textDocument =
+              changeMap['textDocument'] as Map<String, dynamic>;
           final uri = textDocument['uri'] as String;
           final guestUri = Uri.parse(uri);
           final guestPath = guestUri.toFilePath();
-          final hostPath = PathMapper.mapToHost(guestPath, filesDirPath, activeWorkspacePath: activeProjectPath);
-          
+          final hostPath = PathMapper.mapToHost(
+            guestPath,
+            filesDirPath,
+            activeWorkspacePath: activeProjectPath,
+          );
+
           if (changeMap.containsKey('edits')) {
             final edits = changeMap['edits'] as List;
             _applyTextEdits(hostPath, edits);
@@ -793,14 +910,11 @@ class LspService {
 
     final result = await _sendRequestForServer(key, 'textDocument/formatting', {
       'textDocument': {'uri': Uri.file(guestPath).toString()},
-      'options': {
-        'tabSize': 2,
-        'insertSpaces': true,
-      },
+      'options': {'tabSize': 2, 'insertSpaces': true},
     });
 
     if (result == null || result is! List) return [];
-    
+
     final edits = result.map((edit) {
       final map = edit as Map<String, dynamic>;
       return TextEdit(
@@ -818,14 +932,27 @@ class LspService {
       );
     }).toList();
 
-    _applyTextEdits(path, edits.map((e) => {
-      'range': {
-        'start': {'line': e.range.start.line, 'character': e.range.start.character},
-        'end': {'line': e.range.end.line, 'character': e.range.end.character},
-      },
-      'newText': e.newText,
-    }).toList());
-    
+    _applyTextEdits(
+      path,
+      edits
+          .map(
+            (e) => {
+              'range': {
+                'start': {
+                  'line': e.range.start.line,
+                  'character': e.range.start.character,
+                },
+                'end': {
+                  'line': e.range.end.line,
+                  'character': e.range.end.character,
+                },
+              },
+              'newText': e.newText,
+            },
+          )
+          .toList(),
+    );
+
     debugPrint('LSP: Formatting applied ${edits.length} edits');
     return edits;
   }
@@ -942,9 +1069,5 @@ class CodeAction {
   final String? kind;
   final Map<String, dynamic>? command;
 
-  const CodeAction({
-    required this.title,
-    this.kind,
-    this.command,
-  });
+  const CodeAction({required this.title, this.kind, this.command});
 }

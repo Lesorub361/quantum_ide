@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -14,108 +15,73 @@ import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 import 'package:quantum_ide/core/services/network_inspector_service.dart';
 import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 import 'package:quantum_ide/core/services/shizuku_bridge.dart';
+
 import 'app.dart';
 
 void main() async {
-  runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-    // Global error handlers
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      LogService.log('[ERR] Flutter Error: ${details.exception}\n${details.stack}');
-      GhostQAService.instance.recordFlutterError(details);
-      TalkerService.handle(details.exception, details.stack, 'Flutter Error');
-    };
+      // Global error handlers
+      FlutterError.onError = (FlutterErrorDetails details) {
+        FlutterError.presentError(details);
+        LogService.log(
+          '[ERR] Flutter Error: ${details.exception}\n${details.stack}',
+        );
+        GhostQAService.instance.recordFlutterError(details);
+        TalkerService.handle(details.exception, details.stack, 'Flutter Error');
+      };
 
-    PlatformDispatcher.instance.onError = (error, stack) {
-      LogService.log('[ERR] Platform Error: $error\n$stack');
-      TalkerService.handle(error, stack, 'Platform Error');
-      return true;
-    };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        LogService.log('[ERR] Platform Error: $error\n$stack');
+        TalkerService.handle(error, stack, 'Platform Error');
+        return true;
+      };
 
-    // Initialize LogService with temporary directory safely
-    try {
-      final tempDir = await getTemporaryDirectory();
-      await LogService.init(tempDir.path);
-    } catch (e) {
-      debugPrint('LogService init error: $e');
-    }
-
-    // Disable Android's Phantom Process Killer as early as possible.
-    // PRoot spawns many child processes; on Android 12+ the system trims them
-    // ("Killing PhantomProcessRecord") unless max_phantom_processes is raised.
-    // Works via Shizuku or via root (Magisk/KernelSU/APatch) fallback.
-    if (!kIsWeb && Platform.isAndroid) {
-      unawaited(ShizukuBridge.instance.boostForBuild());
-    }
-
-    // Initialize Quick Actions (App Shortcuts)
-    try {
-      QuickActionsService.instance.init();
-      LogService.log('[OK] QuickActionsService initialized');
-    } catch (e) {
-      LogService.log('[ERR] QuickActions init error: $e');
-    }
-
-    // Initialize ASMR Mechanical Keyboard & Haptic Engine
-    try {
-      await KeyboardSoundService.init();
-      LogService.log('[OK] KeyboardSoundService initialized');
-    } catch (e) {
-      LogService.log('[ERR] KeyboardSoundService init error: $e');
-    }
-
-    // Initialize In-App Network Inspector (Chucker)
-    try {
-      NetworkInspectorService.init();
-      LogService.log('[OK] NetworkInspectorService initialized');
-    } catch (e) {
-      LogService.log('[ERR] NetworkInspectorService init error: $e');
-    }
-
-    // Initialize Ghost QA engine (only activates if owner is authorized)
-    try {
-      await GhostQAService.instance.init();
-      LogService.log('[OK] GhostQAService initialized');
-    } catch (e) {
-      LogService.log('[ERR] Ghost QA init error: $e');
-    }
-
-    // Initialize Live Telemetry Bridge (metrics, logs and terminal monitoring)
-    try {
-      await LiveTelemetryService.instance.init();
-      LogService.log('[OK] LiveTelemetryService initialized');
-    } catch (e) {
-      LogService.log('[ERR] LiveTelemetryService init error: $e');
-    }
-
-    // Handle desktop-specific initialization
-    if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+      // Initialize LogService with temporary directory safely
       try {
-        await _initializeDesktop();
+        final tempDir = await getTemporaryDirectory();
+        await LogService.init(tempDir.path);
       } catch (e) {
-        debugPrint('Desktop initialization failed: $e');
+        debugPrint('LogService init error: $e');
       }
-    }
 
-    // Mount and launch UI immediately to ensure the user never gets a black/frozen screen
-    runApp(
-      const ProviderScope(
-        child: QuantumApp(),
-      ),
-    );
+      // Disable Android's Phantom Process Killer as early as possible.
+      if (!kIsWeb && Platform.isAndroid) {
+        unawaited(ShizukuBridge.instance.boostForBuild());
+      }
 
-    // Request Android permissions asynchronously after UI first frame is mounted
-    if (!kIsWeb && Platform.isAndroid) {
+      // Handle desktop-specific initialization
+      if (!kIsWeb &&
+          (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+        try {
+          await _initializeDesktop();
+        } catch (e) {
+          debugPrint('Desktop initialization failed: $e');
+        }
+      }
+
+      // Mount and launch UI immediately to ensure the user never gets a black/frozen screen
+      runApp(const ProviderScope(child: QuantumApp()));
+
+      // Defer secondary services until after first frame renders
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _initializeAndroid();
+        unawaited(_initializeSecondaryServices());
       });
-    }
-  }, (error, stack) {
-    LogService.log('Uncaught Async Error: $error\n$stack');
-    TalkerService.handle(error, stack, 'Uncaught Async Error');
-  });
+
+      // Request Android permissions asynchronously after UI first frame is mounted
+      if (!kIsWeb && Platform.isAndroid) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _initializeAndroid();
+        });
+      }
+    },
+    (error, stack) {
+      LogService.log('Uncaught Async Error: $error\n$stack');
+      TalkerService.handle(error, stack, 'Uncaught Async Error');
+    },
+  );
 }
 
 /// Initialize Android-specific settings non-blockingly
@@ -156,5 +122,39 @@ Future<void> _initializeDesktop() async {
     debugPrint('Desktop initialization complete (SQLite FFI enabled)');
   } catch (e) {
     debugPrint('Desktop initialization error: $e');
+  }
+}
+
+/// Initialize non-critical services after the first frame is rendered
+/// so app launch stays fast and responsive.
+Future<void> _initializeSecondaryServices() async {
+  try {
+    QuickActionsService.instance.init();
+  } catch (e) {
+    LogService.log('[ERR] QuickActions init error: $e');
+  }
+
+  try {
+    await KeyboardSoundService.init();
+  } catch (e) {
+    LogService.log('[ERR] KeyboardSoundService init error: $e');
+  }
+
+  try {
+    NetworkInspectorService.init();
+  } catch (e) {
+    LogService.log('[ERR] NetworkInspectorService init error: $e');
+  }
+
+  try {
+    await GhostQAService.instance.init();
+  } catch (e) {
+    LogService.log('[ERR] Ghost QA init error: $e');
+  }
+
+  try {
+    await LiveTelemetryService.instance.init();
+  } catch (e) {
+    LogService.log('[ERR] LiveTelemetryService init error: $e');
   }
 }
