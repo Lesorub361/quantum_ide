@@ -2408,67 +2408,86 @@ fi
     }
   }
 
+  Future<bool> _isValidElfBinary(File file) async {
+    try {
+      if (!await file.exists()) return false;
+      final len = await file.length();
+      if (len < 100000) return false;
+      final raf = await file.open();
+      try {
+        final header = await raf.read(4);
+        return header.length == 4 &&
+            header[0] == 0x7f &&
+            header[1] == 0x45 &&
+            header[2] == 0x4c &&
+            header[3] == 0x46;
+      } finally {
+        await raf.close();
+      }
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Extracts the pre-bundled native ARM64 static aapt2 binary to the system
   /// and Android SDK build-tools to ensure AGP 8+ builds never fail with '--source-path'.
   Future<void> _ensureBundledAapt2() async {
     try {
       final primaryAapt2 = File(_aapt2Targets.first);
-      bool needsExtract = true;
-      if (await primaryAapt2.exists()) {
-        try {
-          final len = await primaryAapt2.length();
-          if (len > 1000000) {
-            needsExtract = false;
-          }
-        } catch (_) {}
+      if (await _isValidElfBinary(primaryAapt2)) {
+        return;
       }
 
-      if (needsExtract) {
-        debugPrint('[AAPT2] Extracting bundled modern ARM64 aapt2 from assets...');
-        final byteData = await rootBundle.load('assets/bin/aapt2-arm64.gz');
-        final compressedBytes = byteData.buffer.asUint8List(
-          byteData.offsetInBytes,
-          byteData.lengthInBytes,
-        );
-        final decompressedBytes = gzip.decode(compressedBytes);
+      debugPrint('[AAPT2] Extracting bundled modern ARM64 aapt2 from assets...');
+      final byteData = await rootBundle.load('assets/bin/aapt2-arm64.gz');
+      final compressedBytes = byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      );
+      final decompressedBytes = gzip.decode(compressedBytes);
+      if (decompressedBytes.length >= 4 &&
+          decompressedBytes[0] == 0x7f &&
+          decompressedBytes[1] == 0x45 &&
+          decompressedBytes[2] == 0x4c &&
+          decompressedBytes[3] == 0x46) {
         _installAapt2ToTargets(decompressedBytes);
       }
     } catch (e) {
-      debugPrint('[AAPT2] Bundled asset not available: $e; trying download fallback...');
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 20),
-        receiveTimeout: const Duration(minutes: 3),
-      ));
-      final urls = [
-        'https://github.com/Lesorub361/quantum_ide/releases/download/aapt2/aapt2-arm64.gz',
-        'https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip',
-      ];
-      List<int>? gzBytes;
-      for (final url in urls) {
-        try {
-          final res = await dio.get<List<int>>(
-            url,
-            options: Options(responseType: ResponseType.bytes),
-          );
-          if (res.statusCode == 200 && res.data != null && res.data!.length > 100000) {
-            gzBytes = res.data;
-            break;
-          }
-        } catch (ee) {
-          debugPrint('[AAPT2] Download failed from $url: $ee');
-        }
-      }
-      if (gzBytes == null) {
-        debugPrint('[AAPT2] Warning: Failed to obtain aapt2 from any source; builds may need system aapt2.');
+      debugPrint('[AAPT2] Bundled asset not available: $e');
+      // Avoid downloading 150MB commandlinetools zip or spamming 404s on every launch.
+      final marker = File(p.join(_filesDir, 'tmp', '.aapt2_fallback_checked'));
+      if (await marker.exists()) {
         return;
       }
       try {
-        final decompressedBytes = gzBytes.length > 2 && gzBytes[0] == 0x1f && gzBytes[1] == 0x8b
-            ? gzip.decode(gzBytes)
-            : gzBytes;
-        _installAapt2ToTargets(decompressedBytes);
+        await marker.parent.create(recursive: true);
+        await marker.writeAsString(DateTime.now().toIso8601String());
+      } catch (_) {}
+
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+      try {
+        final res = await dio.get<List<int>>(
+          'https://github.com/Lesorub361/quantum_ide/releases/download/aapt2/aapt2-arm64.gz',
+          options: Options(responseType: ResponseType.bytes),
+        );
+        if (res.statusCode == 200 && res.data != null && res.data!.length > 100000) {
+          final gzBytes = res.data!;
+          final decompressedBytes = gzBytes.length > 2 && gzBytes[0] == 0x1f && gzBytes[1] == 0x8b
+              ? gzip.decode(gzBytes)
+              : gzBytes;
+          if (decompressedBytes.length >= 4 &&
+              decompressedBytes[0] == 0x7f &&
+              decompressedBytes[1] == 0x45 &&
+              decompressedBytes[2] == 0x4c &&
+              decompressedBytes[3] == 0x46) {
+            _installAapt2ToTargets(decompressedBytes);
+          }
+        }
       } catch (ee) {
-        debugPrint('[AAPT2] Warning: Failed to process downloaded aapt2: $ee');
+        debugPrint('[AAPT2] Download skipped/failed: $ee');
       }
     }
   }
