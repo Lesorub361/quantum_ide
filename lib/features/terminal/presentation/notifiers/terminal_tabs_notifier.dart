@@ -217,24 +217,13 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows.clamp(6, 250);
           final safeCols = cols.clamp(20, 400);
-          if (lastRows == -1 && lastCols == -1) {
+          if (safeRows != lastRows || safeCols != lastCols) {
             lastRows = safeRows;
             lastCols = safeCols;
             try {
               pty.resize(safeRows, safeCols);
             } catch (_) {}
-            return;
           }
-          resizeDebounce?.cancel();
-          resizeDebounce = Timer(const Duration(milliseconds: 180), () {
-            if (safeRows != lastRows || safeCols != lastCols) {
-              lastRows = safeRows;
-              lastCols = safeCols;
-              try {
-                pty.resize(safeRows, safeCols);
-              } catch (_) {}
-            }
-          });
         },
       );
 

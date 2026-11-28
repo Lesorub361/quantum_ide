@@ -184,7 +184,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   int _lastCursorY = -1;
   bool _hasPerformedInitialResize = false;
   Timer? _resizeDebounceTimer;
-  static const Duration _resizeDebounceDuration = Duration(milliseconds: 140);
+  static const Duration _resizeDebounceDuration = Duration(milliseconds: 50);
 
   void _onScroll() {
     if (_isUpdatingLayout) return;
@@ -462,9 +462,13 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     _terminal.resize(
       viewportSize.width,
       viewportSize.height,
-      _painter.cellSize.width.round(),
-      _painter.cellSize.height.round(),
+      size.width.round(),
+      size.height.round(),
     );
+    if (attached) {
+      markNeedsLayout();
+      markNeedsPaint();
+    }
   }
 
   /// Update the scroll offset based on the current terminal state. This should
@@ -622,10 +626,14 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   void _paint(PaintingContext context, Offset offset) {
     final canvas = context.canvas;
 
-    if (_stickToBottom && _controller.selection == null && (_maxScrollExtent - _scrollOffset).abs() > 0.5) {
+    final maxScroll = _maxScrollExtent;
+    if ((_scrollOffset > maxScroll) ||
+        (_stickToBottom &&
+            _controller.selection == null &&
+            (maxScroll - _scrollOffset).abs() > 0.5)) {
       _isUpdatingLayout = true;
       try {
-        _offset.correctBy(_maxScrollExtent - _scrollOffset);
+        _offset.correctBy((maxScroll - _scrollOffset).clamp(-_scrollOffset, double.infinity));
         _updateScrollOffset();
       } finally {
         _isUpdatingLayout = false;

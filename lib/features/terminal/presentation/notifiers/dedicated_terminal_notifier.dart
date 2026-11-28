@@ -223,24 +223,13 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows < 6 ? 6 : rows;
           final safeCols = cols < 20 ? 20 : cols;
-          if (lastRows == -1 && lastCols == -1) {
+          if (safeRows != lastRows || safeCols != lastCols) {
             lastRows = safeRows;
             lastCols = safeCols;
             try {
               pty.resize(safeRows, safeCols);
             } catch (_) {}
-            return;
           }
-          resizeDebounce?.cancel();
-          resizeDebounce = Timer(const Duration(milliseconds: 180), () {
-            if (safeRows != lastRows || safeCols != lastCols) {
-              lastRows = safeRows;
-              lastCols = safeCols;
-              try {
-                pty.resize(safeRows, safeCols);
-              } catch (_) {}
-            }
-          });
         },
       );
       // ptyOutSub is stored in TerminalSession
